@@ -1,0 +1,22 @@
+[Unit]
+Description=Trading Arena — 10 paper bots in a continuous loop
+Documentation=https://github.com/galehomedesigns/openclaw-xrt9
+After=network-online.target ollama-guard.service
+Wants=network-online.target
+
+# Optional unit. The default on GX10 is to drive arena scans via crontab
+# (arena_scan.sh every 5 min, 13-19 UTC Mon-Fri). Enable THIS unit only if
+# you want a continuous-loop runner instead. Do not enable both at once.
+
+[Service]
+Type=simple
+WorkingDirectory=/home/tonygale/openclaw/skills/trading-arena
+ExecStart=/home/tonygale/openclaw/.venv/bin/python -u /home/tonygale/openclaw/skills/trading-arena/arena_runner.py
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=trading-arena
+
+[Install]
+WantedBy=default.target

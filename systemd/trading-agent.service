@@ -1,0 +1,21 @@
+[Unit]
+Description=Trading Agent — Questrade autonomous trader (continuous loop)
+Documentation=https://github.com/galehomedesigns/openclaw-xrt9
+After=network-online.target ollama-guard.service
+Wants=network-online.target
+
+# Optional unit. Enable only if you want the Questrade autonomous trader running
+# continuously. The arena_scan.sh cron every 5 min does not require this.
+
+[Service]
+Type=simple
+WorkingDirectory=/home/tonygale/openclaw/skills/trading/scripts/trading_bot
+ExecStart=/home/tonygale/openclaw/.venv/bin/python -u /home/tonygale/openclaw/skills/trading/scripts/trading_bot/trading_agent.py
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=trading-agent
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,18 @@
+[Unit]
+Description=TradingView Webhook Receiver (localhost:8089; exposed via Tailscale Funnel)
+Documentation=https://github.com/galehomedesigns/openclaw-xrt9
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/tonygale/openclaw/skills/tradingview/scripts
+ExecStart=/home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/tradingview/scripts/webhook_server.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tv-webhook
+
+[Install]
+WantedBy=default.target

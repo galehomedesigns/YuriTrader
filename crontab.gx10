@@ -1,0 +1,72 @@
+# GX10 user crontab for OpenClaw stack.
+# Install with: crontab ~/openclaw/crontab.gx10
+# All times are UTC. ET conversions drift by 1 h during DST; crons that are
+# ET-sensitive self-gate inside the script where it matters.
+
+# ---------- Environment ----------
+PATH=/home/tonygale/openclaw/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+SHELL=/bin/bash
+
+# ---------- Procurement ----------
+# Tender crawler — every 2 days at 3 AM ET (7 AM UTC).
+0 7 */2 * * /home/tonygale/openclaw/skills/procurement/scripts/smart_crawl.sh >> /home/tonygale/openclaw/skills/procurement/logs/cron.log 2>&1
+
+# ---------- Trading Arena (Mon-Fri, market hours ET) ----------
+# Arena scan every 5 min during 9:30-16:00 ET (13:00-20:00 UTC standard time).
+*/5 13-19 * * 1-5 /home/tonygale/openclaw/skills/trading-arena/arena_scan.sh
+30 13 * * 1-5 /home/tonygale/openclaw/skills/trading-arena/arena_scan.sh
+
+# Pre-market game plan (9:00 AM ET = 13:00 UTC).
+0 13 * * 1-5 /home/tonygale/openclaw/skills/trading-arena/overseer_cron.sh game_plan
+
+# Post-market autopsy (4:30 PM ET = 20:30 UTC).
+30 20 * * 1-5 /home/tonygale/openclaw/skills/trading-arena/overseer_cron.sh autopsy
+
+# Weekly super-prompt (Fri 6:00 PM ET = 22:00 UTC Fri).
+0 22 * * 5 /home/tonygale/openclaw/skills/trading-arena/overseer_cron.sh super_prompt
+
+# Dynamic watchlist — every 2 h during market hours.
+0 13,15,17,19 * * 1-5 /home/tonygale/openclaw/skills/trading-arena/watchlist_cron.sh
+
+# TradingView focus switcher — every 30 min during market hours.
+*/30 13-19 * * 1-5 /home/tonygale/openclaw/skills/trading-arena/tv_focus_cron.sh
+
+# Crypto position watcher — every 5 min, 24/7 (crypto never closes).
+*/5 * * * * /home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/trading-arena/concierge/position_watcher.py >> /home/tonygale/openclaw/skills/trading-arena/logs/position_watcher.log 2>&1
+
+# Yuri crypto buy watcher — every 30 min, script self-gates to 07:00-23:00 ET.
+*/30 * * * * /home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/trading-arena/concierge/buy_watcher.py >> /home/tonygale/openclaw/skills/trading-arena/logs/buy_watcher.log 2>&1
+
+# Stock buy watcher — every 30 min, script self-gates to 09:30-16:00 ET Mon-Fri.
+*/30 * * * * /home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/trading-arena/concierge/stock_buy_watcher.py >> /home/tonygale/openclaw/skills/trading-arena/logs/stock_buy_watcher.log 2>&1
+
+# Stock position watcher — every 5 min, script self-gates to market hours.
+*/5 * * * * /home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/trading-arena/concierge/stock_position_watcher.py >> /home/tonygale/openclaw/skills/trading-arena/logs/stock_position_watcher.log 2>&1
+
+# ---------- Medic ----------
+# Full medic check — 7 AM ET weekdays (UTC cron drifts 1 h in EST).
+0 11 * * 1-5 /home/tonygale/openclaw/skills/medic/scripts/medic_cron.sh
+
+# Daily medic report-only — 11 PM ET (3:00 UTC).
+0 3 * * *   /home/tonygale/openclaw/skills/medic/scripts/medic_cron.sh report-only
+
+# ---------- Receipts ----------
+# Receipt processor — 11 PM ET daily.
+0 3 * * * /home/tonygale/openclaw/skills/receipts/scripts/receipts_cron.sh
+
+# ---------- Trading briefs ----------
+# Noon ET dashboard refresh.
+0 16 * * 1-5 /home/tonygale/openclaw/skills/trading/scripts/trading_dashboard_cron.sh
+
+# News scan — every 15 min, 24/7.
+*/15 * * * * /home/tonygale/openclaw/skills/trading/scripts/trading_news_cron.sh
+
+# Pre-market briefing — 9 AM ET Mon-Fri (13:00 UTC).
+0 13 * * 1-5 /home/tonygale/openclaw/skills/trading/scripts/trading_premarket_cron.sh
+
+# Post-market summary — 4:30 PM ET Mon-Fri (20:30 UTC).
+30 20 * * 1-5 /home/tonygale/openclaw/skills/trading/scripts/trading_postmarket_cron.sh
+
+# ---------- Questrade token keep-fresh ----------
+# Refresh 5 min before each medic check (token lives ~30 min).
+55 2,10 * * * /home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/questrade/scripts/questrade.py portfolio > /dev/null 2>&1

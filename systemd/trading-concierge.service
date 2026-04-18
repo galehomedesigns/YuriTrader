@@ -1,0 +1,18 @@
+[Unit]
+Description=Trading Concierge — human-in-the-loop Telegram bot for Kraken trading
+Documentation=https://github.com/galehomedesigns/openclaw-xrt9
+After=network-online.target ollama-guard.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/tonygale/openclaw/skills/trading-arena
+ExecStart=/home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/trading-arena/concierge/trading_concierge.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=trading-concierge
+
+[Install]
+WantedBy=default.target

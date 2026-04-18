@@ -1,0 +1,18 @@
+[Unit]
+Description=Stock Concierge — YuriTradingViewBot Telegram daemon for Questrade
+Documentation=https://github.com/galehomedesigns/openclaw-xrt9
+After=network-online.target ollama-guard.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/tonygale/openclaw/skills/trading-arena
+ExecStart=/home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/trading-arena/concierge/stock_concierge.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=stock-concierge
+
+[Install]
+WantedBy=default.target

@@ -124,7 +124,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    server = HTTPServer(("0.0.0.0", PORT), WebhookHandler)
+    server = HTTPServer(("127.0.0.1", PORT), WebhookHandler)
     print(f"Webhook server listening on port {PORT}")
     try:
         server.serve_forever()
