@@ -659,7 +659,7 @@ We always know what happened.
 If anything goes wrong:
 
 ```bash
-/docker/openclaw-xrt9/data/skills/trading-arena/kill_live_trading.sh
+/home/tonygale/openclaw/skills/trading-arena/kill_live_trading.sh
 ```
 
 This:

@@ -258,7 +258,7 @@ def main():
     md = generate_markdown(args.channel_id)
 
     if args.format in ("markdown", "both"):
-        md_path = args.output or f"/data/.openclaw/workspace/projects/youtube-strategy/{channel_name.replace(' ', '-').lower()}-strategies.md"
+        md_path = args.output or f"/home/tonygale/openclaw/projects/youtube-strategy/{channel_name.replace(' ', '-').lower()}-strategies.md"
         with open(md_path, "w") as f:
             f.write(md)
         print(f"Markdown report: {md_path}", file=sys.stderr)

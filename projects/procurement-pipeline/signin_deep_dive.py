@@ -2,7 +2,7 @@ import json
 import os
 
 # 1. Load Credentials
-with open('/data/.openclaw/workspace/projects/procurement-pipeline/credentials.json', 'r') as f:
+with open('/home/tonygale/openclaw/projects/procurement-pipeline/credentials.json', 'r') as f:
     creds = json.load(f)
 
 # 2. Select target (e.g., Kal Tire Condenser Replacement on CivicInfo BC)

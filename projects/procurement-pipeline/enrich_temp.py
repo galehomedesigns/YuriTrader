@@ -41,7 +41,7 @@ def geocode(location):
     if not location or location == "Canada":
         return None
     try:
-        result = subprocess.check_output(["python3", "/data/skills/geocoder/scripts/geocode.py", location], stderr=subprocess.DEVNULL)
+        result = subprocess.check_output(["python3", "/home/tonygale/openclaw/skills/geocoder/scripts/geocode.py", location], stderr=subprocess.DEVNULL)
         data = json.loads(result)
         return {"lat": data["properties"]["lat"], "lng": data["properties"]["lng"]}
     except:

@@ -30,11 +30,11 @@ MODE="${1:-full}"
 
 echo "=== Medic $MODE: $(date -Iseconds) ===" >> "$LOG_FILE"
 
-REPORT="$(docker exec "$CONTAINER" python3 /data/skills/medic/scripts/medic.py report 2>&1)"
+REPORT="$(docker exec "$CONTAINER" python3 /home/tonygale/openclaw/skills/medic/scripts/medic.py report 2>&1)"
 echo "$REPORT" >> "$LOG_FILE"
 
 if [ "$MODE" != "report-only" ]; then
-    docker exec "$CONTAINER" python3 /data/skills/medic/scripts/medic.py dashboard >> "$LOG_FILE" 2>&1 || true
+    docker exec "$CONTAINER" python3 /home/tonygale/openclaw/skills/medic/scripts/medic.py dashboard >> "$LOG_FILE" 2>&1 || true
 fi
 
 PREFIX=""

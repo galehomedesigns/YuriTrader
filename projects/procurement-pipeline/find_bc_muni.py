@@ -25,7 +25,7 @@ def fetch_bc_municipalities():
         {"name": "City of Chilliwack", "region": "Fraser Valley", "portal_type": "bidsandtenders", "priority": "medium"}
     ]
     
-    with open('/data/.openclaw/workspace/projects/procurement-pipeline/bc_municipalities.json', 'w') as f:
+    with open('/home/tonygale/openclaw/projects/procurement-pipeline/bc_municipalities.json', 'w') as f:
         json.dump(bc_targets, f, indent=2)
         
     print(f"Saved {len(bc_targets)} major BC municipal targets to bc_municipalities.json")

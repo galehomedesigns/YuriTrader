@@ -19,7 +19,7 @@ Processes receipt photos and categorizes them into an Excel spreadsheet complian
 **When Tony sends a photo via Telegram**, check if it looks like a receipt. If it does:
 
 1. Save the image to `/data/.openclaw/workspace/receipts/incoming/`
-2. Run: `python3 /data/skills/receipts/scripts/process_single.py /path/to/image.jpg`
+2. Run: `python3 /home/tonygale/openclaw/skills/receipts/scripts/process_single.py /path/to/image.jpg`
 3. Report the results back to Tony
 
 The script will:
@@ -46,7 +46,7 @@ Tony uploads photos to the **Receipts** folder on Google Drive. The nightly cron
 ## Run Receipt Processor
 
 ```bash
-python3 /data/skills/receipts/scripts/process_receipts.py
+python3 /home/tonygale/openclaw/skills/receipts/scripts/process_receipts.py
 ```
 
 Options:
@@ -56,7 +56,7 @@ Options:
 ## Check Expense Summary
 
 ```bash
-python3 /data/skills/receipts/scripts/summary.py
+python3 /home/tonygale/openclaw/skills/receipts/scripts/summary.py
 ```
 
 Options:
@@ -100,7 +100,7 @@ When Tony sends a photo in Telegram:
 1. **Save the image** to `/data/.openclaw/workspace/receipts/incoming/`
 2. **Run analysis (no --save):**
    ```bash
-   python3 /data/skills/receipts/scripts/process_single.py /data/.openclaw/workspace/receipts/incoming/filename.jpg
+   python3 /home/tonygale/openclaw/skills/receipts/scripts/process_single.py /data/.openclaw/workspace/receipts/incoming/filename.jpg
    ```
 3. **Read the JSON output** and respond to Tony based on the `status` field:
    - `"not_a_receipt"` → Tell Tony what the image appears to be
@@ -109,7 +109,7 @@ When Tony sends a photo in Telegram:
    - `"success"` → Show the extracted data (vendor, date, total, tax, category) and ask Tony to confirm
 4. **If Tony confirms**, re-run with `--save`:
    ```bash
-   python3 /data/skills/receipts/scripts/process_single.py /data/.openclaw/workspace/receipts/incoming/filename.jpg --save
+   python3 /home/tonygale/openclaw/skills/receipts/scripts/process_single.py /data/.openclaw/workspace/receipts/incoming/filename.jpg --save
    ```
 5. **Report:** "Saved! [vendor] — $[total] on [date] under [category]"
 
@@ -132,7 +132,7 @@ When Tony sends a photo in Telegram:
 When Tony tells Yuri about an expense conversationally (e.g. "I spent $25 on Uber today"), use this script to add it to the spreadsheet:
 
 ```bash
-python3 /data/skills/receipts/scripts/add_expense.py --vendor "Uber" --total 25.50 --date "2026-03-07" --category "Travel" --description "Uber ride" --payment "Visa"
+python3 /home/tonygale/openclaw/skills/receipts/scripts/add_expense.py --vendor "Uber" --total 25.50 --date "2026-03-07" --category "Travel" --description "Uber ride" --payment "Visa"
 ```
 
 **Two-step process (same as photo receipts):**
@@ -158,7 +158,7 @@ Options:
 Scan Gmail for receipt emails (Uber, Amazon, etc.) and extract expense data:
 
 ```bash
-python3 /data/skills/receipts/scripts/scan_email_receipts.py --list
+python3 /home/tonygale/openclaw/skills/receipts/scripts/scan_email_receipts.py --list
 ```
 
 Options:

@@ -385,7 +385,7 @@ def cmd_history(_):
 def cmd_kill(_):
     """Trigger the kill switch."""
     send_message("🛑 <b>KILL SWITCH ACTIVATED</b>\nStopping all live trading...")
-    script = "/docker/openclaw-xrt9/data/skills/trading-arena/kill_live_trading.sh"
+    script = "/home/tonygale/openclaw/skills/trading-arena/kill_live_trading.sh"
     try:
         result = subprocess.run([script], capture_output=True, text=True, timeout=30)
         send_message(f"✅ Kill complete.\n<pre>{result.stdout[:500]}</pre>")

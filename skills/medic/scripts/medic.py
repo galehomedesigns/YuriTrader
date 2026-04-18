@@ -24,7 +24,7 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 CRON_FILE = Path("/data/.openclaw/cron/jobs.json")
 MEMORY_DIR = Path("/data/.openclaw/workspace/memory")
-TOKEN_FILE = Path("/data/.openclaw/questrade_token.json")
+TOKEN_FILE = Path("/home/tonygale/openclaw/state/questrade_token.json")
 CANVAS_DIR = Path("/data/.openclaw/canvas")
 
 HEADERS = {
@@ -386,7 +386,7 @@ def cmd_fix(issue):
         print("Stale locks cleared.")
 
     elif issue == "memory-sync":
-        script = "/data/skills/medic/scripts/log_event.py"
+        script = "/home/tonygale/openclaw/skills/medic/scripts/log_event.py"
         result = subprocess.run(
             ["python3", script, "--backfill-today"],
             capture_output=True, text=True, timeout=60)

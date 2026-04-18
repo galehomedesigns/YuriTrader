@@ -10,10 +10,10 @@ description: 10 parallel trading bots competing with different strategies. Paper
 ## Commands
 
 ```bash
-python3 /data/skills/trading-arena/arena_runner.py --once         # Run one scan cycle
-python3 /data/skills/trading-arena/arena_runner.py --leaderboard  # Show P&L rankings
-python3 /data/skills/trading-arena/arena_runner.py --status       # Show bot statuses
-python3 /data/skills/trading-arena/arena_runner.py               # Continuous loop
+python3 /home/tonygale/openclaw/skills/trading-arena/arena_runner.py --once         # Run one scan cycle
+python3 /home/tonygale/openclaw/skills/trading-arena/arena_runner.py --leaderboard  # Show P&L rankings
+python3 /home/tonygale/openclaw/skills/trading-arena/arena_runner.py --status       # Show bot statuses
+python3 /home/tonygale/openclaw/skills/trading-arena/arena_runner.py               # Continuous loop
 ```
 
 ## The 10 Bots

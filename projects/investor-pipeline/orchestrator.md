@@ -31,14 +31,14 @@ Task: "Pull current business metrics: total tenders in database, active sources,
 ### Step 2: Update Deck
 Spawn deck-updater with model `google/gemini-3-flash-preview`.
 
-Task: "Update the investor pitch talking points with these current metrics: [pass compiler output]. Create updated slides content for: Problem, Solution, Traction, Market Size, Business Model, Team, Ask. Save to /data/.openclaw/workspace/projects/investor-pipeline/output/pitch-points.md"
+Task: "Update the investor pitch talking points with these current metrics: [pass compiler output]. Create updated slides content for: Problem, Solution, Traction, Market Size, Business Model, Team, Ask. Save to /home/tonygale/openclaw/projects/investor-pipeline/output/pitch-points.md"
 
 **Wait for completion.**
 
 ### Step 3: Build Demo
 Spawn demo-builder with model `google/gemini-3-flash-preview`.
 
-Task: "Create a live demo script for The Project Wheel investor presentation. Include: procurement dashboard walkthrough, RAG search demo queries, newsletter generation demo, multi-agent architecture explanation. Save to /data/.openclaw/workspace/projects/investor-pipeline/output/demo-script.md"
+Task: "Create a live demo script for The Project Wheel investor presentation. Include: procurement dashboard walkthrough, RAG search demo queries, newsletter generation demo, multi-agent architecture explanation. Save to /home/tonygale/openclaw/projects/investor-pipeline/output/demo-script.md"
 
 **Wait for completion.**
 

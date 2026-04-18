@@ -4,7 +4,7 @@ import subprocess
 
 def run_evaluation():
     print("Fetching tenders from database...")
-    res = subprocess.run(["python3", "/data/skills/procurement/scripts/crawl.py", "--stats"], capture_output=True, text=True)
+    res = subprocess.run(["python3", "/home/tonygale/openclaw/skills/procurement/scripts/crawl.py", "--stats"], capture_output=True, text=True)
     try:
         data = json.loads(res.stdout)
         tenders = data.get("tenders", [])

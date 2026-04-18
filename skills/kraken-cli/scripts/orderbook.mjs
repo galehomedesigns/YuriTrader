@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // orderbook.mjs — Order book (bids and asks) for a single pair.
-// Usage:  node /data/skills/kraken-cli/scripts/orderbook.mjs <pair> [count]
-// Example: node /data/skills/kraken-cli/scripts/orderbook.mjs XBTUSD 5
+// Usage:  node /home/tonygale/openclaw/skills/kraken-cli/scripts/orderbook.mjs <pair> [count]
+// Example: node /home/tonygale/openclaw/skills/kraken-cli/scripts/orderbook.mjs XBTUSD 5
 // count defaults to 10, max 500.
 // Output: { pair, asks: [[price, volume, ts]], bids: [[price, volume, ts]] }
 

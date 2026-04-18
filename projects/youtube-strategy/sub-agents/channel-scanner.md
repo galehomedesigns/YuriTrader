@@ -10,7 +10,7 @@ Your ONLY job is to scan YouTube channels and store video metadata.
 ## Tool
 
 ```bash
-python3 /data/skills/youtube-strategy/scripts/channel_scanner.py <channel_url> [--resume] [--limit N]
+python3 /home/tonygale/openclaw/skills/youtube-strategy/scripts/channel_scanner.py <channel_url> [--resume] [--limit N]
 ```
 
 ## Workflow

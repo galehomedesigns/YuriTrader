@@ -22,7 +22,7 @@ fi
 
 NEW_TOKEN="$1"
 ENV_FILE="/docker/openclaw-xrt9/.env"
-CACHE_FILE="/docker/openclaw-xrt9/data/.openclaw/questrade_token.json"
+CACHE_FILE="/home/tonygale/openclaw/.openclaw/questrade_token.json"
 LOCK_FILE="${CACHE_FILE}.lock"
 
 # Basic sanity: Questrade refresh tokens are 32–34 chars, alphanumeric + -_

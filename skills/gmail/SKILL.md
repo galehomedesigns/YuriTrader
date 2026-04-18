@@ -15,7 +15,7 @@ Access Gmail (decadesdevelopments@gmail.com) via IMAP/SMTP using App Password au
 ## Read Emails
 
 ```bash
-python3 /data/skills/gmail/scripts/read_email.py
+python3 /home/tonygale/openclaw/skills/gmail/scripts/read_email.py
 ```
 
 Options:
@@ -29,12 +29,12 @@ Options:
 
 **Step 1: Draft (no --confirmed flag).** This shows the draft to the user without sending.
 ```bash
-python3 /data/skills/gmail/scripts/send_email.py --to "recipient@example.com" --subject "Subject" --body "Message body"
+python3 /home/tonygale/openclaw/skills/gmail/scripts/send_email.py --to "recipient@example.com" --subject "Subject" --body "Message body"
 ```
 
 **Step 2: Send (only after user says yes).** Add `--confirmed` to actually send.
 ```bash
-python3 /data/skills/gmail/scripts/send_email.py --to "recipient@example.com" --subject "Subject" --body "Message body" --confirmed
+python3 /home/tonygale/openclaw/skills/gmail/scripts/send_email.py --to "recipient@example.com" --subject "Subject" --body "Message body" --confirmed
 ```
 
 ⚠️ **NEVER use --confirmed without explicit user approval.** Always show the draft first and wait for the user to confirm.

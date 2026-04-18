@@ -19,7 +19,7 @@ def fetch_ab_municipalities():
         {"name": "Parkland County", "region": "Edmonton Region", "portal_type": "bidsandtenders", "priority": "medium"}
     ]
     
-    with open('/data/.openclaw/workspace/projects/procurement-pipeline/ab_municipalities.json', 'w') as f:
+    with open('/home/tonygale/openclaw/projects/procurement-pipeline/ab_municipalities.json', 'w') as f:
         json.dump(ab_targets, f, indent=2)
         
     print(f"Saved {len(ab_targets)} major Alberta municipal targets to ab_municipalities.json")

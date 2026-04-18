@@ -15,13 +15,13 @@ President Trump's Truth Social posts and policy announcements have been directly
 
 ```bash
 # Scan Truth Social for Trump posts
-python3 /data/skills/trading/scripts/social_scanner.py truth-social
+python3 /home/tonygale/openclaw/skills/trading/scripts/social_scanner.py truth-social
 
 # Scan political/policy news headlines
-python3 /data/skills/trading/scripts/social_scanner.py news-headlines
+python3 /home/tonygale/openclaw/skills/trading/scripts/social_scanner.py news-headlines
 
 # Show only new signals since last check
-python3 /data/skills/trading/scripts/social_scanner.py check-new
+python3 /home/tonygale/openclaw/skills/trading/scripts/social_scanner.py check-new
 ```
 
 ## Workflow

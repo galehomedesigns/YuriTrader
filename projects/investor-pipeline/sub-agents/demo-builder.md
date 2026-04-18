@@ -49,7 +49,7 @@ Your ONLY job is to create demo scripts and walkthrough guides for investor pres
 
 Save to:
 ```
-/data/.openclaw/workspace/projects/investor-pipeline/output/demo-script.md
+/home/tonygale/openclaw/projects/investor-pipeline/output/demo-script.md
 ```
 
 ## Boundaries

@@ -10,7 +10,7 @@ def get_emails():
     # This assumes the Gmail skill is configured
     try:
         # We'll use the read_email.py script from the gmail skill directly
-        result = subprocess.run(['python3', '/data/skills/gmail/scripts/read_email.py', '--count', '30'], capture_output=True, text=True)
+        result = subprocess.run(['python3', '/home/tonygale/openclaw/skills/gmail/scripts/read_email.py', '--count', '30'], capture_output=True, text=True)
         if result.returncode == 0:
             return json.loads(result.stdout)
         else:

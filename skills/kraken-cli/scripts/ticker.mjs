@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ticker.mjs — Current price, bid/ask, 24h volume for one or more pairs.
-// Usage:  node /data/skills/kraken-cli/scripts/ticker.mjs XBTUSD
-//         node /data/skills/kraken-cli/scripts/ticker.mjs XBTUSD,ETHUSD,SOLUSD
+// Usage:  node /home/tonygale/openclaw/skills/kraken-cli/scripts/ticker.mjs XBTUSD
+//         node /home/tonygale/openclaw/skills/kraken-cli/scripts/ticker.mjs XBTUSD,ETHUSD,SOLUSD
 // Output: { "XXBTZUSD": { last, bid, ask, volume24h, low24h, high24h }, ... }
 
 import { makeClient, printOk, printErr, parseArgs } from './_common.mjs';

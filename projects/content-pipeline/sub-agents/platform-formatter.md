@@ -44,7 +44,7 @@ Your ONLY job is to take written content and format it for each social platform.
 Save each formatted piece as a separate file:
 
 ```
-/data/.openclaw/workspace/projects/content-pipeline/drafts/
+/home/tonygale/openclaw/projects/content-pipeline/drafts/
 ├── linkedin-[topic-slug]-[DATE].md
 ├── facebook-[topic-slug]-[DATE].md
 ├── youtube-[topic-slug]-[DATE].md

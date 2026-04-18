@@ -18,7 +18,7 @@ Your ONLY job is to generate spending reports and update the personal dashboard.
 
 Run the existing dashboard generator:
 ```bash
-python3 /data/skills/dashboard/scripts/generate.py
+python3 /home/tonygale/openclaw/skills/dashboard/scripts/generate.py
 ```
 
 If that's not available, update the spending section of the dashboard directly with:

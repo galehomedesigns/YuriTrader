@@ -16,7 +16,7 @@ TOKEN_FILE = config.TOKEN_FILE
 
 def _api_base_url(token):
     """Route token's assigned api_server through the SSH tunnel port map.
-    See /data/skills/questrade/scripts/questrade.py for the shared pattern."""
+    See /home/tonygale/openclaw/skills/questrade/scripts/questrade.py for the shared pattern."""
     server = token["api_server"]
     port_map_env = os.environ.get("QUESTRADE_API_PORT_MAP")
     if not port_map_env:

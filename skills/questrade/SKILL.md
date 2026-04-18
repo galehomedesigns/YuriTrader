@@ -55,7 +55,7 @@ python3 {baseDir}/scripts/questrade.py cancel 12345678
 
 ## Authentication
 
-- Uses OAuth2 refresh token flow. Tokens are cached at `/data/.openclaw/questrade_token.json`.
+- Uses OAuth2 refresh token flow. Tokens are cached at `/home/tonygale/openclaw/state/questrade_token.json`.
 - Refresh tokens are single-use — each refresh generates a new one.
 - If auth fails, Tony needs to generate a new token at questrade.com > Settings > API centre.
 

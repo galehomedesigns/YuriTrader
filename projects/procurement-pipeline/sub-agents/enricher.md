@@ -20,7 +20,7 @@ You are a specialist enricher. Your ONLY job is to take existing tenders in Supa
 
 ## Tools Available
 
-- **Geocoder skill**: `python3 /data/skills/geocoder/scripts/geocode.py "City Name, Province"`
+- **Geocoder skill**: `python3 /home/tonygale/openclaw/skills/geocoder/scripts/geocode.py "City Name, Province"`
 - **Supabase skill**: Query and update via REST API
 - **OpenAI API**: Generate embeddings via curl or python
 

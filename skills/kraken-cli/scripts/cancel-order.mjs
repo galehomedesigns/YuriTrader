@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // cancel-order.mjs — Cancel an open order by txid or userref.
-// Usage:   node /data/skills/kraken-cli/scripts/cancel-order.mjs <txid>
-// Example: node /data/skills/kraken-cli/scripts/cancel-order.mjs OQCLML-BW3P3-BUCMWZ
+// Usage:   node /home/tonygale/openclaw/skills/kraken-cli/scripts/cancel-order.mjs <txid>
+// Example: node /home/tonygale/openclaw/skills/kraken-cli/scripts/cancel-order.mjs OQCLML-BW3P3-BUCMWZ
 //
 // Cancellation is NOT gated by the --validate flag. It only removes orders,
 // never creates positions, so the default-deny posture that protects

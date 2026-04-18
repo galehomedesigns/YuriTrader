@@ -36,7 +36,7 @@ echo "  Done."
 echo "Step 2: Cancelling all open Kraken orders"
 python3 - <<'PYEOF'
 import sys
-sys.path.insert(0, '/docker/openclaw-xrt9/data/skills/trading-arena')
+sys.path.insert(0, '/home/tonygale/openclaw/skills/trading-arena')
 try:
     from shared.kraken_executor import KrakenExecutor
     executor = KrakenExecutor()

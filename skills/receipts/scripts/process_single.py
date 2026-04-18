@@ -190,7 +190,7 @@ def main():
 
     # Check for duplicates
     try:
-        sys.path.insert(0, "/data/skills/receipts/scripts")
+        sys.path.insert(0, "/home/tonygale/openclaw/skills/receipts/scripts")
         from dedup_check import find_duplicate
         dup = find_duplicate(output["data"].get("vendor"), output["data"].get("date"), output["data"].get("total"))
         if dup:

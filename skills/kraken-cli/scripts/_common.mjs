@@ -1,11 +1,11 @@
 // _common.mjs — Shared helpers for kraken-cli skill scripts.
 // This file is not a CLI itself; other scripts in scripts/ import from it.
 //
-// Deployment target: /data/skills/kraken-cli/scripts/_common.mjs
+// Deployment target: /home/tonygale/openclaw/skills/kraken-cli/scripts/_common.mjs
 // KrakenClient source: /data/kraken-mcp/build/kraken/client.js
 //
 // The relative import (`../../../kraken-mcp/build/kraken/client.js`) resolves
-// correctly from inside the OpenClaw container because /data/skills/kraken-cli/
+// correctly from inside the OpenClaw container because /home/tonygale/openclaw/skills/kraken-cli/
 // and /data/kraken-mcp/ are siblings under /data/.
 
 import { KrakenClient } from '../../../kraken-mcp/build/kraken/client.js';

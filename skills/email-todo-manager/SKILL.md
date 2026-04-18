@@ -12,7 +12,7 @@ This skill helps Tony stay on top of his business by transforming unread or rece
 ### 1. Generate To-Do List
 Run the generator script to pull recent emails and extract potential tasks.
 ```bash
-python3 /data/skills/email-todo-manager/scripts/generate_todo.py
+python3 /home/tonygale/openclaw/skills/email-todo-manager/scripts/generate_todo.py
 ```
 
 ### 2. Review and Refine

@@ -57,7 +57,7 @@ Task: "Generate a weekly procurement digest email from the past 7 days of Supaba
 
 Spawn a sub-agent using `sub-agents/social-poster.md` as system prompt with model `google/gemini-3-flash-preview`.
 
-Task: "Draft this week's social media posts for Facebook groups and LinkedIn. Save to /data/.openclaw/workspace/projects/procurement-pipeline/drafts/. Report: posts drafted, platforms covered."
+Task: "Draft this week's social media posts for Facebook groups and LinkedIn. Save to /home/tonygale/openclaw/projects/procurement-pipeline/drafts/. Report: posts drafted, platforms covered."
 
 **Wait for completion.**
 

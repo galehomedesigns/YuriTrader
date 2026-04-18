@@ -32,7 +32,7 @@ Extract a task when an email:
 ## Tool
 
 ```bash
-python3 /data/skills/memory-sync/scripts/sync-tasks.py add "Task title" \
+python3 /home/tonygale/openclaw/skills/memory-sync/scripts/sync-tasks.py add "Task title" \
   --priority medium \
   --category email \
   --assigned-to tony \

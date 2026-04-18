@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="$SCRIPT_DIR/logs"
 LOG_FILE="$LOG_DIR/overseer.log"
 CONTAINER="openclaw-xrt9-openclaw-1"
-OVERSEER_DIR_IN_CONTAINER="/data/skills/trading-arena/overseer"
+OVERSEER_DIR_IN_CONTAINER="/home/tonygale/openclaw/skills/trading-arena/overseer"
 
 mkdir -p "$LOG_DIR"
 

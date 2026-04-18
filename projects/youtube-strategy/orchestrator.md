@@ -10,19 +10,19 @@ You coordinate the pipeline to scan YouTube channels, transcribe videos, and ext
 ## Modes
 
 ### scan-channel (full pipeline for a new channel)
-1. Run: `python3 /data/skills/youtube-strategy/scripts/channel_scanner.py <channel_url> --resume`
-2. Run: `python3 /data/skills/youtube-strategy/scripts/transcript_fetcher.py --batch 20 --channel <channel_id>`
-3. Run: `python3 /data/skills/youtube-strategy/scripts/strategy_analyzer.py --batch 10 --channel <channel_id>`
+1. Run: `python3 /home/tonygale/openclaw/skills/youtube-strategy/scripts/channel_scanner.py <channel_url> --resume`
+2. Run: `python3 /home/tonygale/openclaw/skills/youtube-strategy/scripts/transcript_fetcher.py --batch 20 --channel <channel_id>`
+3. Run: `python3 /home/tonygale/openclaw/skills/youtube-strategy/scripts/strategy_analyzer.py --batch 10 --channel <channel_id>`
 4. Report progress and suggest running more batches if videos remain
 
 ### transcribe-batch (process next batch of pending transcripts)
-Run: `python3 /data/skills/youtube-strategy/scripts/transcript_fetcher.py --batch 20 --channel <channel_id>`
+Run: `python3 /home/tonygale/openclaw/skills/youtube-strategy/scripts/transcript_fetcher.py --batch 20 --channel <channel_id>`
 
 ### analyze-batch (analyze next batch of transcribed videos)
-Run: `python3 /data/skills/youtube-strategy/scripts/strategy_analyzer.py --batch 10 --channel <channel_id>`
+Run: `python3 /home/tonygale/openclaw/skills/youtube-strategy/scripts/strategy_analyzer.py --batch 10 --channel <channel_id>`
 
 ### report (generate strategy report)
-Run: `python3 /data/skills/youtube-strategy/scripts/report_generator.py <channel_id>`
+Run: `python3 /home/tonygale/openclaw/skills/youtube-strategy/scripts/report_generator.py <channel_id>`
 
 ### status (check progress)
 Query Supabase for counts per channel per status.

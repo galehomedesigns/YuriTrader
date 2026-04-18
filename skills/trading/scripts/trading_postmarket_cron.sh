@@ -48,11 +48,11 @@ run_cmd() {
 }
 
 SUMMARY="$(
-    run_cmd "Portfolio"     /data/skills/questrade/scripts/questrade.py portfolio
-    run_cmd "Market snap"   /data/skills/trading/scripts/market_data.py snapshot
-    run_cmd "Alerts"        /data/skills/trading/scripts/alert_engine.py check
-    run_cmd "Auto-trader"   /data/skills/trading/scripts/auto_trader.py status
-    run_cmd "Trade history" /data/skills/trading/scripts/auto_trader.py history 1
+    run_cmd "Portfolio"     /home/tonygale/openclaw/skills/questrade/scripts/questrade.py portfolio
+    run_cmd "Market snap"   /home/tonygale/openclaw/skills/trading/scripts/market_data.py snapshot
+    run_cmd "Alerts"        /home/tonygale/openclaw/skills/trading/scripts/alert_engine.py check
+    run_cmd "Auto-trader"   /home/tonygale/openclaw/skills/trading/scripts/auto_trader.py status
+    run_cmd "Trade history" /home/tonygale/openclaw/skills/trading/scripts/auto_trader.py history 1
 )"
 
 echo "$SUMMARY" >> "$LOG_FILE"

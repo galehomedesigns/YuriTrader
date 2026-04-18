@@ -10,7 +10,7 @@ Search YouTube and extract transcripts from videos for content repurposing.
 ## Search Videos
 
 ```bash
-python3 /data/skills/youtube/scripts/search.py "project planning AI construction"
+python3 /home/tonygale/openclaw/skills/youtube/scripts/search.py "project planning AI construction"
 ```
 
 Options:
@@ -20,7 +20,7 @@ Options:
 ## Get Transcript
 
 ```bash
-python3 /data/skills/youtube/scripts/transcript.py "https://youtube.com/watch?v=VIDEO_ID"
+python3 /home/tonygale/openclaw/skills/youtube/scripts/transcript.py "https://youtube.com/watch?v=VIDEO_ID"
 ```
 
 Options:

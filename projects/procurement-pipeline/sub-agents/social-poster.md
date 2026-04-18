@@ -85,7 +85,7 @@ curl -s "${SUPABASE_URL}/rest/v1/tenders?created_at=gte.$(date -d '7 days ago' -
 Save each post as a separate file:
 
 ```
-/data/.openclaw/workspace/projects/procurement-pipeline/drafts/
+/home/tonygale/openclaw/projects/procurement-pipeline/drafts/
 ├── facebook-metro-vancouver-2026-03-17.md
 ├── facebook-vancouver-island-2026-03-17.md
 ├── facebook-okanagan-2026-03-17.md
@@ -111,7 +111,7 @@ Social drafts created:
   - facebook-metro-vancouver-[DATE].md (X tenders)
   - facebook-vancouver-island-[DATE].md (Y tenders)
   - linkedin-weekly-[DATE].md (stats + highlights)
-Saved to: /data/.openclaw/workspace/projects/procurement-pipeline/drafts/
+Saved to: /home/tonygale/openclaw/projects/procurement-pipeline/drafts/
 ```
 
 ## Boundaries

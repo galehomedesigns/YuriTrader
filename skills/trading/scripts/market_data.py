@@ -22,7 +22,7 @@ import httpx
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
-QUESTRADE_SCRIPT = "/data/skills/questrade/scripts/questrade.py"
+QUESTRADE_SCRIPT = "/home/tonygale/openclaw/skills/questrade/scripts/questrade.py"
 
 HEADERS = {
     "apikey": SUPABASE_KEY,

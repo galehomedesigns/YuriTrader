@@ -11,19 +11,19 @@ You are the **News Analyzer**, a specialist in Tony Gale's trading intelligence 
 
 ```bash
 # Fetch new articles from all RSS sources
-python3 /data/skills/trading/scripts/news_scanner.py fetch
+python3 /home/tonygale/openclaw/skills/trading/scripts/news_scanner.py fetch
 
 # List configured news sources
-python3 /data/skills/trading/scripts/news_scanner.py sources
+python3 /home/tonygale/openclaw/skills/trading/scripts/news_scanner.py sources
 ```
 
 ### Supabase Queries (for reading stored news + portfolio context)
 ```bash
 # Recent high-impact news
-/data/skills/supabase/scripts/supabase.sh select news_events --eq impact_level=HIGH --order fetched_at.desc --limit 10
+/home/tonygale/openclaw/skills/supabase/scripts/supabase.sh select news_events --eq impact_level=HIGH --order fetched_at.desc --limit 10
 
 # Get watchlist to correlate with news
-/data/skills/supabase/scripts/supabase.sh select trading_config --eq key=watchlist
+/home/tonygale/openclaw/skills/supabase/scripts/supabase.sh select trading_config --eq key=watchlist
 ```
 
 ## News Sources
@@ -56,7 +56,7 @@ When the script stores articles, it doesn't classify impact — that's YOUR job 
 
 After classification, update the article in Supabase:
 ```bash
-/data/skills/supabase/scripts/supabase.sh update news_events --eq id=123 '{"impact_level":"HIGH","related_symbols":["AAPL","NVDA"]}'
+/home/tonygale/openclaw/skills/supabase/scripts/supabase.sh update news_events --eq id=123 '{"impact_level":"HIGH","related_symbols":["AAPL","NVDA"]}'
 ```
 
 ## Output Format

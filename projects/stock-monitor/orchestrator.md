@@ -56,7 +56,7 @@ Full morning briefing before market open.
    **Wait for completion.**
 4. Spawn **Trend Analyzer** — "Analyze historical snapshots for all positions. Generate trend signals. Flag any signal changes."
    **Wait for completion.**
-5. Run: `python3 /data/skills/trading/scripts/dashboard_gen.py generate`
+5. Run: `python3 /home/tonygale/openclaw/skills/trading/scripts/dashboard_gen.py generate`
 6. Compile **Pre-Market Briefing** (see report format below).
 
 ### Mode: `post-market`
@@ -66,7 +66,7 @@ End-of-day summary after market close.
    **Wait for completion.**
 2. Spawn **Trend Analyzer** — "Compute end-of-day trend signals for all positions. Compare against previous signals."
    **Wait for completion.**
-3. Run: `python3 /data/skills/trading/scripts/dashboard_gen.py generate`
+3. Run: `python3 /home/tonygale/openclaw/skills/trading/scripts/dashboard_gen.py generate`
 4. Compile **Post-Market Summary** (see report format below).
 
 ### Mode: `interactive`

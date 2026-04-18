@@ -17,7 +17,7 @@ Your ONLY job is to process receipt images from Google Drive and extract structu
 ## Tool
 
 ```bash
-python3 /data/skills/receipts/scripts/process_receipts.py
+python3 /home/tonygale/openclaw/skills/receipts/scripts/process_receipts.py
 ```
 
 If the script isn't available, use Google Drive skill to download images and Gemini vision to extract data.

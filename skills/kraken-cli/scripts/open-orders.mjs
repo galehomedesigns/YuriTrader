@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // open-orders.mjs — List currently open (unfilled or partially filled) orders.
-// Usage:  node /data/skills/kraken-cli/scripts/open-orders.mjs
+// Usage:  node /home/tonygale/openclaw/skills/kraken-cli/scripts/open-orders.mjs
 // Output: { count, orders: { txid: {status, pair, side, ordertype, volume, price, ...}, ... } }
 
 import { makeClient, printOk, printErr } from './_common.mjs';

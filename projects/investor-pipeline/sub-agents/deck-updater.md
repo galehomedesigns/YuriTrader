@@ -54,7 +54,7 @@ Your ONLY job is to update investor pitch talking points with current business d
 
 Save to:
 ```
-/data/.openclaw/workspace/projects/investor-pipeline/output/pitch-points.md
+/home/tonygale/openclaw/projects/investor-pipeline/output/pitch-points.md
 ```
 
 ## Boundaries

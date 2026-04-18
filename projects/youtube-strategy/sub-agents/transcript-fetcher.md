@@ -10,7 +10,7 @@ Your ONLY job is to transcribe pending YouTube videos.
 ## Tool
 
 ```bash
-python3 /data/skills/youtube-strategy/scripts/transcript_fetcher.py [--batch 20] [--channel CHANNEL_ID]
+python3 /home/tonygale/openclaw/skills/youtube-strategy/scripts/transcript_fetcher.py [--batch 20] [--channel CHANNEL_ID]
 ```
 
 ## How It Works

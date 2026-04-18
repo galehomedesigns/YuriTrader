@@ -53,11 +53,11 @@ run_cmd() {
 }
 
 BRIEFING="$(
-    run_cmd "Portfolio"    /data/skills/questrade/scripts/questrade.py portfolio
-    run_cmd "Quotes"       /data/skills/questrade/scripts/questrade.py quote $WATCHLIST
-    run_cmd "Market snap"  /data/skills/trading/scripts/market_data.py snapshot
-    run_cmd "Alerts"       /data/skills/trading/scripts/alert_engine.py check
-    run_cmd "Auto-trader"  /data/skills/trading/scripts/auto_trader.py status
+    run_cmd "Portfolio"    /home/tonygale/openclaw/skills/questrade/scripts/questrade.py portfolio
+    run_cmd "Quotes"       /home/tonygale/openclaw/skills/questrade/scripts/questrade.py quote $WATCHLIST
+    run_cmd "Market snap"  /home/tonygale/openclaw/skills/trading/scripts/market_data.py snapshot
+    run_cmd "Alerts"       /home/tonygale/openclaw/skills/trading/scripts/alert_engine.py check
+    run_cmd "Auto-trader"  /home/tonygale/openclaw/skills/trading/scripts/auto_trader.py status
 )"
 
 echo "$BRIEFING" >> "$LOG_FILE"

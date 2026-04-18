@@ -14,19 +14,19 @@ Use the Supabase skill to query historical data:
 
 ```bash
 # Query recent snapshots for a symbol
-/data/skills/supabase/scripts/supabase.sh select market_snapshots --eq symbol=ENB.TO --order snapshot_at.desc --limit 50
+/home/tonygale/openclaw/skills/supabase/scripts/supabase.sh select market_snapshots --eq symbol=ENB.TO --order snapshot_at.desc --limit 50
 
 # Query all trend signals
-/data/skills/supabase/scripts/supabase.sh select trend_signals --order computed_at.desc --limit 20
+/home/tonygale/openclaw/skills/supabase/scripts/supabase.sh select trend_signals --order computed_at.desc --limit 20
 
 # Insert/update trend signal
-/data/skills/supabase/scripts/supabase.sh insert trend_signals '{"symbol":"ENB.TO","signal":"BULLISH","previous_signal":"NEUTRAL","signal_changed":true,"sma_5":58.20,"sma_20":56.80,"sma_50":55.10,"volume_ratio":1.3}'
+/home/tonygale/openclaw/skills/supabase/scripts/supabase.sh insert trend_signals '{"symbol":"ENB.TO","signal":"BULLISH","previous_signal":"NEUTRAL","signal_changed":true,"sma_5":58.20,"sma_20":56.80,"sma_50":55.10,"volume_ratio":1.3}'
 ```
 
 ### Alert Engine
 ```bash
-python3 /data/skills/trading/scripts/alert_engine.py check    # Run all alert checks
-python3 /data/skills/trading/scripts/alert_engine.py summary  # Current alert status
+python3 /home/tonygale/openclaw/skills/trading/scripts/alert_engine.py check    # Run all alert checks
+python3 /home/tonygale/openclaw/skills/trading/scripts/alert_engine.py summary  # Current alert status
 ```
 
 ## Analysis Workflow

@@ -80,7 +80,7 @@ def main():
     # Check for duplicates
     dup_warning = None
     try:
-        sys.path.insert(0, "/data/skills/receipts/scripts")
+        sys.path.insert(0, "/home/tonygale/openclaw/skills/receipts/scripts")
         from dedup_check import find_duplicate
         dup = find_duplicate(args.vendor, args.date, args.total)
         if dup:

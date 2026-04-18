@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ohlc.mjs — OHLC candle data for a single pair.
-// Usage:  node /data/skills/kraken-cli/scripts/ohlc.mjs <pair> [interval-minutes]
-// Example: node /data/skills/kraken-cli/scripts/ohlc.mjs XBTUSD 60
+// Usage:  node /home/tonygale/openclaw/skills/kraken-cli/scripts/ohlc.mjs <pair> [interval-minutes]
+// Example: node /home/tonygale/openclaw/skills/kraken-cli/scripts/ohlc.mjs XBTUSD 60
 // Valid intervals: 1, 5, 15, 30, 60, 240 (4h), 1440 (1d), 10080 (1w), 21600 (15d)
 // Output: { pair, interval, count, candles: [{time, open, high, low, close, vwap, volume, trades}, ...] }
 

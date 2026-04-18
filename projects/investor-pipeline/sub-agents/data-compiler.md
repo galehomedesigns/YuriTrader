@@ -31,7 +31,7 @@ curl -s "${SUPABASE_URL}/rest/v1/tenders?select=category&status=eq.open" -H "api
 ```
 
 ### Platform Capabilities
-- Count skills in `/data/skills/`
+- Count skills in `/home/tonygale/openclaw/skills/`
 - Count orchestrator pipelines in `workspace/projects/`
 - List automation features (cron jobs, multi-agent workflows)
 

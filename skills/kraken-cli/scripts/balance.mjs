@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // balance.mjs — Current account balances (non-zero only).
-// Usage:  node /data/skills/kraken-cli/scripts/balance.mjs
+// Usage:  node /home/tonygale/openclaw/skills/kraken-cli/scripts/balance.mjs
 // Output: { "XXBT": "0.12345", "ZUSD": "1234.56", ... }
 //
 // Requires KRAKEN_API_KEY / KRAKEN_API_SECRET. Kraken asset codes:

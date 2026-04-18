@@ -11,10 +11,10 @@ Your ONLY job is to analyze transcripts and extract trading strategies.
 
 ```bash
 # Analyze pending transcripts
-python3 /data/skills/youtube-strategy/scripts/strategy_analyzer.py [--batch 10] [--channel CHANNEL_ID]
+python3 /home/tonygale/openclaw/skills/youtube-strategy/scripts/strategy_analyzer.py [--batch 10] [--channel CHANNEL_ID]
 
 # Generate strategy report
-python3 /data/skills/youtube-strategy/scripts/report_generator.py <channel_id> [--format markdown|html|both]
+python3 /home/tonygale/openclaw/skills/youtube-strategy/scripts/report_generator.py <channel_id> [--format markdown|html|both]
 ```
 
 ## What Gets Extracted

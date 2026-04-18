@@ -36,7 +36,7 @@ Audit and improve each bot's signal logic. Reject single-condition alerts. Ensur
 ### Practice 2: Pre-Market Game Plan
 Run daily before market open:
 ```bash
-python3 /data/skills/trading-arena/overseer/game_plan.py
+python3 /home/tonygale/openclaw/skills/trading-arena/overseer/game_plan.py
 ```
 - Consolidate all bot watchlists
 - Rank tickers by setup quality + catalyst strength
@@ -46,7 +46,7 @@ python3 /data/skills/trading-arena/overseer/game_plan.py
 ### Practice 3: Performance Analytics
 Run daily post-market and weekly:
 ```bash
-python3 /data/skills/trading-arena/overseer/analytics.py --period 7d
+python3 /home/tonygale/openclaw/skills/trading-arena/overseer/analytics.py --period 7d
 ```
 - Per-bot: trades, win rate, expectancy, P&L by setup type
 - Time-of-day analysis (30-min blocks)
@@ -63,11 +63,11 @@ Audit exit logic monthly. Ensure every bot has:
 ### Practice 5: AI Trade Autopsy & Super-Prompt
 Run after each session:
 ```bash
-python3 /data/skills/trading-arena/overseer/autopsy.py
+python3 /home/tonygale/openclaw/skills/trading-arena/overseer/autopsy.py
 ```
 Weekly super-prompt:
 ```bash
-python3 /data/skills/trading-arena/overseer/super_prompt.py
+python3 /home/tonygale/openclaw/skills/trading-arena/overseer/super_prompt.py
 ```
 - Autopsy every trade (no cherry-picking)
 - Identify behavioral patterns per bot

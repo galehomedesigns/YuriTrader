@@ -5,7 +5,7 @@
  *
  * Usage: node tv_switch_symbol.js KRAKEN:BTCUSD
  */
-import CDP from '/docker/openclaw-xrt9/data/tradingview-mcp/node_modules/chrome-remote-interface/index.js';
+import CDP from '/home/tonygale/openclaw/tradingview-mcp/node_modules/chrome-remote-interface/index.js';
 
 const symbol = process.argv[2];
 if (!symbol) {

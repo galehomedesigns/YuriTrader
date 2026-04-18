@@ -36,7 +36,7 @@ def geocode(address):
     if not address or address == "BC" or address == "Canada":
         return None
     try:
-        cmd = ["python3", "/data/skills/geocoder/scripts/geocode.py", address]
+        cmd = ["python3", "/home/tonygale/openclaw/skills/geocoder/scripts/geocode.py", address]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
             data = json.loads(result.stdout)

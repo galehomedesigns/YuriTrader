@@ -30,7 +30,7 @@ import httpx
 # share the same physical file).
 TOKEN_FILE = Path(os.environ.get(
     "QUESTRADE_TOKEN_FILE",
-    "/data/.openclaw/questrade_token.json",
+    "/home/tonygale/openclaw/state/questrade_token.json",
 ))
 TOKEN_LOCK = Path(str(TOKEN_FILE) + ".lock")
 AUTH_URL = os.environ.get("QUESTRADE_AUTH_URL") or "https://login.questrade.com/oauth2/token"

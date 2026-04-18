@@ -38,7 +38,7 @@ Task: "Write content for the following topics: [pass researcher output]. Create 
 ### Step 3: Format & Distribute
 Spawn platform-formatter with model `google/gemini-3-flash-preview`.
 
-Task: "Take the following content and format for each platform: [pass writer output]. Create LinkedIn post, Facebook post, YouTube description, and email newsletter snippet. Save all drafts to /data/.openclaw/workspace/projects/content-pipeline/drafts/."
+Task: "Take the following content and format for each platform: [pass writer output]. Create LinkedIn post, Facebook post, YouTube description, and email newsletter snippet. Save all drafts to /home/tonygale/openclaw/projects/content-pipeline/drafts/."
 
 **Wait for completion.**
 

@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 OPENAI_KEY = os.environ.get("OPENAI_API_KEY", "")
-CREDS_FILE = "/data/.openclaw/workspace/projects/procurement-pipeline/credentials.json"
+CREDS_FILE = "/home/tonygale/openclaw/projects/procurement-pipeline/credentials.json"
 
 HEADERS = {
     "apikey": SUPABASE_KEY,

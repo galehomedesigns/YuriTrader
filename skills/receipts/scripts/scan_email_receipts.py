@@ -471,7 +471,7 @@ def main():
 
         # Check for duplicates in spreadsheet
         try:
-            sys.path.insert(0, "/data/skills/receipts/scripts")
+            sys.path.insert(0, "/home/tonygale/openclaw/skills/receipts/scripts")
             from dedup_check import find_duplicate
             dup = find_duplicate(entry.get("vendor"), entry.get("date"), entry.get("total"))
             if dup:

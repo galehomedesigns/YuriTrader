@@ -18,12 +18,12 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID", "6545739863")
 
 # -- Questrade Token --
-TOKEN_FILE = "/data/.openclaw/questrade_token.json"
+TOKEN_FILE = "/home/tonygale/openclaw/state/questrade_token.json"
 
 # -- Questrade Web Login (for browser automation) --
 QUESTRADE_WEB_USER     = os.getenv("QUESTRADE_WEB_USER", "")
 QUESTRADE_WEB_PASSWORD = os.getenv("QUESTRADE_WEB_PASSWORD", "")
-BROWSER_STATE_DIR      = "/data/.openclaw/questrade_browser_state"
+BROWSER_STATE_DIR      = "/home/tonygale/openclaw/state/questrade_browser_state"
 TWO_FA_CODE_FILE       = "/data/.openclaw/questrade_2fa_code.txt"
 
 # -- Risk Controls --

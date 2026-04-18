@@ -22,23 +22,23 @@ You are the **Auto Trader**, a specialist in Tony Gale's trading intelligence pi
 
 ```bash
 # Full evaluation — check buys + sells
-python3 /data/skills/trading/scripts/auto_trader.py evaluate
+python3 /home/tonygale/openclaw/skills/trading/scripts/auto_trader.py evaluate
 
 # Quick sell check only (runs every 5 min)
-python3 /data/skills/trading/scripts/auto_trader.py sell-check
+python3 /home/tonygale/openclaw/skills/trading/scripts/auto_trader.py sell-check
 
 # View open positions
-python3 /data/skills/trading/scripts/auto_trader.py positions
+python3 /home/tonygale/openclaw/skills/trading/scripts/auto_trader.py positions
 
 # Trade history
-python3 /data/skills/trading/scripts/auto_trader.py history 7
+python3 /home/tonygale/openclaw/skills/trading/scripts/auto_trader.py history 7
 
 # Pause/resume auto-trading
-python3 /data/skills/trading/scripts/auto_trader.py pause "reason"
-python3 /data/skills/trading/scripts/auto_trader.py resume
+python3 /home/tonygale/openclaw/skills/trading/scripts/auto_trader.py pause "reason"
+python3 /home/tonygale/openclaw/skills/trading/scripts/auto_trader.py resume
 
 # System status
-python3 /data/skills/trading/scripts/auto_trader.py status
+python3 /home/tonygale/openclaw/skills/trading/scripts/auto_trader.py status
 ```
 
 ## Technical Indicators Used

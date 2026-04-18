@@ -6,7 +6,7 @@ Usage: python3 write_2fa.py 123456
 import sys
 from pathlib import Path
 
-CODE_FILE = Path("/data/.openclaw/questrade_2fa_code.txt")
+CODE_FILE = Path("/home/tonygale/openclaw/state/questrade_2fa_code.txt")
 
 if len(sys.argv) < 2:
     print("Usage: write_2fa.py <code>")

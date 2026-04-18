@@ -11,25 +11,25 @@ Scrape trading YouTubers, transcribe their videos, and extract actionable tradin
 
 ### Channel Scanner
 ```bash
-python3 /data/skills/youtube-strategy/scripts/channel_scanner.py <channel_url> [--resume] [--limit N]
+python3 /home/tonygale/openclaw/skills/youtube-strategy/scripts/channel_scanner.py <channel_url> [--resume] [--limit N]
 ```
 Enumerates all videos from a YouTube channel and stores metadata in Supabase `yt_videos` table.
 
 ### Transcript Fetcher
 ```bash
-python3 /data/skills/youtube-strategy/scripts/transcript_fetcher.py [--batch 20] [--channel CHANNEL_ID]
+python3 /home/tonygale/openclaw/skills/youtube-strategy/scripts/transcript_fetcher.py [--batch 20] [--channel CHANNEL_ID]
 ```
 Transcribes pending videos using youtube-transcript-api (fast) with yt-dlp fallback.
 
 ### Strategy Analyzer
 ```bash
-python3 /data/skills/youtube-strategy/scripts/strategy_analyzer.py [--batch 10] [--channel CHANNEL_ID]
+python3 /home/tonygale/openclaw/skills/youtube-strategy/scripts/strategy_analyzer.py [--batch 10] [--channel CHANNEL_ID]
 ```
 Sends transcripts to LLM to extract trading strategies (entry/exit rules, indicators, risk management).
 
 ### Report Generator
 ```bash
-python3 /data/skills/youtube-strategy/scripts/report_generator.py <channel_id> [--format markdown|html]
+python3 /home/tonygale/openclaw/skills/youtube-strategy/scripts/report_generator.py <channel_id> [--format markdown|html]
 ```
 Compiles extracted strategies into a ranked report, deduplicates across videos.
 

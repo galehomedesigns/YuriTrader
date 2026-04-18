@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // closed-orders.mjs — List historical closed orders (filled, cancelled, expired).
-// Usage:  node /data/skills/kraken-cli/scripts/closed-orders.mjs [--ofs=N] [--start=UNIX] [--end=UNIX]
+// Usage:  node /home/tonygale/openclaw/skills/kraken-cli/scripts/closed-orders.mjs [--ofs=N] [--start=UNIX] [--end=UNIX]
 // Kraken returns up to 50 at a time. Use --ofs=50 to page.
 // Output: { count, total, orders: { txid: {...}, ... } }
 

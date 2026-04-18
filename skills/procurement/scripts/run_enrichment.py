@@ -170,8 +170,8 @@ def main():
         'duplicates': duplicates[:100]  # Limit to first 100
     }
     
-    report_path = f'/data/skills/procurement/reports/enrichment_{datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")}.json'
-    os.makedirs('/data/skills/procurement/reports', exist_ok=True)
+    report_path = f'/home/tonygale/openclaw/skills/procurement/reports/enrichment_{datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")}.json'
+    os.makedirs('/home/tonygale/openclaw/skills/procurement/reports', exist_ok=True)
     
     with open(report_path, 'w') as f:
         json.dump(report, f, indent=2)

@@ -36,22 +36,22 @@ You coordinate the 10-bot Trading Arena and the Trading Overseer agent. You do N
 
 ```bash
 # Pre-market game plan
-python3 /data/skills/trading-arena/overseer/game_plan.py
+python3 /home/tonygale/openclaw/skills/trading-arena/overseer/game_plan.py
 
 # Performance analytics
-python3 /data/skills/trading-arena/overseer/analytics.py --period 7d
+python3 /home/tonygale/openclaw/skills/trading-arena/overseer/analytics.py --period 7d
 
 # Trade autopsies (today's closed trades)
-python3 /data/skills/trading-arena/overseer/autopsy.py
+python3 /home/tonygale/openclaw/skills/trading-arena/overseer/autopsy.py
 
 # Weekly super-prompt
-python3 /data/skills/trading-arena/overseer/super_prompt.py
+python3 /home/tonygale/openclaw/skills/trading-arena/overseer/super_prompt.py
 
 # Bot restrictions (from data)
-python3 /data/skills/trading-arena/overseer/restrictions.py
+python3 /home/tonygale/openclaw/skills/trading-arena/overseer/restrictions.py
 
 # Arena status
-python3 /data/skills/trading-arena/arena_runner.py --leaderboard
+python3 /home/tonygale/openclaw/skills/trading-arena/arena_runner.py --leaderboard
 ```
 
 ## Boundaries

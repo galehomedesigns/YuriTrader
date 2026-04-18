@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // trades-history.mjs — Historical trade fills (individual executions).
-// Usage:  node /data/skills/kraken-cli/scripts/trades-history.mjs [--ofs=N] [--start=UNIX] [--end=UNIX]
+// Usage:  node /home/tonygale/openclaw/skills/kraken-cli/scripts/trades-history.mjs [--ofs=N] [--start=UNIX] [--end=UNIX]
 // Note: these are FILLS, not orders. One order can produce multiple fills.
 // Output: { count, total, trades: { tradeid: {pair, side, ordertype, price, cost, fee, volume, ...}, ... } }
 

@@ -10,7 +10,7 @@ Tony's personal dashboard for Decades Developments. Shows spending statistics, t
 ## Generate/Update Dashboard
 
 ```bash
-python3 /data/skills/dashboard/scripts/generate.py
+python3 /home/tonygale/openclaw/skills/dashboard/scripts/generate.py
 ```
 
 This pulls latest expense data from Google Drive, combines it with todos/priorities, and generates an HTML dashboard at `/data/.openclaw/canvas/dashboard.html`.
@@ -56,7 +56,7 @@ Edit the `priorities` array in the same data file. Each priority has a `category
 
 Always regenerate the dashboard after modifying data:
 ```bash
-python3 /data/skills/dashboard/scripts/generate.py
+python3 /home/tonygale/openclaw/skills/dashboard/scripts/generate.py
 ```
 
 ## Cron Schedule

@@ -41,7 +41,7 @@ done
 
 echo "=== Receipts ${DOCKER_ARGS[*]:-normal}: $(date -Iseconds) ===" >> "$LOG_FILE"
 
-OUTPUT="$(docker exec "$CONTAINER" python3 /data/skills/receipts/scripts/process_receipts.py "${DOCKER_ARGS[@]}" 2>&1)" || RC=$?
+OUTPUT="$(docker exec "$CONTAINER" python3 /home/tonygale/openclaw/skills/receipts/scripts/process_receipts.py "${DOCKER_ARGS[@]}" 2>&1)" || RC=$?
 RC=${RC:-0}
 echo "$OUTPUT" >> "$LOG_FILE"
 echo "exit=$RC" >> "$LOG_FILE"

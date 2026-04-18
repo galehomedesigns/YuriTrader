@@ -33,11 +33,11 @@ VERBOSE=0
 echo "=== News scan: $(date -Iseconds) ===" >> "$LOG_FILE"
 
 # Scanners run silently (fill DB). Only their stderr/errors reach the log.
-docker exec "$CONTAINER" python3 /data/skills/trading/scripts/social_scanner.py truth-social >> "$LOG_FILE" 2>&1 || true
-docker exec "$CONTAINER" python3 /data/skills/trading/scripts/news_scanner.py fetch >> "$LOG_FILE" 2>&1 || true
+docker exec "$CONTAINER" python3 /home/tonygale/openclaw/skills/trading/scripts/social_scanner.py truth-social >> "$LOG_FILE" 2>&1 || true
+docker exec "$CONTAINER" python3 /home/tonygale/openclaw/skills/trading/scripts/news_scanner.py fetch >> "$LOG_FILE" 2>&1 || true
 
 # Alert engine is the decision point.
-ALERTS="$(docker exec "$CONTAINER" python3 /data/skills/trading/scripts/alert_engine.py check 2>&1)" || RC=$?
+ALERTS="$(docker exec "$CONTAINER" python3 /home/tonygale/openclaw/skills/trading/scripts/alert_engine.py check 2>&1)" || RC=$?
 RC=${RC:-0}
 echo "$ALERTS" >> "$LOG_FILE"
 echo "alert_engine exit=$RC" >> "$LOG_FILE"
