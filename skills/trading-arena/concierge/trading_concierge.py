@@ -39,7 +39,7 @@ from datetime import datetime, timezone
 # (config.py, shared/, concierge/advisor all import config which reads os.environ
 # at load time — if we import them before loading .env, their globals stay blank).
 def _load_env():
-    env_file = "/docker/openclaw-xrt9/.env"
+    env_file = "/home/tonygale/openclaw/.env"
     if not os.path.exists(env_file):
         return
     with open(env_file) as f:

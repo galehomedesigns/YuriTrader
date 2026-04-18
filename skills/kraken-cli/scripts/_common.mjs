@@ -22,7 +22,7 @@ export function makeClient({ requireAuth = false } = {}) {
 
   if (requireAuth && !(apiKey && apiSecret)) {
     console.error('Error: this command requires KRAKEN_API_KEY and KRAKEN_API_SECRET in the environment.');
-    console.error('Add them to /docker/openclaw-xrt9/.env and restart the OpenClaw container.');
+    console.error('Add them to /home/tonygale/openclaw/.env and restart the OpenClaw container.');
     process.exit(2);
   }
 

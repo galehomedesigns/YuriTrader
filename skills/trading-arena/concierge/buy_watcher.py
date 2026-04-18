@@ -23,7 +23,7 @@ from zoneinfo import ZoneInfo
 
 # Load .env BEFORE importing anything that reads env vars at module-load time
 def _load_env():
-    env_file = "/docker/openclaw-xrt9/.env"
+    env_file = "/home/tonygale/openclaw/.env"
     if not os.path.exists(env_file):
         return
     with open(env_file) as f:

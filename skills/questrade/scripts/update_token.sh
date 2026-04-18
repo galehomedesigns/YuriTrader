@@ -21,7 +21,7 @@ if [[ $# -ne 1 ]]; then
 fi
 
 NEW_TOKEN="$1"
-ENV_FILE="/docker/openclaw-xrt9/.env"
+ENV_FILE="/home/tonygale/openclaw/.env"
 CACHE_FILE="/home/tonygale/openclaw/.openclaw/questrade_token.json"
 LOCK_FILE="${CACHE_FILE}.lock"
 

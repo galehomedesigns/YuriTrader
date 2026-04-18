@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def _load_env():
     """Load .env into os.environ (cron doesn't inherit the shell env)."""
-    env_file = "/docker/openclaw-xrt9/.env"
+    env_file = "/home/tonygale/openclaw/.env"
     if not os.path.exists(env_file):
         return
     with open(env_file) as f:

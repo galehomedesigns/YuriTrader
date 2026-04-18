@@ -5,7 +5,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ENV_FILE="/docker/openclaw-xrt9/.env"
+ENV_FILE="/home/tonygale/openclaw/.env"
 LOG_FILE="$SCRIPT_DIR/logs/watchlist.log"
 
 mkdir -p "$SCRIPT_DIR/logs"
@@ -19,7 +19,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 echo "=== Watchlist refresh: $(date) ===" >> "$LOG_FILE"
-python3 "$SCRIPT_DIR/overseer/dynamic_watchlist.py" >> "$LOG_FILE" 2>&1
+/home/tonygale/openclaw/.venv/bin/python "$SCRIPT_DIR/overseer/dynamic_watchlist.py" >> "$LOG_FILE" 2>&1
 echo "" >> "$LOG_FILE"
 
 tail -3000 "$LOG_FILE" > "$LOG_FILE.tmp" 2>/dev/null && mv "$LOG_FILE.tmp" "$LOG_FILE" || true

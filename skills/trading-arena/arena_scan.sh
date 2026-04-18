@@ -6,7 +6,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ENV_FILE="/docker/openclaw-xrt9/.env"
+ENV_FILE="/home/tonygale/openclaw/.env"
 LOG_DIR="$SCRIPT_DIR/logs"
 LOG_FILE="$LOG_DIR/arena_scan.log"
 
@@ -21,7 +21,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 echo "=== Arena Scan: $(date) ===" >> "$LOG_FILE"
-python3 "$SCRIPT_DIR/arena_runner.py" --once >> "$LOG_FILE" 2>&1
+/home/tonygale/openclaw/.venv/bin/python "$SCRIPT_DIR/arena_runner.py" --once >> "$LOG_FILE" 2>&1
 echo "" >> "$LOG_FILE"
 
 # Keep last 7 days of logs (~2000 scans)

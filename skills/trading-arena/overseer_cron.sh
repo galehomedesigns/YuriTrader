@@ -28,7 +28,7 @@ fi
 echo "=== Overseer $ACTION: $(date) ===" >> "$LOG_FILE"
 
 run_in_container() {
-    docker exec "$CONTAINER" python3 "$OVERSEER_DIR_IN_CONTAINER/$1" "${@:2}" >> "$LOG_FILE" 2>&1
+    /home/tonygale/openclaw/.venv/bin/python "$OVERSEER_DIR_IN_CONTAINER/$1" "${@:2}" >> "$LOG_FILE" 2>&1
 }
 
 case "$ACTION" in

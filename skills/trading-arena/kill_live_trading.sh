@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-ENV_FILE="/docker/openclaw-xrt9/.env"
+ENV_FILE="/home/tonygale/openclaw/.env"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 if [ ! -f "$ENV_FILE" ]; then
@@ -34,7 +34,7 @@ echo "  Done."
 
 # 2. Cancel all open orders on Kraken
 echo "Step 2: Cancelling all open Kraken orders"
-python3 - <<'PYEOF'
+/home/tonygale/openclaw/.venv/bin/python - <<'PYEOF'
 import sys
 sys.path.insert(0, '/home/tonygale/openclaw/skills/trading-arena')
 try:

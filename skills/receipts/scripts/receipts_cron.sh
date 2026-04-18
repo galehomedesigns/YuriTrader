@@ -12,7 +12,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="$SCRIPT_DIR/../logs"
-ENV_FILE="/docker/openclaw-xrt9/.env"
+ENV_FILE="/home/tonygale/openclaw/.env"
 LOG_FILE="$LOG_DIR/cron.log"
 CONTAINER="openclaw-xrt9-openclaw-1"
 
@@ -41,7 +41,7 @@ done
 
 echo "=== Receipts ${DOCKER_ARGS[*]:-normal}: $(date -Iseconds) ===" >> "$LOG_FILE"
 
-OUTPUT="$(docker exec "$CONTAINER" python3 /home/tonygale/openclaw/skills/receipts/scripts/process_receipts.py "${DOCKER_ARGS[@]}" 2>&1)" || RC=$?
+OUTPUT="$(/home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/receipts/scripts/process_receipts.py "${DOCKER_ARGS[@]}" 2>&1)" || RC=$?
 RC=${RC:-0}
 echo "$OUTPUT" >> "$LOG_FILE"
 echo "exit=$RC" >> "$LOG_FILE"

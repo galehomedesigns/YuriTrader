@@ -5,7 +5,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ENV_FILE="/docker/openclaw-xrt9/.env"
+ENV_FILE="/home/tonygale/openclaw/.env"
 LOG_FILE="$SCRIPT_DIR/logs/tv_focus.log"
 
 mkdir -p "$SCRIPT_DIR/logs"
@@ -18,7 +18,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 echo "=== TV focus: $(date) ===" >> "$LOG_FILE"
-python3 "$SCRIPT_DIR/overseer/tv_focus.py" >> "$LOG_FILE" 2>&1
+/home/tonygale/openclaw/.venv/bin/python "$SCRIPT_DIR/overseer/tv_focus.py" >> "$LOG_FILE" 2>&1
 echo "" >> "$LOG_FILE"
 
 tail -2000 "$LOG_FILE" > "$LOG_FILE.tmp" 2>/dev/null && mv "$LOG_FILE.tmp" "$LOG_FILE" || true

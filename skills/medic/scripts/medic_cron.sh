@@ -10,7 +10,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="$SCRIPT_DIR/../logs"
-ENV_FILE="/docker/openclaw-xrt9/.env"
+ENV_FILE="/home/tonygale/openclaw/.env"
 LOG_FILE="$LOG_DIR/cron.log"
 CONTAINER="openclaw-xrt9-openclaw-1"
 
@@ -30,11 +30,11 @@ MODE="${1:-full}"
 
 echo "=== Medic $MODE: $(date -Iseconds) ===" >> "$LOG_FILE"
 
-REPORT="$(docker exec "$CONTAINER" python3 /home/tonygale/openclaw/skills/medic/scripts/medic.py report 2>&1)"
+REPORT="$(/home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/medic/scripts/medic.py report 2>&1)"
 echo "$REPORT" >> "$LOG_FILE"
 
 if [ "$MODE" != "report-only" ]; then
-    docker exec "$CONTAINER" python3 /home/tonygale/openclaw/skills/medic/scripts/medic.py dashboard >> "$LOG_FILE" 2>&1 || true
+    /home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/medic/scripts/medic.py dashboard >> "$LOG_FILE" 2>&1 || true
 fi
 
 PREFIX=""

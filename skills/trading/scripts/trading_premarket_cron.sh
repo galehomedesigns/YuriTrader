@@ -9,7 +9,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="$SCRIPT_DIR/../logs"
-ENV_FILE="/docker/openclaw-xrt9/.env"
+ENV_FILE="/home/tonygale/openclaw/.env"
 LOG_FILE="$LOG_DIR/premarket.log"
 CONTAINER="openclaw-xrt9-openclaw-1"
 DASHBOARD_URL="https://187-77-193-40.sslip.io/trading.html"
@@ -33,7 +33,7 @@ run_cmd() {
     local label="$1"
     shift
     local output rc cleaned
-    output=$(docker exec "$CONTAINER" python3 "$@" 2>&1)
+    output=$(/home/tonygale/openclaw/.venv/bin/python "$@" 2>&1)
     rc=$?
     # Strip Python traceback body: stop at first "Traceback" line; cap at 15 lines.
     # Strip Python traceback body lines (File "...", indented continuations,

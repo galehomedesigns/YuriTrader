@@ -11,7 +11,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="$SCRIPT_DIR/../logs"
-ENV_FILE="/docker/openclaw-xrt9/.env"
+ENV_FILE="/home/tonygale/openclaw/.env"
 LOG_FILE="$LOG_DIR/news.log"
 CONTAINER="openclaw-xrt9-openclaw-1"
 
@@ -33,11 +33,11 @@ VERBOSE=0
 echo "=== News scan: $(date -Iseconds) ===" >> "$LOG_FILE"
 
 # Scanners run silently (fill DB). Only their stderr/errors reach the log.
-docker exec "$CONTAINER" python3 /home/tonygale/openclaw/skills/trading/scripts/social_scanner.py truth-social >> "$LOG_FILE" 2>&1 || true
-docker exec "$CONTAINER" python3 /home/tonygale/openclaw/skills/trading/scripts/news_scanner.py fetch >> "$LOG_FILE" 2>&1 || true
+/home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/trading/scripts/social_scanner.py truth-social >> "$LOG_FILE" 2>&1 || true
+/home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/trading/scripts/news_scanner.py fetch >> "$LOG_FILE" 2>&1 || true
 
 # Alert engine is the decision point.
-ALERTS="$(docker exec "$CONTAINER" python3 /home/tonygale/openclaw/skills/trading/scripts/alert_engine.py check 2>&1)" || RC=$?
+ALERTS="$(/home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/trading/scripts/alert_engine.py check 2>&1)" || RC=$?
 RC=${RC:-0}
 echo "$ALERTS" >> "$LOG_FILE"
 echo "alert_engine exit=$RC" >> "$LOG_FILE"

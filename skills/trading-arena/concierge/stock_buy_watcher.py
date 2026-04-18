@@ -24,7 +24,7 @@ from zoneinfo import ZoneInfo
 
 
 def _load_env():
-    env_file = "/docker/openclaw-xrt9/.env"
+    env_file = "/home/tonygale/openclaw/.env"
     if not os.path.exists(env_file):
         return
     with open(env_file) as f:

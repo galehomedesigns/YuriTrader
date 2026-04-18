@@ -12,5 +12,5 @@ CONTAINER="openclaw-xrt9-openclaw-1"
 mkdir -p "$LOG_DIR"
 
 echo "=== Dashboard regen: $(date -Iseconds) ===" >> "$LOG_FILE"
-docker exec "$CONTAINER" python3 /home/tonygale/openclaw/skills/trading/scripts/dashboard_gen.py generate >> "$LOG_FILE" 2>&1
+/home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/trading/scripts/dashboard_gen.py generate >> "$LOG_FILE" 2>&1
 echo "" >> "$LOG_FILE"

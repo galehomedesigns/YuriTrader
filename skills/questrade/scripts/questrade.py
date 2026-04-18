@@ -26,7 +26,7 @@ import httpx
 
 # Token storage — persists across runs.
 # Default is the in-container path (/data is the openclaw bind mount which
-# maps to /docker/openclaw-xrt9/data on the host, so CLI and host daemons
+# maps to /home/tonygale/openclaw on the host, so CLI and host daemons
 # share the same physical file).
 TOKEN_FILE = Path(os.environ.get(
     "QUESTRADE_TOKEN_FILE",
