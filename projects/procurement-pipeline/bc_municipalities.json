@@ -1,0 +1,92 @@
+[
+  {
+    "name": "Metro Vancouver Regional District",
+    "region": "Metro Vancouver",
+    "portal_type": "bidsandtenders",
+    "priority": "high"
+  },
+  {
+    "name": "City of Vancouver",
+    "region": "Metro Vancouver",
+    "portal_type": "sciquest/sap",
+    "priority": "high"
+  },
+  {
+    "name": "City of Surrey",
+    "region": "Metro Vancouver",
+    "portal_type": "bidsandtenders",
+    "priority": "high"
+  },
+  {
+    "name": "City of Burnaby",
+    "region": "Metro Vancouver",
+    "portal_type": "bidsandtenders",
+    "priority": "high"
+  },
+  {
+    "name": "City of Richmond",
+    "region": "Metro Vancouver",
+    "portal_type": "bidsandtenders",
+    "priority": "high"
+  },
+  {
+    "name": "Capital Regional District (CRD)",
+    "region": "Vancouver Island",
+    "portal_type": "bonfire",
+    "priority": "high"
+  },
+  {
+    "name": "City of Victoria",
+    "region": "Vancouver Island",
+    "portal_type": "bonfire",
+    "priority": "high"
+  },
+  {
+    "name": "City of Nanaimo",
+    "region": "Vancouver Island",
+    "portal_type": "bidsandtenders",
+    "priority": "high"
+  },
+  {
+    "name": "City of Kelowna",
+    "region": "Okanagan",
+    "portal_type": "bonfire",
+    "priority": "high"
+  },
+  {
+    "name": "City of Kamloops",
+    "region": "Interior",
+    "portal_type": "bidsandtenders",
+    "priority": "high"
+  },
+  {
+    "name": "City of Prince George",
+    "region": "Northern BC",
+    "portal_type": "bidsandtenders",
+    "priority": "high"
+  },
+  {
+    "name": "District of Squamish",
+    "region": "Metro Vancouver",
+    "portal_type": "bidsandtenders",
+    "priority": "medium"
+  },
+  {
+    "name": "City of Coquitlam",
+    "region": "Metro Vancouver",
+    "portal_type": "bidsandtenders",
+    "priority": "medium"
+  },
+  {
+    "name": "City of Abbotsford",
+    "region": "Fraser Valley",
+    "portal_type": "bidsandtenders",
+    "priority": "high"
+  },
+  {
+    "name": "City of Chilliwack",
+    "region": "Fraser Valley",
+    "portal_type": "bidsandtenders",
+    "priority": "medium"
+  }
+]

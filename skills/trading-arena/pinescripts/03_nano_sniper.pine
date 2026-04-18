@@ -1,0 +1,75 @@
+// © Decades Developments — Trading Arena Bot #3
+//@version=5
+indicator("Nano Sniper — Arena Bot #3", overlay=true, max_labels_count=50)
+
+// ══════════════════════════════════════════════
+// INPUTS
+// ══════════════════════════════════════════════
+ema8Len    = input.int(8, "EMA 8 Length", minval=3)
+ema21Len   = input.int(21, "EMA 21 Length", minval=5)
+ema55Len   = input.int(55, "EMA 55 Length", minval=10)
+ema200Len  = input.int(200, "EMA 200 Length", minval=50)
+volMult    = input.float(1.5, "Volume Multiplier", minval=1.0, step=0.1)
+volLen     = input.int(20, "Volume Avg Length", minval=5)
+tpPct      = input.float(0.3, "Take Profit %", minval=0.1, step=0.1)
+slPct      = input.float(0.2, "Stop Loss %", minval=0.1, step=0.1)
+
+// ══════════════════════════════════════════════
+// CALCULATIONS
+// ══════════════════════════════════════════════
+ema8   = ta.ema(close, ema8Len)
+ema21  = ta.ema(close, ema21Len)
+ema55  = ta.ema(close, ema55Len)
+ema200 = ta.ema(close, ema200Len)
+volAvg = ta.sma(volume, volLen)
+vwapVal = ta.vwap(hlc3)
+
+// ══════════════════════════════════════════════
+// ENTRY: Strict EMA hierarchy + VWAP + volume
+// ══════════════════════════════════════════════
+c1_hierarchy = ema8 > ema21 and ema21 > ema55 and ema55 > ema200   // Strict EMA stack
+c2_vwap      = close > vwapVal                                      // Price above VWAP
+c3_volume    = volume > volAvg * volMult                             // Volume surge
+
+flagCount = (c1_hierarchy ? 1 : 0) + (c2_vwap ? 1 : 0) + (c3_volume ? 1 : 0)
+buySignal = flagCount >= 3
+
+// ══════════════════════════════════════════════
+// EXIT: TP/SL or EMA cross
+// ══════════════════════════════════════════════
+var float entryPrice = na
+var bool  inTrade    = false
+
+if buySignal and not inTrade
+    entryPrice := close
+    inTrade    := true
+
+tpHit    = inTrade and close >= entryPrice * (1 + tpPct / 100)
+slHit    = inTrade and close <= entryPrice * (1 - slPct / 100)
+emaCross = inTrade and ta.crossunder(ema8, ema21)
+
+sellSignal = tpHit or slHit or emaCross
+if sellSignal and inTrade
+    inTrade := false
+
+// ══════════════════════════════════════════════
+// VISUALS
+// ══════════════════════════════════════════════
+plot(ema8, "EMA 8", color=color.new(color.lime, 20), linewidth=1)
+plot(ema21, "EMA 21", color=color.new(color.blue, 20), linewidth=1)
+plot(ema55, "EMA 55", color=color.new(color.orange, 20), linewidth=1)
+plot(ema200, "EMA 200", color=color.new(color.red, 30), linewidth=2)
+plot(vwapVal, "VWAP", color=color.new(color.white, 40), linewidth=1, style=plot.style_circles)
+
+plotshape(buySignal and not inTrade[1], "BUY", shape.triangleup, location.belowbar, color.new(color.green, 0), size=size.small)
+plotshape(sellSignal, "SELL", shape.triangledown, location.abovebar, color.new(color.red, 0), size=size.small)
+bgcolor(buySignal and not inTrade[1] ? color.new(color.green, 90) : na)
+
+plot(inTrade ? entryPrice * (1 + tpPct / 100) : na, "TP", color=color.new(color.green, 50), style=plot.style_linebr)
+plot(inTrade ? entryPrice * (1 - slPct / 100) : na, "SL", color=color.new(color.red, 50), style=plot.style_linebr)
+
+// ══════════════════════════════════════════════
+// ALERTS
+// ══════════════════════════════════════════════
+alertcondition(buySignal and not inTrade[1], "Nano Sniper BUY", '{"bot":"nano-sniper","action":"BUY","ticker":"{{ticker}}","price":{{close}},"time":"{{time}}"}')
+alertcondition(sellSignal, "Nano Sniper SELL", '{"bot":"nano-sniper","action":"SELL","ticker":"{{ticker}}","price":{{close}},"time":"{{time}}"}')

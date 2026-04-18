@@ -1,0 +1,90 @@
+// © Decades Developments — Trading Arena Bot #7
+//@version=5
+indicator("Trap Catcher — Arena Bot #7", overlay=true, max_labels_count=50)
+
+// ══════════════════════════════════════════════
+// INPUTS
+// ══════════════════════════════════════════════
+rsiLen       = input.int(14, "RSI Length", minval=2)
+rsiOversold  = input.float(25, "RSI Oversold Level", minval=10, maxval=35)
+rsiRecoverUp = input.float(30, "RSI Recovery Cross (Bull)", minval=25, maxval=40)
+rsiOverbought = input.float(75, "RSI Overbought Level", minval=65, maxval=90)
+rsiRecoverDn  = input.float(70, "RSI Recovery Cross (Bear)", minval=60, maxval=80)
+lookback     = input.int(5, "RSI Extreme Lookback Bars", minval=2, maxval=10)
+rsiNeutral   = input.float(50, "RSI Neutral Exit", minval=40, maxval=60)
+tpPct        = input.float(2.0, "Take Profit %", minval=0.5, step=0.5)
+slPct        = input.float(1.5, "Stop Loss %", minval=0.5, step=0.5)
+
+// ══════════════════════════════════════════════
+// CALCULATIONS
+// ══════════════════════════════════════════════
+rsiVal = ta.rsi(close, rsiLen)
+
+// Check if RSI was extreme within lookback
+wasOversold  = ta.lowest(rsiVal, lookback) < rsiOversold
+wasOverbought = ta.highest(rsiVal, lookback) > rsiOverbought
+
+// Volume declining confirms false breakout exhaustion
+volDeclining = volume < volume[1]
+
+// ══════════════════════════════════════════════
+// ENTRY: False breakout reversal signals
+// ══════════════════════════════════════════════
+// Bullish reversal: was oversold, now recovering
+c1_bullOversold = wasOversold                               // Was in extreme territory
+c2_bullRecover  = ta.crossover(rsiVal, rsiRecoverUp)        // RSI crossing back above 30
+c3_bullVol      = volDeclining                               // Selling exhaustion
+
+bullFlag = (c1_bullOversold ? 1 : 0) + (c2_bullRecover ? 1 : 0) + (c3_bullVol ? 1 : 0)
+bullSignal = bullFlag >= 2
+
+// Bearish reversal: was overbought, now dropping
+c1_bearOverbought = wasOverbought                            // Was in extreme territory
+c2_bearRecover    = ta.crossunder(rsiVal, rsiRecoverDn)      // RSI crossing back below 70
+c3_bearVol        = volDeclining                              // Buying exhaustion
+
+bearFlag = (c1_bearOverbought ? 1 : 0) + (c2_bearRecover ? 1 : 0) + (c3_bearVol ? 1 : 0)
+bearSignal = bearFlag >= 2
+
+buySignal = bullSignal
+
+// ══════════════════════════════════════════════
+// EXIT: TP/SL or RSI returns to neutral
+// ══════════════════════════════════════════════
+var float entryPrice = na
+var bool  inTrade    = false
+
+if buySignal and not inTrade
+    entryPrice := close
+    inTrade    := true
+
+tpHit      = inTrade and close >= entryPrice * (1 + tpPct / 100)
+slHit      = inTrade and close <= entryPrice * (1 - slPct / 100)
+rsiNeutExit = inTrade and rsiVal >= rsiNeutral
+
+sellSignal = tpHit or slHit or rsiNeutExit or bearSignal
+if sellSignal and inTrade
+    inTrade := false
+
+// ══════════════════════════════════════════════
+// VISUALS
+// ══════════════════════════════════════════════
+// RSI extreme zone highlighting
+bgcolor(rsiVal < rsiOversold ? color.new(color.green, 88) : na)
+bgcolor(rsiVal > rsiOverbought ? color.new(color.red, 88) : na)
+
+plotshape(buySignal and not inTrade[1], "BUY", shape.triangleup, location.belowbar, color.new(color.green, 0), size=size.small)
+plotshape(sellSignal, "SELL", shape.triangledown, location.abovebar, color.new(color.red, 0), size=size.small)
+bgcolor(buySignal and not inTrade[1] ? color.new(color.green, 90) : na)
+
+// Mark bearish reversal signals
+plotshape(bearSignal, "BEAR", shape.triangledown, location.abovebar, color.new(color.orange, 0), size=size.tiny)
+
+plot(inTrade ? entryPrice * (1 + tpPct / 100) : na, "TP", color=color.new(color.green, 50), style=plot.style_linebr)
+plot(inTrade ? entryPrice * (1 - slPct / 100) : na, "SL", color=color.new(color.red, 50), style=plot.style_linebr)
+
+// ══════════════════════════════════════════════
+// ALERTS
+// ══════════════════════════════════════════════
+alertcondition(buySignal and not inTrade[1], "Trap Catcher BUY", '{"bot":"trap-catcher","action":"BUY","ticker":"{{ticker}}","price":{{close}},"time":"{{time}}"}')
+alertcondition(sellSignal, "Trap Catcher SELL", '{"bot":"trap-catcher","action":"SELL","ticker":"{{ticker}}","price":{{close}},"time":"{{time}}"}')

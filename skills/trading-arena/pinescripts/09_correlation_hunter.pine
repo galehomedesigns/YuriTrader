@@ -1,0 +1,82 @@
+// © Decades Developments — Trading Arena Bot #9
+//@version=5
+indicator("Correlation Hunter — Arena Bot #9", overlay=true, max_labels_count=50)
+
+// ══════════════════════════════════════════════
+// INPUTS
+// ══════════════════════════════════════════════
+compSymbol   = input.symbol("BINANCE:ETHUSDT", "Comparison Symbol")
+zLen         = input.int(20, "Z-Score Lookback", minval=5)
+zEntry       = input.float(2.0, "Z-Score Entry Threshold", minval=1.0, step=0.5)
+zStop        = input.float(3.5, "Z-Score Stop Threshold", minval=2.5, step=0.5)
+tpPct        = input.float(2.0, "Take Profit %", minval=0.5, step=0.5)
+slPct        = input.float(1.5, "Stop Loss %", minval=0.5, step=0.5)
+
+// ══════════════════════════════════════════════
+// CALCULATIONS
+// ══════════════════════════════════════════════
+compClose = request.security(compSymbol, timeframe.period, close)
+
+// Price ratio and Z-score
+ratio     = close / compClose
+ratioMean = ta.sma(ratio, zLen)
+ratioStd  = ta.stdev(ratio, zLen)
+zScore    = ratioStd != 0 ? (ratio - ratioMean) / ratioStd : 0
+
+// ══════════════════════════════════════════════
+// ENTRY: Z-score divergence signals
+// ══════════════════════════════════════════════
+// Z > +entry: this asset overvalued vs comparison — sell signal
+// Z < -entry: this asset undervalued vs comparison — buy signal
+c1_undervalued = zScore < -zEntry                // Ratio compressed, buy this
+c2_notExtreme  = zScore > -zStop                 // Not at stop level yet
+
+buySignal = c1_undervalued and c2_notExtreme
+
+// Also detect overvalued for alerts
+c1_overvalued  = zScore > zEntry
+c2_notExtHigh  = zScore < zStop
+shortSignal    = c1_overvalued and c2_notExtHigh
+
+// ══════════════════════════════════════════════
+// EXIT: Z-score reverts to 0 or hits stop
+// ══════════════════════════════════════════════
+var float entryPrice = na
+var bool  inTrade    = false
+
+if buySignal and not inTrade
+    entryPrice := close
+    inTrade    := true
+
+tpHit    = inTrade and close >= entryPrice * (1 + tpPct / 100)
+slHit    = inTrade and close <= entryPrice * (1 - slPct / 100)
+zRevert  = inTrade and zScore >= 0                          // Ratio normalized
+zBlowout = inTrade and math.abs(zScore) > zStop             // Divergence too extreme
+
+sellSignal = tpHit or slHit or zRevert or zBlowout
+if sellSignal and inTrade
+    inTrade := false
+
+// ══════════════════════════════════════════════
+// VISUALS
+// ══════════════════════════════════════════════
+// Z-score bands on price chart via background
+bgcolor(zScore > zEntry ? color.new(color.red, 85) : zScore < -zEntry ? color.new(color.green, 85) : na)
+bgcolor(math.abs(zScore) > zStop ? color.new(color.orange, 80) : na)
+
+plotshape(buySignal and not inTrade[1], "BUY", shape.triangleup, location.belowbar, color.new(color.green, 0), size=size.small)
+plotshape(sellSignal, "SELL", shape.triangledown, location.abovebar, color.new(color.red, 0), size=size.small)
+plotshape(shortSignal, "SHORT", shape.triangledown, location.abovebar, color.new(color.orange, 0), size=size.tiny)
+
+plot(inTrade ? entryPrice * (1 + tpPct / 100) : na, "TP", color=color.new(color.green, 50), style=plot.style_linebr)
+plot(inTrade ? entryPrice * (1 - slPct / 100) : na, "SL", color=color.new(color.red, 50), style=plot.style_linebr)
+
+// Z-score value label on signal
+if buySignal and not inTrade[1]
+    label.new(bar_index, low, "Z:" + str.tostring(zScore, "#.##"), style=label.style_label_up, color=color.green, textcolor=color.white, size=size.tiny)
+
+// ══════════════════════════════════════════════
+// ALERTS
+// ══════════════════════════════════════════════
+alertcondition(buySignal and not inTrade[1], "Correlation Hunter BUY", '{"bot":"correlation-hunter","action":"BUY","ticker":"{{ticker}}","price":{{close}},"time":"{{time}}"}')
+alertcondition(sellSignal, "Correlation Hunter SELL", '{"bot":"correlation-hunter","action":"SELL","ticker":"{{ticker}}","price":{{close}},"time":"{{time}}"}')

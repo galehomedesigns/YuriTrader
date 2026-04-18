@@ -1,0 +1,92 @@
+[
+  {
+    "name": "Alberta Purchasing Connection (APC)",
+    "region": "Province-wide",
+    "portal_type": "apc",
+    "priority": "high"
+  },
+  {
+    "name": "City of Calgary",
+    "region": "Calgary Region",
+    "portal_type": "sap/ariba",
+    "priority": "high"
+  },
+  {
+    "name": "City of Edmonton",
+    "region": "Edmonton Region",
+    "portal_type": "sap/ariba",
+    "priority": "high"
+  },
+  {
+    "name": "Regional Municipality of Wood Buffalo",
+    "region": "Northern Alberta",
+    "portal_type": "bidsandtenders",
+    "priority": "high"
+  },
+  {
+    "name": "Strathcona County",
+    "region": "Edmonton Region",
+    "portal_type": "bidsandtenders",
+    "priority": "high"
+  },
+  {
+    "name": "City of Red Deer",
+    "region": "Central Alberta",
+    "portal_type": "bidsandtenders",
+    "priority": "high"
+  },
+  {
+    "name": "City of Lethbridge",
+    "region": "Central Alberta",
+    "portal_type": "bidsandtenders",
+    "priority": "high"
+  },
+  {
+    "name": "City of Medicine Hat",
+    "region": "Southern Alberta",
+    "portal_type": "bidsandtenders",
+    "priority": "medium"
+  },
+  {
+    "name": "City of Grande Prairie",
+    "region": "Northern Alberta",
+    "portal_type": "bidsandtenders",
+    "priority": "high"
+  },
+  {
+    "name": "City of Airdrie",
+    "region": "Calgary Region",
+    "portal_type": "bidsandtenders",
+    "priority": "medium"
+  },
+  {
+    "name": "City of St. Albert",
+    "region": "Edmonton Region",
+    "portal_type": "bidsandtenders",
+    "priority": "high"
+  },
+  {
+    "name": "Rocky View County",
+    "region": "Calgary Region",
+    "portal_type": "bidsandtenders",
+    "priority": "medium"
+  },
+  {
+    "name": "City of Spruce Grove",
+    "region": "Edmonton Region",
+    "portal_type": "bidsandtenders",
+    "priority": "medium"
+  },
+  {
+    "name": "City of Lloydminster",
+    "region": "Southern Alberta",
+    "portal_type": "bidsandtenders",
+    "priority": "medium"
+  },
+  {
+    "name": "Parkland County",
+    "region": "Edmonton Region",
+    "portal_type": "bidsandtenders",
+    "priority": "medium"
+  }
+]

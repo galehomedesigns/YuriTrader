@@ -1,0 +1,78 @@
+// © Decades Developments — Trading Arena Bot #8
+//@version=5
+indicator("Volume Whisperer — Arena Bot #8", overlay=true, max_labels_count=50)
+
+// ══════════════════════════════════════════════
+// INPUTS
+// ══════════════════════════════════════════════
+rsiLen       = input.int(14, "RSI Length", minval=2)
+rsiMin       = input.float(45, "RSI Min for Entry", minval=30, maxval=55)
+volAvgLen    = input.int(20, "Volume Avg Length", minval=5)
+relVolEntry  = input.float(1.5, "Relative Volume Entry Threshold", minval=1.0, step=0.1)
+relVolExit   = input.float(0.5, "Relative Volume Exit Threshold", minval=0.1, step=0.1)
+tpPct        = input.float(2.0, "Take Profit %", minval=0.5, step=0.5)
+slPct        = input.float(1.0, "Stop Loss %", minval=0.5, step=0.5)
+
+// ══════════════════════════════════════════════
+// CALCULATIONS
+// ══════════════════════════════════════════════
+rsiVal  = ta.rsi(close, rsiLen)
+vwapVal = ta.vwap(hlc3)
+volAvg  = ta.sma(volume, volAvgLen)
+relVol  = volume / volAvg
+
+// On-Balance Volume
+var float obv = 0.0
+obv := close > close[1] ? obv + volume : close < close[1] ? obv - volume : obv
+obvRising = obv > obv[1]
+
+// ══════════════════════════════════════════════
+// ENTRY: VWAP + OBV rising + relative volume + RSI
+// ══════════════════════════════════════════════
+c1_vwap   = close > vwapVal                     // Price above VWAP
+c2_obv    = obvRising                            // OBV rising (accumulation)
+c3_relVol = relVol > relVolEntry                 // High relative volume
+c4_rsi    = rsiVal > rsiMin                      // RSI confirms momentum
+
+flagCount = (c1_vwap ? 1 : 0) + (c2_obv ? 1 : 0) + (c3_relVol ? 1 : 0) + (c4_rsi ? 1 : 0)
+buySignal = flagCount >= 3
+
+// ══════════════════════════════════════════════
+// EXIT: TP/SL, VWAP breakdown, or volume dries up
+// ══════════════════════════════════════════════
+var float entryPrice = na
+var bool  inTrade    = false
+
+if buySignal and not inTrade
+    entryPrice := close
+    inTrade    := true
+
+tpHit     = inTrade and close >= entryPrice * (1 + tpPct / 100)
+slHit     = inTrade and close <= entryPrice * (1 - slPct / 100)
+vwapDrop  = inTrade and close < vwapVal
+volDryUp  = inTrade and relVol < relVolExit
+
+sellSignal = tpHit or slHit or vwapDrop or volDryUp
+if sellSignal and inTrade
+    inTrade := false
+
+// ══════════════════════════════════════════════
+// VISUALS
+// ══════════════════════════════════════════════
+plot(vwapVal, "VWAP", color=color.new(color.white, 30), linewidth=2)
+
+// Color bars by relative volume
+barcolor(relVol > 2.0 ? color.new(color.yellow, 0) : relVol > relVolEntry ? color.new(color.lime, 20) : na)
+
+plotshape(buySignal and not inTrade[1], "BUY", shape.triangleup, location.belowbar, color.new(color.green, 0), size=size.small)
+plotshape(sellSignal, "SELL", shape.triangledown, location.abovebar, color.new(color.red, 0), size=size.small)
+bgcolor(buySignal and not inTrade[1] ? color.new(color.green, 90) : na)
+
+plot(inTrade ? entryPrice * (1 + tpPct / 100) : na, "TP", color=color.new(color.green, 50), style=plot.style_linebr)
+plot(inTrade ? entryPrice * (1 - slPct / 100) : na, "SL", color=color.new(color.red, 50), style=plot.style_linebr)
+
+// ══════════════════════════════════════════════
+// ALERTS
+// ══════════════════════════════════════════════
+alertcondition(buySignal and not inTrade[1], "Volume Whisperer BUY", '{"bot":"volume-whisperer","action":"BUY","ticker":"{{ticker}}","price":{{close}},"time":"{{time}}"}')
+alertcondition(sellSignal, "Volume Whisperer SELL", '{"bot":"volume-whisperer","action":"SELL","ticker":"{{ticker}}","price":{{close}},"time":"{{time}}"}')

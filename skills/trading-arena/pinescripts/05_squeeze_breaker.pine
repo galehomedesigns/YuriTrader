@@ -1,0 +1,80 @@
+// © Decades Developments — Trading Arena Bot #5
+//@version=5
+indicator("Squeeze Breaker — Arena Bot #5", overlay=true, max_labels_count=50)
+
+// ══════════════════════════════════════════════
+// INPUTS
+// ══════════════════════════════════════════════
+bbLen        = input.int(20, "Bollinger Length", minval=10)
+bbMult       = input.float(2.0, "Bollinger Multiplier", minval=1.0, step=0.5)
+bwThresh     = input.float(0.03, "Bandwidth Squeeze Threshold", minval=0.01, step=0.005)
+rsiLen       = input.int(14, "RSI Length", minval=2)
+rsiMin       = input.float(50, "RSI Min for Entry", minval=30, maxval=60)
+volMult      = input.float(1.5, "Volume Multiplier", minval=1.0, step=0.1)
+volLen       = input.int(20, "Volume Avg Length", minval=5)
+tpPct        = input.float(2.5, "Take Profit %", minval=0.5, step=0.5)
+slPct        = input.float(1.0, "Stop Loss %", minval=0.5, step=0.5)
+
+// ══════════════════════════════════════════════
+// CALCULATIONS
+// ══════════════════════════════════════════════
+[bbUp, bbMid, bbLow] = ta.bb(close, bbLen, bbMult)
+bandwidth = (bbUp - bbLow) / bbMid
+rsiVal    = ta.rsi(close, rsiLen)
+volAvg    = ta.sma(volume, volLen)
+
+// Squeeze detection — bandwidth below threshold
+isSqueeze = bandwidth < bwThresh
+
+// ══════════════════════════════════════════════
+// ENTRY: Squeeze breakout above upper BB
+// ══════════════════════════════════════════════
+c1_squeeze = isSqueeze[1]                       // Was in squeeze on previous bar
+c2_breakout = close > bbUp                       // Breaks above upper BB
+c3_volume  = volume > volAvg * volMult           // Volume confirmation
+c4_rsi     = rsiVal > rsiMin                     // RSI bullish
+
+flagCount = (c1_squeeze ? 1 : 0) + (c2_breakout ? 1 : 0) + (c3_volume ? 1 : 0) + (c4_rsi ? 1 : 0)
+buySignal = flagCount >= 3
+
+// ══════════════════════════════════════════════
+// EXIT: TP/SL or return to BB middle
+// ══════════════════════════════════════════════
+var float entryPrice = na
+var bool  inTrade    = false
+
+if buySignal and not inTrade
+    entryPrice := close
+    inTrade    := true
+
+tpHit      = inTrade and close >= entryPrice * (1 + tpPct / 100)
+slHit      = inTrade and close <= entryPrice * (1 - slPct / 100)
+meanRevert = inTrade and close <= bbMid
+
+sellSignal = tpHit or slHit or meanRevert
+if sellSignal and inTrade
+    inTrade := false
+
+// ══════════════════════════════════════════════
+// VISUALS
+// ══════════════════════════════════════════════
+pUp  = plot(bbUp, "BB Upper", color=color.new(color.purple, 40))
+pMid = plot(bbMid, "BB Middle", color=color.new(color.gray, 40))
+pLow = plot(bbLow, "BB Lower", color=color.new(color.purple, 40))
+fill(pUp, pLow, color=isSqueeze ? color.new(color.yellow, 85) : color.new(color.purple, 92))
+
+// Highlight squeeze zones on background
+bgcolor(isSqueeze ? color.new(color.yellow, 93) : na)
+
+plotshape(buySignal and not inTrade[1], "BUY", shape.triangleup, location.belowbar, color.new(color.green, 0), size=size.small)
+plotshape(sellSignal, "SELL", shape.triangledown, location.abovebar, color.new(color.red, 0), size=size.small)
+bgcolor(buySignal and not inTrade[1] ? color.new(color.green, 90) : na)
+
+plot(inTrade ? entryPrice * (1 + tpPct / 100) : na, "TP", color=color.new(color.green, 50), style=plot.style_linebr)
+plot(inTrade ? entryPrice * (1 - slPct / 100) : na, "SL", color=color.new(color.red, 50), style=plot.style_linebr)
+
+// ══════════════════════════════════════════════
+// ALERTS
+// ══════════════════════════════════════════════
+alertcondition(buySignal and not inTrade[1], "Squeeze Breaker BUY", '{"bot":"squeeze-breaker","action":"BUY","ticker":"{{ticker}}","price":{{close}},"time":"{{time}}"}')
+alertcondition(sellSignal, "Squeeze Breaker SELL", '{"bot":"squeeze-breaker","action":"SELL","ticker":"{{ticker}}","price":{{close}},"time":"{{time}}"}')

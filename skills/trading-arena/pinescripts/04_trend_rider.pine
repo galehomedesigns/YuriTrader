@@ -1,0 +1,80 @@
+// © Decades Developments — Trading Arena Bot #4
+//@version=5
+indicator("Trend Rider — Arena Bot #4", overlay=true, max_labels_count=50)
+
+// ══════════════════════════════════════════════
+// INPUTS
+// ══════════════════════════════════════════════
+ema21Len     = input.int(21, "EMA 21 Length", minval=5)
+ema50Len     = input.int(50, "EMA 50 Length", minval=10)
+rsiLen       = input.int(14, "RSI Length", minval=2)
+rsiLow       = input.float(40, "RSI Low Bound", minval=20, maxval=50)
+rsiHigh      = input.float(60, "RSI High Bound", minval=50, maxval=80)
+pullbackPct  = input.float(1.0, "Pullback Distance %", minval=0.1, step=0.1)
+volLen       = input.int(20, "Volume Avg Length", minval=5)
+exitBars     = input.int(2, "Bars Below EMA to Exit", minval=1)
+tpPct        = input.float(3.0, "Take Profit %", minval=0.5, step=0.5)
+slPct        = input.float(1.5, "Stop Loss %", minval=0.5, step=0.5)
+
+// ══════════════════════════════════════════════
+// CALCULATIONS
+// ══════════════════════════════════════════════
+ema21  = ta.ema(close, ema21Len)
+ema50  = ta.ema(close, ema50Len)
+rsiVal = ta.rsi(close, rsiLen)
+volAvg = ta.sma(volume, volLen)
+
+// Distance from EMA 21 as percentage
+pullbackDist = math.abs(close - ema21) / ema21 * 100
+
+// Count consecutive bars closing below EMA 21
+var int belowCount = 0
+belowCount := close < ema21 ? belowCount + 1 : 0
+
+// ══════════════════════════════════════════════
+// ENTRY: Uptrend + quiet pullback to EMA
+// ══════════════════════════════════════════════
+c1_uptrend  = ema21 > ema50                                  // EMA confirms uptrend
+c2_pullback = pullbackDist < pullbackPct and close >= ema21  // Near EMA 21, not below
+c3_rsi      = rsiVal >= rsiLow and rsiVal <= rsiHigh         // Neutral RSI (not overbought)
+c4_quiet    = volume < volAvg                                 // Quiet pullback volume
+
+flagCount = (c1_uptrend ? 1 : 0) + (c2_pullback ? 1 : 0) + (c3_rsi ? 1 : 0) + (c4_quiet ? 1 : 0)
+buySignal = flagCount >= 3
+
+// ══════════════════════════════════════════════
+// EXIT: TP/SL or sustained break below EMA 21
+// ══════════════════════════════════════════════
+var float entryPrice = na
+var bool  inTrade    = false
+
+if buySignal and not inTrade
+    entryPrice := close
+    inTrade    := true
+
+tpHit     = inTrade and close >= entryPrice * (1 + tpPct / 100)
+slHit     = inTrade and close <= entryPrice * (1 - slPct / 100)
+emaBreak  = inTrade and belowCount >= exitBars
+
+sellSignal = tpHit or slHit or emaBreak
+if sellSignal and inTrade
+    inTrade := false
+
+// ══════════════════════════════════════════════
+// VISUALS
+// ══════════════════════════════════════════════
+plot(ema21, "EMA 21", color=color.new(color.blue, 20), linewidth=2)
+plot(ema50, "EMA 50", color=color.new(color.orange, 20), linewidth=2)
+
+plotshape(buySignal and not inTrade[1], "BUY", shape.triangleup, location.belowbar, color.new(color.green, 0), size=size.small)
+plotshape(sellSignal, "SELL", shape.triangledown, location.abovebar, color.new(color.red, 0), size=size.small)
+bgcolor(buySignal and not inTrade[1] ? color.new(color.green, 90) : na)
+
+plot(inTrade ? entryPrice * (1 + tpPct / 100) : na, "TP", color=color.new(color.green, 50), style=plot.style_linebr)
+plot(inTrade ? entryPrice * (1 - slPct / 100) : na, "SL", color=color.new(color.red, 50), style=plot.style_linebr)
+
+// ══════════════════════════════════════════════
+// ALERTS
+// ══════════════════════════════════════════════
+alertcondition(buySignal and not inTrade[1], "Trend Rider BUY", '{"bot":"trend-rider","action":"BUY","ticker":"{{ticker}}","price":{{close}},"time":"{{time}}"}')
+alertcondition(sellSignal, "Trend Rider SELL", '{"bot":"trend-rider","action":"SELL","ticker":"{{ticker}}","price":{{close}},"time":"{{time}}"}')

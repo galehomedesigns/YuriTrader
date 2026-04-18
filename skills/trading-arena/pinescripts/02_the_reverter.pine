@@ -1,0 +1,75 @@
+// © Decades Developments — Trading Arena Bot #2
+//@version=5
+indicator("The Reverter — Arena Bot #2", overlay=true, max_labels_count=50)
+
+// ══════════════════════════════════════════════
+// INPUTS
+// ══════════════════════════════════════════════
+rsiLen       = input.int(14, "RSI Length", minval=2)
+rsiBuy       = input.float(30, "RSI Oversold Level", minval=10, maxval=40)
+rsiRecover   = input.float(60, "RSI Recovery Exit", minval=50, maxval=70)
+bbLen        = input.int(20, "Bollinger Length", minval=10)
+bbMult       = input.float(2.0, "Bollinger Multiplier", minval=1.0, step=0.5)
+adxLen       = input.int(14, "ADX Length", minval=5)
+adxMax       = input.float(25, "ADX Max (ranging filter)", minval=15, maxval=40)
+tpPct        = input.float(1.5, "Take Profit %", minval=0.5, step=0.5)
+slPct        = input.float(2.0, "Stop Loss %", minval=0.5, step=0.5)
+
+// ══════════════════════════════════════════════
+// CALCULATIONS
+// ══════════════════════════════════════════════
+rsiVal  = ta.rsi(close, rsiLen)
+[bbUp, bbMid, bbLow] = ta.bb(close, bbLen, bbMult)
+[diPlus, diMinus, adxVal] = ta.dmi(adxLen, adxLen)
+macdHist = ta.ema(close, 12) - ta.ema(close, 26) - ta.ema(ta.ema(close, 12) - ta.ema(close, 26), 9)
+
+// ══════════════════════════════════════════════
+// ENTRY: Oversold + at BB lower + ranging market
+// ══════════════════════════════════════════════
+c1_rsi     = rsiVal < rsiBuy                    // RSI oversold
+c2_bb      = close <= bbLow * 1.01              // At or below lower BB
+c3_ranging = adxVal < adxMax                    // Not trending
+c4_macd    = macdHist > macdHist[1]             // MACD turning up
+
+flagCount = (c1_rsi ? 1 : 0) + (c2_bb ? 1 : 0) + (c3_ranging ? 1 : 0) + (c4_macd ? 1 : 0)
+buySignal = flagCount >= 2
+
+// ══════════════════════════════════════════════
+// EXIT: Mean reversion to BB middle
+// ══════════════════════════════════════════════
+var float entryPrice = na
+var bool  inTrade    = false
+
+if buySignal and not inTrade
+    entryPrice := close
+    inTrade    := true
+
+tpHit      = inTrade and close >= entryPrice * (1 + tpPct / 100)
+slHit      = inTrade and close <= entryPrice * (1 - slPct / 100)
+meanRevert = inTrade and close >= bbMid
+rsiRevert  = inTrade and rsiVal > rsiRecover
+
+sellSignal = tpHit or slHit or meanRevert or rsiRevert
+if sellSignal and inTrade
+    inTrade := false
+
+// ══════════════════════════════════════════════
+// VISUALS
+// ══════════════════════════════════════════════
+plot(bbUp, "BB Upper", color=color.new(color.purple, 60))
+plot(bbMid, "BB Middle", color=color.new(color.gray, 40))
+plot(bbLow, "BB Lower", color=color.new(color.purple, 60))
+fill(plot(bbUp, display=display.none), plot(bbLow, display=display.none), color=color.new(color.purple, 92))
+
+plotshape(buySignal and not inTrade[1], "BUY", shape.triangleup, location.belowbar, color.new(color.teal, 0), size=size.small)
+plotshape(sellSignal, "SELL", shape.triangledown, location.abovebar, color.new(color.red, 0), size=size.small)
+bgcolor(buySignal and not inTrade[1] ? color.new(color.teal, 90) : na)
+
+plot(inTrade ? entryPrice * (1 + tpPct / 100) : na, "TP", color=color.new(color.green, 50), style=plot.style_linebr)
+plot(inTrade ? entryPrice * (1 - slPct / 100) : na, "SL", color=color.new(color.red, 50), style=plot.style_linebr)
+
+// ══════════════════════════════════════════════
+// ALERTS
+// ══════════════════════════════════════════════
+alertcondition(buySignal and not inTrade[1], "Reverter BUY", '{"bot":"the-reverter","action":"BUY","ticker":"{{ticker}}","price":{{close}},"rsi":' + str.tostring(rsiVal, "#.0") + ',"time":"{{time}}"}')
+alertcondition(sellSignal, "Reverter SELL", '{"bot":"the-reverter","action":"SELL","ticker":"{{ticker}}","price":{{close}},"time":"{{time}}"}')

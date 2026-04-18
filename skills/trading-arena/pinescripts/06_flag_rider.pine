@@ -1,0 +1,96 @@
+// © Decades Developments — Trading Arena Bot #6
+//@version=5
+indicator("Flag Rider — Arena Bot #6", overlay=true, max_labels_count=50)
+
+// ══════════════════════════════════════════════
+// INPUTS
+// ══════════════════════════════════════════════
+poleMinPct     = input.float(2.0, "Pole Min Change %", minval=1.0, step=0.5)
+volMult        = input.float(1.5, "Volume Multiplier (Pole)", minval=1.0, step=0.1)
+volLen         = input.int(20, "Volume Avg Length", minval=5)
+flagBars       = input.int(3, "Consolidation Bars", minval=2, maxval=10)
+flagRatio      = input.float(0.5, "Max Flag/Pole Range Ratio", minval=0.1, step=0.1)
+tpPct          = input.float(2.0, "Take Profit %", minval=0.5, step=0.5)
+slPct          = input.float(1.0, "Stop Loss %", minval=0.5, step=0.5)
+
+// ══════════════════════════════════════════════
+// CALCULATIONS
+// ══════════════════════════════════════════════
+volAvg   = ta.sma(volume, volLen)
+vwapVal  = ta.vwap(hlc3)
+barChg   = math.abs(close - open) / open * 100
+
+// Detect impulse pole: big move + high volume
+isPole = barChg > poleMinPct and volume > volAvg * volMult
+
+// Track pole data
+var float poleHigh  = na
+var float poleLow   = na
+var float poleRange = na
+var int   poleBarsAgo = na
+
+if isPole
+    poleHigh  := high
+    poleLow   := low
+    poleRange := high - low
+    poleBarsAgo := 0
+else
+    poleBarsAgo := na(poleBarsAgo) ? na : poleBarsAgo + 1
+
+// Flag consolidation: check last N bars have tight range
+flagHigh  = ta.highest(high, flagBars)
+flagLow   = ta.lowest(low, flagBars)
+flagRange = flagHigh - flagLow
+
+isConsolidating = not na(poleRange) and poleBarsAgo >= flagBars and poleBarsAgo <= flagBars + 3 and flagRange < poleRange * flagRatio
+
+// ══════════════════════════════════════════════
+// ENTRY: Breakout above consolidation high
+// ══════════════════════════════════════════════
+c1_flag     = isConsolidating                    // Flag pattern formed
+c2_breakout = close > flagHigh[1]                // Breaking above consolidation
+c3_volume   = volume > volAvg                    // Volume on breakout
+
+flagCount = (c1_flag ? 1 : 0) + (c2_breakout ? 1 : 0) + (c3_volume ? 1 : 0)
+buySignal = flagCount >= 2
+
+// ══════════════════════════════════════════════
+// EXIT: TP/SL or VWAP breakdown
+// ══════════════════════════════════════════════
+var float entryPrice = na
+var bool  inTrade    = false
+
+if buySignal and not inTrade
+    entryPrice := close
+    inTrade    := true
+
+tpHit        = inTrade and close >= entryPrice * (1 + tpPct / 100)
+slHit        = inTrade and close <= entryPrice * (1 - slPct / 100)
+vwapBreak    = inTrade and close < vwapVal
+
+sellSignal = tpHit or slHit or vwapBreak
+if sellSignal and inTrade
+    inTrade := false
+
+// ══════════════════════════════════════════════
+// VISUALS
+// ══════════════════════════════════════════════
+plot(vwapVal, "VWAP", color=color.new(color.white, 30), linewidth=1)
+
+// Mark pole bars
+barcolor(isPole ? color.new(color.yellow, 0) : na)
+// Mark consolidation zones
+bgcolor(isConsolidating ? color.new(color.blue, 92) : na)
+
+plotshape(buySignal and not inTrade[1], "BUY", shape.triangleup, location.belowbar, color.new(color.green, 0), size=size.small)
+plotshape(sellSignal, "SELL", shape.triangledown, location.abovebar, color.new(color.red, 0), size=size.small)
+bgcolor(buySignal and not inTrade[1] ? color.new(color.green, 90) : na)
+
+plot(inTrade ? entryPrice * (1 + tpPct / 100) : na, "TP", color=color.new(color.green, 50), style=plot.style_linebr)
+plot(inTrade ? entryPrice * (1 - slPct / 100) : na, "SL", color=color.new(color.red, 50), style=plot.style_linebr)
+
+// ══════════════════════════════════════════════
+// ALERTS
+// ══════════════════════════════════════════════
+alertcondition(buySignal and not inTrade[1], "Flag Rider BUY", '{"bot":"flag-rider","action":"BUY","ticker":"{{ticker}}","price":{{close}},"time":"{{time}}"}')
+alertcondition(sellSignal, "Flag Rider SELL", '{"bot":"flag-rider","action":"SELL","ticker":"{{ticker}}","price":{{close}},"time":"{{time}}"}')

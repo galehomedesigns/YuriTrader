@@ -1,0 +1,58 @@
+[
+  {
+    "name": "BC Construction Association",
+    "acronym": "BCCA",
+    "type": "construction",
+    "region": "bc",
+    "url": "https://bccassn.com"
+  },
+  {
+    "name": "Engineers and Geoscientists BC",
+    "acronym": "EGBC",
+    "type": "engineering",
+    "region": "bc",
+    "url": "https://www.egbc.ca"
+  },
+  {
+    "name": "Canadian Association of Petroleum Producers",
+    "acronym": "CAPP",
+    "type": "industrial",
+    "region": "national",
+    "url": "https://www.capp.ca"
+  },
+  {
+    "name": "Canadian Energy Pipeline Association",
+    "acronym": "CEPA",
+    "type": "industrial",
+    "region": "national",
+    "url": "https://cepa.com"
+  },
+  {
+    "name": "Canadian Manufacturers & Exporters",
+    "acronym": "CME",
+    "type": "industrial",
+    "region": "national",
+    "url": "https://cme-mec.ca"
+  },
+  {
+    "name": "Mining Association of Canada",
+    "acronym": "MAC",
+    "type": "industrial",
+    "region": "national",
+    "url": "https://mining.ca"
+  },
+  {
+    "name": "Canadian Construction Association",
+    "acronym": "CCA",
+    "type": "construction",
+    "region": "national",
+    "url": "https://www.cca-acc.com"
+  },
+  {
+    "name": "Association of Consulting Engineering Companies - Canada",
+    "acronym": "ACEC",
+    "type": "engineering",
+    "region": "national",
+    "url": "https://www.acec.ca"
+  }
+]

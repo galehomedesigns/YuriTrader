@@ -1,0 +1,101 @@
+// Yuri Trading Strategy — 9 Buy Flags + Trailing Stop + Risk Controls
+// Apply to any chart on TradingView. Set alert on this strategy.
+// Webhook URL: https://187-77-193-40.sslip.io/webhook
+//
+// BUY: 3+ of 9 flags must fire
+// SELL: Trailing stop at 1.5% from peak, or hard stop at -2%
+// Position: $9 per trade, fractional shares
+// No overnight holds
+
+//@version=6
+strategy("Yuri Auto-Trader", overlay=true, default_qty_type=strategy.cash, default_qty_value=9, currency=currency.USD)
+
+// ── INPUTS ──
+minFlags       = input.int(3, "Minimum Buy Flags", minval=1, maxval=9)
+trailingPct    = input.float(1.5, "Trailing Stop %", minval=0.5, maxval=5) / 100
+hardStopPct    = input.float(2.0, "Hard Stop Loss %", minval=0.5, maxval=10) / 100
+smaPeriod5     = input.int(5, "SMA Short Period")
+smaPeriod20    = input.int(20, "SMA Medium Period")
+smaPeriod50    = input.int(50, "SMA Long Period")
+rsiPeriod      = input.int(14, "RSI Period")
+rsiOversold    = input.int(30, "RSI Oversold Level")
+volMultiplier  = input.float(1.5, "Volume Surge Multiplier")
+momentumPct    = input.float(1.0, "Momentum Threshold %") / 100
+bbPeriod       = input.int(20, "Bollinger Period")
+bbStdDev       = input.float(2.0, "Bollinger Std Dev")
+macdFast       = input.int(12, "MACD Fast")
+macdSlow       = input.int(26, "MACD Slow")
+macdSignal     = input.int(9, "MACD Signal")
+
+// ── INDICATORS ──
+sma5           = ta.sma(close, smaPeriod5)
+sma20          = ta.sma(close, smaPeriod20)
+sma50          = ta.sma(close, smaPeriod50)
+rsi            = ta.rsi(close, rsiPeriod)
+[macdLine, signalLine, _] = ta.macd(close, macdFast, macdSlow, macdSignal)
+[bbUpper, bbMiddle, bbLower] = ta.bb(close, bbPeriod, bbStdDev)
+vwapVal        = ta.vwap(hlc3)
+volAvg20       = ta.sma(volume, 20)
+
+// ── BUY FLAGS ──
+flag1 = ta.crossover(sma5, sma20)                                    // SMA Crossover
+flag2 = close > sma50                                                 // Price > SMA-50
+flag3 = volume > volAvg20 * volMultiplier                             // Volume Surge
+flag4 = (close - open) / open > momentumPct                           // Positive Momentum > 1%
+flag5 = rsi[1] < rsiOversold and rsi > rsiOversold                    // RSI Oversold Bounce
+// flag6 = news catalyst (handled externally via webhook)
+flag7 = ta.crossover(macdLine, signalLine)                            // MACD Bullish Cross
+flag8 = close[1] <= bbLower[1] and close > bbLower                    // Bollinger Bounce
+flag9 = close > vwapVal                                               // Above VWAP
+
+buyFlags = (flag1 ? 1 : 0) + (flag2 ? 1 : 0) + (flag3 ? 1 : 0) + (flag4 ? 1 : 0) + (flag5 ? 1 : 0) + (flag7 ? 1 : 0) + (flag8 ? 1 : 0) + (flag9 ? 1 : 0)
+buySignal = buyFlags >= minFlags and strategy.position_size == 0
+
+// ── SELL FLAGS ──
+sellFlag3 = ta.crossunder(sma5, sma20)                               // Bearish SMA Cross
+sellFlag4 = close < close[1] and volume > volAvg20 * 2                // Volume Dump
+sellFlag7 = ta.crossunder(macdLine, signalLine)                       // MACD Bearish Cross
+sellFlag8 = close >= bbUpper                                          // Bollinger Upper Touch
+sellFlag9 = close < vwapVal and strategy.position_size > 0            // Below VWAP
+
+anySellFlag = sellFlag3 or sellFlag4 or sellFlag7 or sellFlag8 or sellFlag9
+
+// ── TRAILING STOP ──
+var float peakPrice = na
+if strategy.position_size > 0
+    peakPrice := math.max(nz(peakPrice, close), close)
+else
+    peakPrice := na
+
+trailingStopPrice = peakPrice * (1 - trailingPct)
+hardStopPrice = strategy.position_avg_price * (1 - hardStopPct)
+
+trailingStopHit = strategy.position_size > 0 and peakPrice > strategy.position_avg_price and close <= trailingStopPrice
+hardStopHit = strategy.position_size > 0 and close <= hardStopPrice
+
+// ── NO OVERNIGHT HOLDS ──
+isMarketClose = hour == 15 and minute >= 50
+forceClose = strategy.position_size > 0 and isMarketClose
+
+// ── EXECUTE ──
+if buySignal
+    strategy.entry("Buy", strategy.long)
+
+if anySellFlag or trailingStopHit or hardStopHit or forceClose
+    exitReason = trailingStopHit ? "Trailing Stop" : hardStopHit ? "Hard Stop" : forceClose ? "End of Day" : "Sell Flag"
+    strategy.close("Buy", comment=exitReason)
+
+// ── PLOTS ──
+plot(sma5, "SMA 5", color=color.blue, linewidth=1)
+plot(sma20, "SMA 20", color=color.orange, linewidth=1)
+plot(sma50, "SMA 50", color=color.red, linewidth=2)
+plot(vwapVal, "VWAP", color=color.purple, linewidth=1, style=plot.style_circles)
+plot(trailingStopPrice, "Trailing Stop", color=color.green, linewidth=1, style=plot.style_stepline)
+
+// ── FLAG COUNT DISPLAY ──
+plotshape(buySignal, "Buy Signal", shape.triangleup, location.belowbar, color.green, size=size.small)
+plotshape(anySellFlag and strategy.position_size > 0, "Sell Signal", shape.triangledown, location.abovebar, color.red, size=size.small)
+
+// ── ALERT CONDITIONS ──
+alertcondition(buySignal, "Yuri Buy Signal", '{"action":"BUY","ticker":"{{ticker}}","price":"{{close}}","flags":"' + str.tostring(buyFlags) + '","secret":"yuri-tv-2026"}')
+alertcondition(anySellFlag or trailingStopHit or hardStopHit, "Yuri Sell Signal", '{"action":"SELL","ticker":"{{ticker}}","price":"{{close}}","secret":"yuri-tv-2026"}')

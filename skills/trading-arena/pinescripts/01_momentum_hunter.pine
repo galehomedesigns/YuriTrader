@@ -1,0 +1,91 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0
+// © Decades Developments — Trading Arena Bot #1
+//@version=5
+indicator("Momentum Hunter — Arena Bot #1", overlay=true, max_labels_count=50)
+
+// ══════════════════════════════════════════════
+// INPUTS
+// ══════════════════════════════════════════════
+rsiLen        = input.int(14, "RSI Length", minval=2)
+rsiThresh     = input.float(50, "RSI Entry Threshold", minval=30, maxval=70)
+emaFast       = input.int(20, "EMA Fast", minval=5)
+emaSlow       = input.int(50, "EMA Slow", minval=10)
+volMult       = input.float(2.0, "Volume Multiplier", minval=1.0, step=0.1)
+volLen        = input.int(20, "Volume Avg Length", minval=5)
+minChange     = input.float(1.0, "Min Day Change %", minval=0.1, step=0.1)
+tpPct         = input.float(2.0, "Take Profit %", minval=0.5, step=0.5)
+slPct         = input.float(1.0, "Stop Loss %", minval=0.5, step=0.5)
+sessionStart  = input.session("0930-1130", "Active Session (ET)")
+
+// ══════════════════════════════════════════════
+// CALCULATIONS
+// ══════════════════════════════════════════════
+rsiVal    = ta.rsi(close, rsiLen)
+emaF      = ta.ema(close, emaFast)
+emaS      = ta.ema(close, emaSlow)
+macdLine  = ta.ema(close, 12) - ta.ema(close, 26)
+macdSig   = ta.ema(macdLine, 9)
+macdHist  = macdLine - macdSig
+volAvg    = ta.sma(volume, volLen)
+dayChange = ((close - open) / open) * 100
+inSession = not na(time(timeframe.period, sessionStart))
+
+// ══════════════════════════════════════════════
+// ENTRY CONDITIONS (need 3+ of 5)
+// ══════════════════════════════════════════════
+c1_rsi      = rsiVal > rsiThresh                          // RSI above threshold
+c2_macd     = macdHist > 0 and macdHist > macdHist[1]    // MACD bullish & rising
+c3_volume   = volume > volAvg * volMult                   // Volume surge
+c4_ema      = close > emaS                                // Price above slow EMA
+c5_momentum = dayChange > minChange                       // Positive day change
+
+flagCount = (c1_rsi ? 1 : 0) + (c2_macd ? 1 : 0) + (c3_volume ? 1 : 0) + (c4_ema ? 1 : 0) + (c5_momentum ? 1 : 0)
+buySignal = flagCount >= 3 and inSession
+
+// ══════════════════════════════════════════════
+// EXIT CONDITIONS (any 1 triggers)
+// ══════════════════════════════════════════════
+var float entryPrice = na
+var bool  inTrade    = false
+
+if buySignal and not inTrade
+    entryPrice := close
+    inTrade    := true
+
+tpHit   = inTrade and close >= entryPrice * (1 + tpPct / 100)
+slHit   = inTrade and close <= entryPrice * (1 - slPct / 100)
+rsiExit = inTrade and rsiVal > 80
+macdExit = inTrade and macdHist < 0 and macdHist < macdHist[1]
+
+sellSignal = tpHit or slHit or rsiExit or macdExit
+
+if sellSignal and inTrade
+    inTrade := false
+
+// ══════════════════════════════════════════════
+// VISUALS
+// ══════════════════════════════════════════════
+plot(emaF, "EMA Fast", color=color.new(color.blue, 30), linewidth=1)
+plot(emaS, "EMA Slow", color=color.new(color.orange, 30), linewidth=2)
+
+// Entry/exit markers
+plotshape(buySignal and not inTrade[1], "BUY", shape.triangleup, location.belowbar, color.new(color.green, 0), size=size.small)
+plotshape(sellSignal, "SELL", shape.triangledown, location.abovebar, color.new(color.red, 0), size=size.small)
+
+// Background highlight on active signal
+bgcolor(buySignal and not inTrade[1] ? color.new(color.green, 90) : na)
+bgcolor(sellSignal ? color.new(color.red, 90) : na)
+
+// Flag count label
+if buySignal and not inTrade[1]
+    label.new(bar_index, low, str.tostring(flagCount) + " flags", style=label.style_label_up, color=color.green, textcolor=color.white, size=size.tiny)
+
+// TP/SL lines when in trade
+plot(inTrade ? entryPrice * (1 + tpPct / 100) : na, "TP Level", color=color.new(color.green, 50), style=plot.style_linebr, linewidth=1)
+plot(inTrade ? entryPrice * (1 - slPct / 100) : na, "SL Level", color=color.new(color.red, 50), style=plot.style_linebr, linewidth=1)
+
+// ══════════════════════════════════════════════
+// ALERTS
+// ══════════════════════════════════════════════
+alertcondition(buySignal and not inTrade[1], "Momentum Hunter BUY", '{"bot":"momentum-hunter","action":"BUY","ticker":"{{ticker}}","price":{{close}},"flags":' + str.tostring(flagCount) + ',"time":"{{time}}"}')
+alertcondition(sellSignal, "Momentum Hunter SELL", '{"bot":"momentum-hunter","action":"SELL","ticker":"{{ticker}}","price":{{close}},"time":"{{time}}"}')

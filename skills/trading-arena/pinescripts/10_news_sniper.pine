@@ -1,0 +1,85 @@
+// © Decades Developments — Trading Arena Bot #10
+//@version=5
+indicator("News Sniper — Arena Bot #10", overlay=true, max_labels_count=50)
+
+// ══════════════════════════════════════════════
+// INPUTS
+// ══════════════════════════════════════════════
+moveThresh   = input.float(3.0, "Big Move Threshold %", minval=1.0, step=0.5)
+volMult      = input.float(2.0, "Volume Multiplier", minval=1.0, step=0.1)
+volLen       = input.int(20, "Volume Avg Length", minval=5)
+rsiLen       = input.int(14, "RSI Length", minval=2)
+rsiLow       = input.float(30, "RSI Low Bound", minval=15, maxval=45)
+rsiHigh      = input.float(70, "RSI High Bound", minval=55, maxval=85)
+sessionWin   = input.session("0930-1130", "Session Window (first 2h ET)")
+maxBarsHeld  = input.int(6, "Max Bars Held (time decay)", minval=2, maxval=20)
+tpPct        = input.float(1.0, "Take Profit %", minval=0.1, step=0.1)
+slPct        = input.float(0.5, "Stop Loss %", minval=0.1, step=0.1)
+
+// ══════════════════════════════════════════════
+// CALCULATIONS
+// ══════════════════════════════════════════════
+rsiVal    = ta.rsi(close, rsiLen)
+volAvg    = ta.sma(volume, volLen)
+barChgPct = math.abs(close - open) / open * 100
+isBullMove = close > open
+inSession = not na(time(timeframe.period, sessionWin))
+
+// ══════════════════════════════════════════════
+// ENTRY: Big move + volume + RSI not extreme + session
+// ══════════════════════════════════════════════
+c1_bigMove  = barChgPct > moveThresh                        // Significant price move
+c2_volume   = volume > volAvg * volMult                      // Volume confirms news
+c3_rsi      = rsiVal > rsiLow and rsiVal < rsiHigh          // RSI not extreme (room to run)
+c4_session  = inSession                                      // Within first 2 hours
+
+flagCount = (c1_bigMove ? 1 : 0) + (c2_volume ? 1 : 0) + (c3_rsi ? 1 : 0) + (c4_session ? 1 : 0)
+buySignal = flagCount >= 3 and isBullMove
+
+// ══════════════════════════════════════════════
+// EXIT: TP/SL or time decay (max bars held)
+// ══════════════════════════════════════════════
+var float entryPrice = na
+var bool  inTrade    = false
+var int   barsHeld   = 0
+
+if buySignal and not inTrade
+    entryPrice := close
+    inTrade    := true
+    barsHeld   := 0
+
+if inTrade
+    barsHeld := barsHeld + 1
+
+tpHit     = inTrade and close >= entryPrice * (1 + tpPct / 100)
+slHit     = inTrade and close <= entryPrice * (1 - slPct / 100)
+timeDecay = inTrade and barsHeld >= maxBarsHeld
+
+sellSignal = tpHit or slHit or timeDecay
+if sellSignal and inTrade
+    inTrade  := false
+    barsHeld := 0
+
+// ══════════════════════════════════════════════
+// VISUALS
+// ══════════════════════════════════════════════
+// Mark big move bars with special coloring
+barcolor(c1_bigMove and c2_volume ? color.new(color.fuchsia, 0) : na)
+
+plotshape(buySignal and not inTrade[1], "BUY", shape.triangleup, location.belowbar, color.new(color.green, 0), size=size.small)
+plotshape(sellSignal, "SELL", shape.triangledown, location.abovebar, color.new(color.red, 0), size=size.small)
+bgcolor(buySignal and not inTrade[1] ? color.new(color.green, 90) : na)
+bgcolor(timeDecay and sellSignal ? color.new(color.gray, 85) : na)
+
+// Flag count label on entry
+if buySignal and not inTrade[1]
+    label.new(bar_index, low, str.tostring(flagCount) + " flags", style=label.style_label_up, color=color.green, textcolor=color.white, size=size.tiny)
+
+plot(inTrade ? entryPrice * (1 + tpPct / 100) : na, "TP", color=color.new(color.green, 50), style=plot.style_linebr)
+plot(inTrade ? entryPrice * (1 - slPct / 100) : na, "SL", color=color.new(color.red, 50), style=plot.style_linebr)
+
+// ══════════════════════════════════════════════
+// ALERTS
+// ══════════════════════════════════════════════
+alertcondition(buySignal and not inTrade[1], "News Sniper BUY", '{"bot":"news-sniper","action":"BUY","ticker":"{{ticker}}","price":{{close}},"time":"{{time}}"}')
+alertcondition(sellSignal, "News Sniper SELL", '{"bot":"news-sniper","action":"SELL","ticker":"{{ticker}}","price":{{close}},"time":"{{time}}"}')
