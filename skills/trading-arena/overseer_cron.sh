@@ -16,8 +16,16 @@ LOG_DIR="$SCRIPT_DIR/logs"
 LOG_FILE="$LOG_DIR/overseer.log"
 CONTAINER="openclaw-xrt9-openclaw-1"
 OVERSEER_DIR_IN_CONTAINER="/home/tonygale/openclaw/skills/trading-arena/overseer"
+ENV_FILE="/home/tonygale/openclaw/.env"
 
 mkdir -p "$LOG_DIR"
+
+if [ -f "$ENV_FILE" ]; then
+    while IFS='=' read -r key value; do
+        [[ -z "$key" || "$key" =~ ^# ]] && continue
+        export "$key=$value" 2>/dev/null || true
+    done < "$ENV_FILE"
+fi
 
 ACTION="${1:-}"
 if [ -z "$ACTION" ]; then
