@@ -31,3 +31,6 @@ dist/
 *.bak.*
 *.log
 .DS_Store
+
+# VPS-side env staging (holds the VPS OpenClaw bot token)
+.vps.env

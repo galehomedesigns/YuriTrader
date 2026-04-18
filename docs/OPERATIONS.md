@@ -194,9 +194,11 @@ Every LLM call on this host goes through **ollama-guard**, a transparent reverse
 
 Drop-ins enforcing the lockdown:
 - `/etc/systemd/system/ollama.service.d/bind-loopback.conf` → `OLLAMA_HOST=127.0.0.1:11436`
-- `/etc/systemd/system/ollama-guard.service.d/lockdown.conf` → `LISTEN_PORT=11434`, `UPSTREAM_PORT=11436`
+- `/etc/systemd/system/ollama-guard.service.d/lockdown.conf` → `LISTEN_PORT=11434`, `UPSTREAM_PORT=11436`, `AUTH_BEARER=<secret>`
 
 Source: `/home/tonygale/ollama-guard/ollama-guard.js` (Node, zero deps). Policy: `/home/tonygale/ollama-guard/policy.json`.
+
+**Bearer auth + model allowlist (hybrid hardening, 2026-04-18).** Non-localhost clients — primarily VPS OpenClaw over Tailscale — must supply `Authorization: Bearer $AUTH_BEARER` or get 401. They also may only request models listed in `policy.json`'s `allowed_models` array, else 404. Localhost clients bypass both (so on-host crons and interactive shells keep working unchanged against any model). Change the bearer: edit `/etc/systemd/system/ollama-guard.service.d/lockdown.conf`, `sudo systemctl daemon-reload && sudo systemctl restart ollama-guard`, then update every client's env. Change the allowlist: edit `policy.json`'s `allowed_models`, then `sudo systemctl reload ollama-guard` (SIGHUP; no restart). Deny events log as `[auth-fail]` or `[deny-model]` — grep them out of `journalctl -u ollama-guard`.
 
 **Tune per-model caps (hot reload, no restart):**
 
