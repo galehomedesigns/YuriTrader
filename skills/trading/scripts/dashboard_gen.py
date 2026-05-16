@@ -16,7 +16,10 @@ import httpx
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
-CANVAS_DIR = Path("/data/.openclaw/canvas")
+# Path-aware: /data/.openclaw is the legacy VPS path; on GX10 use the home path.
+CANVAS_DIR = (Path("/data/.openclaw/canvas") if Path("/data/.openclaw").exists()
+              else Path("/home/tonygale/openclaw/canvas"))
+OLLAMA_URL = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -35,6 +38,67 @@ def supabase_get(table, params=None):
     )
     resp.raise_for_status()
     return resp.json()
+
+
+def generate_market_commentary(latest, latest_signals, alerts, news, auto_open,
+                               auto_today, auto_daily_pnl):
+    """Use quick36 to synthesize 3-5 sentence market commentary for the dashboard.
+    Returns plain text or None on failure."""
+    movers = sorted(latest.values(), key=lambda s: abs(float(s.get("day_change_pct") or 0)), reverse=True)[:8]
+    mover_lines = []
+    for s in movers:
+        pct = float(s.get("day_change_pct") or 0)
+        mover_lines.append(f"  {s['symbol']:<8} {pct:+6.2f}%  vol={int(s.get('volume') or 0):,}")
+
+    sig_changes = [s for s in latest_signals.values() if s.get("signal_changed")]
+    sig_lines = [f"  {s['symbol']}: {s.get('previous_signal','?')} -> {s['signal']}" for s in sig_changes[:6]]
+
+    triggered = [a for a in alerts if a.get("triggered")]
+    alert_lines = [f"  {a.get('symbol','?')}: {a.get('alert_type','?')} threshold {a.get('threshold','?')}" for a in triggered[:6]]
+
+    high_news = [n for n in news if n.get("impact_level") == "HIGH"][:5]
+    news_lines = [f"  [{n.get('source','?')}] {n.get('title','')[:120]}" for n in high_news]
+
+    prompt = f"""You are writing the daily market commentary block for Tony's trading dashboard.
+Produce a tight market read (3-5 sentences, plain text, no markdown).
+
+Lead with the dominant theme today (broad direction, sector rotation, risk-on/off).
+Cite specific tickers with their moves. Note signal flips and high-impact news if relevant.
+Skip the auto-trader unless P&L is notable. Do not invent numbers.
+
+Top movers today:
+{chr(10).join(mover_lines) if mover_lines else '  (no data)'}
+
+Signal changes:
+{chr(10).join(sig_lines) if sig_lines else '  (none)'}
+
+Triggered alerts:
+{chr(10).join(alert_lines) if alert_lines else '  (none)'}
+
+High-impact news:
+{chr(10).join(news_lines) if news_lines else '  (none)'}
+
+Auto-trader: {len(auto_open)} open positions, ${auto_daily_pnl:+.2f} P&L today ({len(auto_today)} trades)."""
+
+    payload = json.dumps({
+        "model": "quick36:latest",
+        "prompt": prompt,
+        "stream": False,
+        "think": False,
+        "keep_alive": "10m",
+        "options": {"temperature": 0.4, "num_ctx": 8192, "num_predict": 500},
+    }).encode()
+
+    import urllib.request
+    req = urllib.request.Request(
+        f"{OLLAMA_URL}/api/generate", data=payload,
+        headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=90) as r:
+            return json.loads(r.read()).get("response", "").strip() or None
+    except Exception as e:
+        print(f"  commentary unavailable: {type(e).__name__}: {str(e)[:100]}", file=sys.stderr)
+        return None
 
 
 def cmd_generate():
@@ -207,6 +271,20 @@ def cmd_generate():
     auto_pnl_color = "#00c853" if auto_daily_pnl >= 0 else "#ff1744"
     auto_status_badge = '<span style="color:#ff1744">PAUSED</span>' if auto_paused else '<span style="color:#00c853">ACTIVE</span>'
 
+    # LLM-generated market commentary (quick36)
+    import html as _html_mod
+    commentary = generate_market_commentary(
+        latest, latest_signals, alerts, news, auto_open, auto_today, auto_daily_pnl
+    )
+    commentary_card = ""
+    if commentary:
+        safe = _html_mod.escape(commentary).replace("\n", "<br>")
+        commentary_card = f'''
+        <div class="card full-width" style="background:linear-gradient(135deg,#161b22 0%,#1a2332 100%);border-left:3px solid #7c8aff;">
+            <h2>🤖 Market Read <span style="font-weight:normal;font-size:12px;color:#556677;">— quick36 (qwen3.6 MoE)</span></h2>
+            <div style="color:#ccd6dd;font-size:14px;line-height:1.6;">{safe}</div>
+        </div>'''
+
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -274,6 +352,7 @@ def cmd_generate():
     </div>
 
     <div class="grid">
+        {commentary_card}
         <div class="card full-width">
             <h2>Market Positions</h2>
             <table>

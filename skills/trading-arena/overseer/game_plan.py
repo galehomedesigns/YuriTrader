@@ -132,6 +132,58 @@ def assign_bot(symbol, data, bot_perf):
         return "trend-rider"
 
 
+def generate_llm_narrative(plan, bot_perf):
+    """Use quick36 to synthesize a tactical pre-market narrative from the plan
+    data. Returns a 4-6 sentence strategic brief, or None on failure."""
+    import urllib.request, urllib.error
+
+    top_entries = plan.get("entries", [])[:8]
+    lines = []
+    for e in top_entries:
+        lines.append(
+            f"  {e['priority']:<6} {e['symbol']:<10} ${e['price']:>8.2f} "
+            f"{e['change_pct']:+.2f}% — assigned to {e['bot_name']}"
+        )
+    perf_lines = []
+    for bot_id, perf in list(bot_perf.items())[:5]:
+        wins = perf.get("wins", 0)
+        losses = perf.get("losses", 0)
+        pnl = perf.get("pnl", 0)
+        perf_lines.append(f"  {bot_id}: {wins}W/{losses}L, ${pnl:+.2f} 7d P&L")
+
+    prompt = f"""You are the overseer of Tony's autonomous trading arena. Today is {plan['date']}.
+Write a tight pre-market briefing (4-6 sentences, plain text, no markdown).
+
+Lead with the highest-priority symbols and what the assigned bots are positioned to do.
+Mention any recent bot performance worth flagging (hot streaks, recent losses).
+Skip the table — just the strategic read.
+
+Top symbols ({plan['high_priority']} HIGH priority of {plan['total_symbols']} total):
+{chr(10).join(lines) if lines else '  (none)'}
+
+Recent bot performance (last 7 days):
+{chr(10).join(perf_lines) if perf_lines else '  (no recent trades)'}"""
+
+    payload = json.dumps({
+        "model": "quick36:latest",
+        "prompt": prompt,
+        "stream": False,
+        "think": False,
+        "keep_alive": "10m",
+        "options": {"temperature": 0.4, "num_ctx": 8192, "num_predict": 500},
+    }).encode()
+
+    url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434") + "/api/generate"
+    req = urllib.request.Request(url, data=payload,
+                                  headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=90) as r:
+            return json.loads(r.read()).get("response", "").strip() or None
+    except Exception as e:
+        print(f"(narrative unavailable: {type(e).__name__}: {str(e)[:100]})", file=sys.stderr)
+        return None
+
+
 def generate_game_plan():
     """Generate the full pre-market game plan."""
     now = datetime.now()
@@ -187,6 +239,13 @@ def generate_game_plan():
         "high_priority": sum(1 for e in entries if e["priority"] == "HIGH"),
         "active_bots": len(bot_perf),
     }
+
+    # LLM narrative on top, then the table for verification
+    narrative = generate_llm_narrative(plan, bot_perf)
+    if narrative:
+        print()
+        print(narrative)
+        plan["narrative"] = narrative
 
     # Print
     print(f"\n{'='*70}")

@@ -62,14 +62,79 @@ BRIEFING="$(
 
 echo "$BRIEFING" >> "$LOG_FILE"
 
-MESSAGE="Pre-Market Briefing ($(date +%Y-%m-%d))
+# LLM narrative — quick36 synthesizes the raw briefing into a tactical paragraph
+NARRATIVE="$(BRIEFING_VAL="$BRIEFING" /home/tonygale/openclaw/.venv/bin/python - <<'PY' 2>>"$LOG_FILE"
+import json, os, sys, urllib.request, urllib.error
+
+briefing = os.environ.get("BRIEFING_VAL", "")[:8000]
+if not briefing.strip():
+    sys.exit(0)
+
+prompt = f"""You are writing Tony's pre-market briefing for today's open. Given the raw data below,
+produce a tight tactical paragraph (4-6 sentences, plain text, no markdown, no headings).
+
+Lead with portfolio P&L direction and any open positions worth flagging.
+Mention specific watchlist movers (price + % change), notable alerts, and auto-trader posture.
+Skip headers, dollar tables, and section labels — synthesize.
+Do not invent numbers; only use what's in the briefing.
+
+Raw briefing:
+{briefing}"""
+
+payload = json.dumps({
+    "model": "quick36:latest",
+    "prompt": prompt,
+    "stream": False,
+    "think": False,
+    "keep_alive": "10m",
+    "options": {"temperature": 0.4, "num_ctx": 16384, "num_predict": 500},
+}).encode()
+
+url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434") + "/api/generate"
+req = urllib.request.Request(url, data=payload,
+                              headers={"Content-Type": "application/json"}, method="POST")
+try:
+    with urllib.request.urlopen(req, timeout=120) as r:
+        text = json.loads(r.read()).get("response", "").strip()
+        print(text)
+except Exception as e:
+    print(f"(narrative unavailable: {type(e).__name__}: {str(e)[:100]})", file=sys.stderr)
+PY
+)"
+
+HEADER="📈 Pre-Market Briefing — $(date '+%a %b %d, %Y')"
+if [ -n "$NARRATIVE" ] && [ ${#NARRATIVE} -gt 50 ]; then
+    MESSAGE="${HEADER}
+
+${NARRATIVE}
+
+— Details —
+${BRIEFING}
+Dashboard: ${DASHBOARD_URL}"
+else
+    MESSAGE="${HEADER}
 
 ${BRIEFING}
 Dashboard: ${DASHBOARD_URL}"
+fi
 
 if [ ${#MESSAGE} -gt 4000 ]; then
-    MESSAGE="${MESSAGE:0:4000}
+    if [ -n "$NARRATIVE" ] && [ ${#NARRATIVE} -gt 50 ]; then
+        BUDGET=$((3700 - ${#HEADER} - ${#NARRATIVE}))
+        [ "$BUDGET" -lt 200 ] && BUDGET=200
+        BRIEFING_TRIM="${BRIEFING:0:$BUDGET}"
+        MESSAGE="${HEADER}
+
+${NARRATIVE}
+
+— Details —
+${BRIEFING_TRIM}
+...[full in premarket.log]
+Dashboard: ${DASHBOARD_URL}"
+    else
+        MESSAGE="${MESSAGE:0:4000}
 ...[truncated]"
+    fi
 fi
 
 curl -sS --max-time 15 \

@@ -1,14 +1,87 @@
 // _common.mjs — Shared helpers for kraken-cli skill scripts.
 // This file is not a CLI itself; other scripts in scripts/ import from it.
 //
-// Deployment target: /home/tonygale/openclaw/skills/kraken-cli/scripts/_common.mjs
-// KrakenClient source: /data/kraken-mcp/build/kraken/client.js
+// KrakenClient is inlined here. The previous version imported from
+// ~/openclaw/kraken-mcp/build/kraken/client.js, but that source no longer
+// exists on this host. Reimplementing the small surface the kraken-cli
+// scripts actually use (public, private) avoids the broken dependency.
 //
-// The relative import (`../../../kraken-mcp/build/kraken/client.js`) resolves
-// correctly from inside the OpenClaw container because /home/tonygale/openclaw/skills/kraken-cli/
-// and /data/kraken-mcp/ are siblings under /data/.
+// Nonce scale must match the other clients sharing this API key
+// (trading-arena's kraken_executor.py and yuri/krakenAuth.js both use
+// microseconds, ~1e15). If we land at a higher scale, every later call
+// from those clients fails with EAPI:Invalid nonce.
 
-import { KrakenClient } from '../../../kraken-mcp/build/kraken/client.js';
+import crypto from 'node:crypto';
+
+const BASE_URL = (process.env.KRAKEN_API_URL || 'https://api.kraken.com').trim();
+
+let _lastNonce = 0n;
+
+class KrakenClient {
+  constructor({ apiUrl = BASE_URL, apiKey = null, apiSecret = null } = {}) {
+    this.apiUrl = apiUrl;
+    this.apiKey = apiKey;
+    this.apiSecret = apiSecret;
+  }
+
+  nextNonce() {
+    // Microsecond-scale wall-clock nonce, matching the Python/Node clients
+    // that share this API key. Bump by 1 if the clock didn't advance since
+    // the last call so in-process bursts stay monotonic.
+    let n = BigInt(Date.now()) * 1000n;
+    if (n <= _lastNonce) n = _lastNonce + 1n;
+    _lastNonce = n;
+    return n.toString();
+  }
+
+  async public(endpoint, params = null) {
+    const qs = params ? '?' + new URLSearchParams(
+      Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)]))
+    ).toString() : '';
+    const url = `${this.apiUrl}/0/public/${endpoint}${qs}`;
+    const resp = await fetch(url);
+    const body = await resp.json();
+    if (body.error && body.error.length) {
+      throw new Error(body.error.join('; '));
+    }
+    return body.result;
+  }
+
+  async private(endpoint, params = {}) {
+    if (!this.apiKey || !this.apiSecret) {
+      throw new Error(`KRAKEN_API_KEY / KRAKEN_API_SECRET required for ${endpoint}`);
+    }
+    const path = `/0/private/${endpoint}`;
+    const nonce = this.nextNonce();
+    const bodyObj = { nonce, ...params };
+    // Booleans/numbers need string-form in the body for the signature to match
+    // (Kraken signs the URL-encoded form).
+    const body = new URLSearchParams(
+      Object.fromEntries(Object.entries(bodyObj).map(([k, v]) => [k, String(v)]))
+    ).toString();
+
+    const sha256 = crypto.createHash('sha256').update(nonce + body).digest();
+    const signature = crypto
+      .createHmac('sha512', Buffer.from(this.apiSecret, 'base64'))
+      .update(Buffer.concat([Buffer.from(path, 'utf8'), sha256]))
+      .digest('base64');
+
+    const resp = await fetch(this.apiUrl + path, {
+      method: 'POST',
+      headers: {
+        'API-Key': this.apiKey,
+        'API-Sign': signature,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    });
+    const data = await resp.json();
+    if (data.error && data.error.length) {
+      throw new Error(data.error.join('; '));
+    }
+    return data.result;
+  }
+}
 
 /**
  * Construct a KrakenClient from env vars.
@@ -22,7 +95,7 @@ export function makeClient({ requireAuth = false } = {}) {
 
   if (requireAuth && !(apiKey && apiSecret)) {
     console.error('Error: this command requires KRAKEN_API_KEY and KRAKEN_API_SECRET in the environment.');
-    console.error('Add them to /home/tonygale/openclaw/.env and restart the OpenClaw container.');
+    console.error('Source /home/tonygale/openclaw/.env before invoking the script.');
     process.exit(2);
   }
 
@@ -72,9 +145,6 @@ export function parseArgs(argv) {
 /**
  * Read the trading double-gate state from env + caller args.
  * Returns { dryRun, envGateOpen, callerOptedIn, willSubmitReal }.
- *
- * ⚠️  This is safety-critical. Do not modify without re-reading the interlock
- *    documentation in ../../../kraken-mcp/src/tools/trading.ts
  *
  * Real order requires BOTH:
  *   - KRAKEN_ALLOW_TRADING=true in environment

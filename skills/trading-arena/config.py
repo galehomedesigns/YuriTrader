@@ -49,6 +49,7 @@ BOT_DAILY_LOSS_LIMIT = -30.0  # -3% of $1000
 GLOBAL_DAILY_LOSS_LIMIT = -500.0  # -5% of $10,000
 GLOBAL_MAX_POSITIONS = 20     # across all bots
 SCAN_INTERVAL = 60            # seconds between scans
+RE_ENTRY_COOLDOWN_MINUTES = float(os.environ.get("RE_ENTRY_COOLDOWN_MINUTES", "15"))
 
 # === LIVE TRADING (real money on Kraken) ===
 # Three gates control real-money flow:

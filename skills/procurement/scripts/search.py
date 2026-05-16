@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Search procurement opportunities using hybrid RAG.
+"""Search procurement tenders using hybrid RAG.
 
 Usage:
     python3 search.py "road paving contracts in BC"
     python3 search.py "IT services" --province ON --status open
     python3 search.py "construction" --category construction --limit 5
     python3 search.py --keyword "erosion control"
-    python3 search.py --list                    # List all open opportunities
+    python3 search.py --list                    # List all open tenders
     python3 search.py --stats                   # Show database stats
 """
 
@@ -19,7 +19,7 @@ import urllib.error
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OLLAMA_URL = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 
 HEADERS = {
     "apikey": SUPABASE_SERVICE_KEY,
@@ -57,49 +57,52 @@ def supabase_rpc(fn_name, params):
 
 
 def get_embedding(text):
-    """Get embedding from OpenAI."""
-    url = "https://api.openai.com/v1/embeddings"
-    payload = json.dumps({
-        "model": "text-embedding-3-small",
-        "input": text,
-    }).encode()
+    """Get a 1024-dim embedding from local Ollama mxbai-embed-large."""
+    ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+    url = f"{ollama_url}/api/embed"
+    payload = json.dumps({"model": "mxbai-embed-large", "input": text}).encode()
     req = urllib.request.Request(url, data=payload, method="POST")
-    req.add_header("Authorization", f"Bearer {OPENAI_API_KEY}")
     req.add_header("Content-Type", "application/json")
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode())
-            return data["data"][0]["embedding"]
+            return data["embeddings"][0]
     except Exception as e:
         print(f"Embedding error: {e}", file=sys.stderr)
         return None
 
 
 def hybrid_search(query, province=None, category=None, status="open", limit=20):
-    """Run hybrid search (keyword + semantic + filters)."""
+    """Semantic search via match_tenders, then filter client-side.
+    (The original hybrid_search_tenders RPC referenced a non-existent
+    table; match_tenders is the actual function in this database.)"""
     embedding = get_embedding(query)
     if not embedding:
         print("Failed to generate query embedding, falling back to keyword search", file=sys.stderr)
         return keyword_search(query, province, category, status, limit)
 
     params = {
-        "query_text": query,
         "query_embedding": f"[{','.join(str(x) for x in embedding)}]",
-        "match_count": limit,
-        "full_text_weight": 1.0,
-        "semantic_weight": 1.5,
-        "filter_province": province,
-        "filter_category": category,
-        "filter_status": status,
+        "match_threshold": 0.3,
+        "match_count": limit * 3,  # over-fetch so filters still leave us with enough
     }
+    results = supabase_rpc("match_tenders", params) or []
 
-    results = supabase_rpc("hybrid_search_opportunities", params)
-    return results or []
+    # Apply filters client-side (the RPC doesn't accept them)
+    def keep(row):
+        if province and row.get("province") != province:
+            return False
+        if category and row.get("category") != category:
+            return False
+        if status and row.get("status") != status:
+            return False
+        return True
+    return [r for r in results if keep(r)][:limit]
 
 
 def keyword_search(query, province=None, category=None, status="open", limit=20):
     """Fallback: keyword-only search using full-text search."""
-    endpoint = f"opportunities?fts=wfts.{query}&select=id,title,description,province,category,deadline_date,source_url,status&limit={limit}&order=deadline_date"
+    endpoint = f"tenders?fts=wfts.{query}&select=id,title,raw_text,province,category,closing_date,url,status&limit={limit}&order=closing_date"
     if province:
         endpoint += f"&province=eq.{province}"
     if category:
@@ -109,9 +112,9 @@ def keyword_search(query, province=None, category=None, status="open", limit=20)
     return supabase_request("GET", endpoint) or []
 
 
-def list_opportunities(province=None, status="open", limit=50):
-    """List all opportunities with filters."""
-    endpoint = f"opportunities?select=id,title,province,category,deadline_date,source_url,status,organization_id&order=deadline_date&limit={limit}"
+def list_tenders(province=None, status="open", limit=50):
+    """List all tenders with filters."""
+    endpoint = f"tenders?select=id,title,province,category,closing_date,url,status,organization&order=closing_date&limit={limit}"
     if province:
         endpoint += f"&province=eq.{province}"
     if status:
@@ -123,28 +126,28 @@ def get_stats():
     """Get database statistics."""
     stats = {}
 
-    # Total opportunities
-    opps = supabase_request("GET", "opportunities?select=id&limit=1000") or []
-    stats["total_opportunities"] = len(opps)
+    # Total tenders
+    opps = supabase_request("GET", "tenders?select=id&limit=1000") or []
+    stats["total_tenders"] = len(opps)
 
     # By status
     for s in ["open", "closed", "awarded", "cancelled"]:
-        r = supabase_request("GET", f"opportunities?status=eq.{s}&select=id&limit=1000") or []
+        r = supabase_request("GET", f"tenders?status=eq.{s}&select=id&limit=1000") or []
         stats[f"status_{s}"] = len(r)
 
     # By province
     for p in ["ON", "BC", "AB", "MB", "FED"]:
-        r = supabase_request("GET", f"opportunities?province=eq.{p}&select=id&limit=1000") or []
+        r = supabase_request("GET", f"tenders?province=eq.{p}&select=id&limit=1000") or []
         if len(r) > 0:
             stats[f"province_{p}"] = len(r)
 
     # With embeddings
-    embedded = supabase_request("GET", "opportunities?embedding=not.is.null&select=id&limit=1000") or []
+    embedded = supabase_request("GET", "tenders?embedding=not.is.null&select=id&limit=1000") or []
     stats["with_embeddings"] = len(embedded)
 
-    # Organizations
-    orgs = supabase_request("GET", "organizations?select=id&limit=100") or []
-    stats["organizations"] = len(orgs)
+    # Organizations (distinct from tenders.organization, since no separate orgs table)
+    orgs = supabase_request("GET", "tenders?select=organization&limit=1000") or []
+    stats["organizations"] = len({o.get("organization") for o in orgs if o.get("organization")})
 
     return stats
 
@@ -159,8 +162,8 @@ def format_results(results):
         title = r.get("title", "N/A")
         province = r.get("province", "?")
         category = r.get("category", "?")
-        deadline = r.get("deadline_date", "N/A")
-        url = r.get("source_url", "")
+        deadline = r.get("closing_date", "N/A")
+        url = r.get("url", "")
         status = r.get("status", "?")
         score = r.get("rank_score", "")
         org = r.get("organization_name", "")
@@ -178,14 +181,14 @@ def format_results(results):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Search procurement opportunities")
+    parser = argparse.ArgumentParser(description="Search procurement tenders")
     parser.add_argument("query", nargs="*", help="Search query")
     parser.add_argument("--province", help="Filter by province code (ON, BC, AB, MB, FED)")
     parser.add_argument("--category", help="Filter by category (goods, services, construction)")
     parser.add_argument("--status", default="open", help="Filter by status (default: open)")
     parser.add_argument("--limit", type=int, default=20, help="Max results")
     parser.add_argument("--keyword", help="Keyword-only search (no semantic)")
-    parser.add_argument("--list", action="store_true", help="List all opportunities")
+    parser.add_argument("--list", action="store_true", help="List all tenders")
     parser.add_argument("--stats", action="store_true", help="Show database stats")
     parser.add_argument("--json", action="store_true", help="Output raw JSON")
     args = parser.parse_args()
@@ -207,7 +210,7 @@ def main():
         return
 
     if args.list:
-        results = list_opportunities(args.province, args.status, args.limit)
+        results = list_tenders(args.province, args.status, args.limit)
         if args.json:
             print(json.dumps(results, indent=2))
         else:
@@ -227,11 +230,7 @@ def main():
         parser.print_help()
         sys.exit(1)
 
-    if not OPENAI_API_KEY:
-        print("Warning: OPENAI_API_KEY not set, using keyword search only", file=sys.stderr)
-        results = keyword_search(query, args.province, args.category, args.status, args.limit)
-    else:
-        results = hybrid_search(query, args.province, args.category, args.status, args.limit)
+    results = hybrid_search(query, args.province, args.category, args.status, args.limit)
 
     if args.json:
         print(json.dumps(results, indent=2))

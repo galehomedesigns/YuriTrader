@@ -8,8 +8,8 @@ to prevent duplicate entries based on vendor + date + total amount.
 import os
 import subprocess
 
-RCLONE_CONFIG = "/data/.config/rclone/rclone.conf"
-LOCAL_DIR = "/data/.openclaw/workspace/receipts"
+RCLONE_CONFIG = (os.path.expanduser("~/.config/rclone/rclone.conf") if not os.path.exists("/data/.openclaw") else "/data/.config/rclone/rclone.conf")
+LOCAL_DIR = (os.path.join(os.environ.get("OPENCLAW_ROOT", "/home/tonygale/openclaw"), "workspace", "receipts") if not os.path.exists("/data/.openclaw") else "/data/.openclaw/workspace/receipts")
 DRIVE_ACCOUNTANT = "gdrive:Accountant/"
 
 

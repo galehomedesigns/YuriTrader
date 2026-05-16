@@ -22,10 +22,12 @@ import httpx
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
-CRON_FILE = Path("/data/.openclaw/cron/jobs.json")
-MEMORY_DIR = Path("/data/.openclaw/workspace/memory")
-TOKEN_FILE = Path("/home/tonygale/openclaw/state/questrade_token.json")
-CANVAS_DIR = Path("/data/.openclaw/canvas")
+OPENCLAW_ROOT = Path(os.environ.get("OPENCLAW_ROOT", "/home/tonygale/openclaw"))
+IS_GX10 = not Path("/data/.openclaw").exists()
+CRON_FILE = Path("/data/.openclaw/cron/jobs.json")  # VPS-only; skipped on GX10
+MEMORY_DIR = OPENCLAW_ROOT / "memory" if IS_GX10 else Path("/data/.openclaw/workspace/memory")
+TOKEN_FILE = OPENCLAW_ROOT / "state" / "questrade_token.json"
+CANVAS_DIR = OPENCLAW_ROOT / "canvas" if IS_GX10 else Path("/data/.openclaw/canvas")
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -74,6 +76,17 @@ def log_check(check_name, status, details=None, recommendation=None):
 def check_cron_health():
     """Check all cron jobs for errors and missed runs."""
     results = []
+    if IS_GX10:
+        try:
+            out = subprocess.run(["crontab", "-l"], capture_output=True, text=True, timeout=5)
+            active = sum(1 for l in out.stdout.splitlines()
+                         if l.strip() and not l.lstrip().startswith("#")
+                         and not l.startswith(("PATH=", "SHELL=")))
+            status = "OK" if active >= 10 else "WARN"
+            results.append(log_check("cron.config", status, {"active_entries": active}))
+        except Exception as e:
+            results.append(log_check("cron.config", "FAIL", {"error": str(e)[:100]}))
+        return results
     if not CRON_FILE.exists():
         results.append(log_check("cron.config", "FAIL", {"error": "jobs.json not found"},
             "Cron config file missing at /data/.openclaw/cron/jobs.json"))
@@ -214,6 +227,21 @@ def check_questrade():
 def check_container():
     """Check container health endpoint and uptime."""
     results = []
+    if IS_GX10:
+        for unit in ("stock-concierge", "trading-concierge", "tv-webhook"):
+            out = subprocess.run(["systemctl", "--user", "is-active", unit],
+                                 capture_output=True, text=True, timeout=5)
+            state = out.stdout.strip()
+            results.append(log_check(f"systemd.{unit}",
+                "OK" if state == "active" else "FAIL",
+                {"state": state},
+                "" if state == "active" else f"systemd user unit {unit} is not active."))
+        try:
+            uptime = float(Path("/proc/uptime").read_text().split()[0])
+            results.append(log_check("host.uptime", "OK", {"uptime_hours": round(uptime/3600, 1)}))
+        except Exception:
+            pass
+        return results
     token = os.environ.get("OPENCLAW_GATEWAY_TOKEN", "")
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:
@@ -246,6 +274,35 @@ def check_container():
 def check_dashboard_access():
     """Check that dashboards are accessible: directory perms + Caddy serving."""
     results = []
+    if IS_GX10:
+        if CANVAS_DIR.exists():
+            html_files = list(CANVAS_DIR.glob("*.html"))
+            if html_files:
+                results.append(log_check("dashboard.files", "OK",
+                    {"count": len(html_files)}))
+            else:
+                results.append(log_check("dashboard.files", "WARN",
+                    {"count": 0},
+                    "No HTML dashboards found in canvas directory."))
+        else:
+            results.append(log_check("dashboard.files", "FAIL",
+                {"error": "Canvas directory missing"},
+                f"Create: mkdir -p {CANVAS_DIR}"))
+        try:
+            resp = httpx.get("http://127.0.0.1:8090/health.html", timeout=5)
+            if resp.status_code == 200:
+                results.append(log_check("dashboard.hosting", "OK",
+                    {"status": 200, "endpoint": "127.0.0.1:8090"}))
+            else:
+                results.append(log_check("dashboard.hosting", "WARN",
+                    {"status": resp.status_code},
+                    "dashboards.service returned non-200."))
+        except Exception as e:
+            results.append(log_check("dashboard.hosting", "FAIL",
+                {"error": str(e)[:100]},
+                "dashboards.service unreachable on 127.0.0.1:8090. "
+                "Check: systemctl --user status dashboards"))
+        return results
     openclaw_dir = Path("/data/.openclaw")
     canvas_dir = CANVAS_DIR
 
@@ -373,15 +430,17 @@ def cmd_report():
     if not fails and not warns:
         lines.append("\nAll systems healthy.")
 
-    lines.append(f"\nDashboard: https://187-77-193-40.sslip.io/health.html")
+    if not IS_GX10:
+        lines.append(f"\nDashboard: https://187-77-193-40.sslip.io/health.html")
     print("\n".join(lines))
 
 
 def cmd_fix(issue):
     """Auto-fix known issues."""
     if issue == "stale-locks":
+        root = str(OPENCLAW_ROOT) if IS_GX10 else "/data/.openclaw"
         result = subprocess.run(
-            ["find", "/data/.openclaw", "-name", "*.lock", "-delete"],
+            ["find", root, "-name", "*.lock", "-delete"],
             capture_output=True, text=True)
         print("Stale locks cleared.")
 

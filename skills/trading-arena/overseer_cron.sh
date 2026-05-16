@@ -39,9 +39,31 @@ run_in_container() {
     /home/tonygale/openclaw/.venv/bin/python "$OVERSEER_DIR_IN_CONTAINER/$1" "${@:2}" >> "$LOG_FILE" 2>&1
 }
 
+send_to_telegram() {
+    # $1 = header, stdin = body. Posts to Telegram if creds are set.
+    local HEADER="$1"
+    local BODY
+    BODY=$(cat)
+    [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${TELEGRAM_CHAT_ID:-}" ] && return 0
+    local MSG="${HEADER}
+
+${BODY}"
+    if [ ${#MSG} -gt 4000 ]; then
+        MSG="${MSG:0:3900}
+...[full report in overseer.log]"
+    fi
+    curl -sS --max-time 15 \
+        -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+        --data-urlencode "text=${MSG}" \
+        >> "$LOG_FILE" 2>&1
+}
+
 case "$ACTION" in
     game_plan)
-        run_in_container game_plan.py
+        PLAN_OUT="$(/home/tonygale/openclaw/.venv/bin/python "$OVERSEER_DIR_IN_CONTAINER/game_plan.py" 2>&1)"
+        echo "$PLAN_OUT" >> "$LOG_FILE"
+        echo "$PLAN_OUT" | send_to_telegram "📊 Pre-Market Game Plan — $(date '+%a %b %d')"
         ;;
     autopsy)
         run_in_container autopsy.py

@@ -69,4 +69,4 @@ SHELL=/bin/bash
 
 # ---------- Questrade token keep-fresh ----------
 # Refresh 5 min before each medic check (token lives ~30 min).
-55 2,10 * * * /home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/questrade/scripts/questrade.py portfolio > /dev/null 2>&1
+*/20 * * * * /home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/questrade/scripts/questrade.py portfolio > /dev/null 2>&1

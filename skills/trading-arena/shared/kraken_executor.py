@@ -43,6 +43,10 @@ KRAKEN_PAIR_MAP = {
     "DOGE/USD": "XDGUSD",
 }
 
+# Monotonic guard so two _private() calls in the same microsecond can't
+# repeat a nonce. Matches the in-process guard in kraken-cli/_common.mjs.
+_last_nonce = 0
+
 
 class KrakenExecutorError(Exception):
     """Raised when a live trade attempt fails any safety check or API call."""
@@ -73,10 +77,16 @@ class KrakenExecutor:
     def _private(self, endpoint, params=None):
         if not self.api_key or not self.api_secret:
             raise KrakenExecutorError("KRAKEN_API_KEY/SECRET not set")
+        global _last_nonce
         params = dict(params or {})
-        # Use microsecond precision to avoid nonce collisions with other clients
-        # (e.g. the kraken-mcp Node server which uses Date.now() millisecond nonces).
-        nonce = str(int(time.time() * 1_000_000))
+        # Microsecond-scale wall-clock nonce, matching kraken-cli/_common.mjs and
+        # yuri/krakenAuth.js. Bump by 1 if the clock didn't advance since the last
+        # call so in-process bursts stay strictly monotonic.
+        n = int(time.time() * 1_000_000)
+        if n <= _last_nonce:
+            n = _last_nonce + 1
+        _last_nonce = n
+        nonce = str(n)
         params["nonce"] = nonce
 
         url_path = f"/0/private/{endpoint}"

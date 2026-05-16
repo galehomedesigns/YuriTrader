@@ -254,8 +254,10 @@ Upstream OpenClaw bug tracking the root cause: [openclaw/openclaw#35436](https:/
 
 | Alias | Real model | Size | When to use | Avoid when |
 |---|---|---|---|---|
-| `quick:latest` | qwen3.5:35b | 23 GB | **Default for every cron job.** Short agent turns, advisor, game plan, autopsy summaries, concierge chat. | Complex multi-step reasoning (use `general`) |
-| `coder:latest` | qwen3-coder-next | 51 GB | Code generation, agent tool-use, script authoring | Running alongside `general` (132 GB exceeds budget) |
+| `quick:latest` | qwen3.5:35b | 23 GB | **Current default for every cron job.** Short agent turns, advisor, game plan, autopsy summaries, concierge chat. Under evaluation for replacement by `quick36`. | Complex multi-step reasoning (use `general`) |
+| `quick36:latest` | qwen3.6:latest (35B-A3B MoE Q4_K_M) | 24 GB | **On trial to replace `quick`.** ~30% faster than `quick` at warm cache (95 vs 73 tok/s) because MoE activates only 3B params. Multimodal + tools + thinking. | Until validated across the cron workload, don't bulk-migrate |
+| `quality:latest` | qwen3.6:35b-a3b-q8_0 | 38 GB | Higher-fidelity 3.6 alternative to `quick36` when the extra quality is worth ~1.6 GB of memory and slightly slower output. Good middle ground between `quick36` and `general`. | Tight cron budgets (`quick36` is faster) |
+| `coder:latest` | qwen3-coder-next | 51 GB | Code generation, agent tool-use, script authoring. SWE-Bench-tuned. | Running alongside `general` (132 GB exceeds budget) |
 | `general:latest` | qwen3.5:122b | 81 GB | Weekly super_prompt, deep strategy analysis, anything that needs real reasoning | Cron jobs with < 60s budgets; running alongside `coder` |
 | `nemotron:70b` | nemotron:70b | 42 GB | Experimental — evaluate against `quick` + `general` before defaulting anything to it | Until it has a track record for this workload |
 | `gemma:latest` | gemma4:31b | 19 GB | **Nothing agentic.** Ignores length limits; ~10 tok/s; 120s timeouts will fail. Use only for multimodal/image tasks. | Any agent loop, any cron job |

@@ -23,13 +23,13 @@ HEADERS = {
 }
 
 BOT_RULES = {
-    "momentum-hunter": "Entry: RSI>50 + MACD bullish + Volume>2x + Price>EMA50. Exit: +2% TP, -1% SL, RSI>80, MACD bearish.",
+    "momentum-hunter": "Entry: RSI>50 + MACD bullish + Volume>2x + Price>EMA50. Exit: +3% TP, -1% SL, RSI>80, MACD bearish.",
     "the-reverter": "Entry: RSI<30 + price at BB lower + ADX<25. Exit: Price at BB middle, +1.5% TP, -2% SL.",
     "nano-sniper": "Entry: EMA 8>21>55>200 alignment + above VWAP. Exit: +0.3% TP, -0.2% SL, EMA breaks.",
     "trend-rider": "Entry: Uptrend EMA21>EMA50 + pullback to 21 EMA + low volume. Exit: +3% TP, -1.5% SL, below EMA21.",
     "squeeze-breaker": "Entry: BB squeeze (bandwidth<0.03) + breakout above upper BB + volume. Exit: +2.5% TP, -1% SL.",
     "flag-rider": "Entry: Strong impulse (>2%) + tight consolidation + breakout on volume. Exit: +2% TP, -1% SL.",
-    "trap-catcher": "Entry: RSI reverting from extreme (>75 or <25) + declining volume. Exit: +2% TP, -1.5% SL, RSI at 50.",
+    "trap-catcher": "Entry: RSI reverting from extreme (>75 or <25) + declining volume. Exit: +3% TP, -1.5% SL, RSI at 50.",
     "volume-whisperer": "Entry: Above VWAP + OBV positive + RVOL>1.5. Exit: +2% TP, -1% SL, below VWAP.",
     "correlation-hunter": "Entry: Z-score>2 on pair spread. Exit: Z-score reverts to 0, Z>3.5 stop.",
     "news-sniper": "Entry: Big move (>3%) + high volume + RSI not extreme. Exit: +1% TP, -0.5% SL, 30min time decay.",
@@ -65,7 +65,7 @@ def call_llm(prompt):
     try:
         r = httpx.post(
             f"{OLLAMA_URL}/api/generate",
-            json={"model": "quick:latest", "prompt": prompt, "stream": False,
+            json={"model": "quick36:latest", "prompt": prompt, "stream": False,
                    "options": opts},
             timeout=120,
         )
@@ -76,7 +76,7 @@ def call_llm(prompt):
     try:
         r = httpx.post(
             f"{OLLAMA_URL}/api/generate",
-            json={"model": "gemma:latest", "prompt": prompt, "stream": False,
+            json={"model": "quality:latest", "prompt": prompt, "stream": False,
                    "options": opts},
             timeout=120,
         )

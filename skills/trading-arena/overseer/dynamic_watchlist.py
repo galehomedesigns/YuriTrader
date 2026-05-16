@@ -226,12 +226,69 @@ def save_watchlist(watchlist):
     return _supabase_post("arena_watchlist", record)
 
 
+def generate_llm_narrative(watchlist):
+    """Use quick36 to synthesize a tradability-focused brief from the watchlist.
+    Returns a 3-5 sentence narrative or None on failure."""
+    if not watchlist:
+        return None
+
+    rows = []
+    for i, item in enumerate(watchlist[:15], 1):
+        rows.append(
+            f"  {i:2d}. {item['symbol']:<10} {item['asset_type']:<6} "
+            f"{item['change_pct']:+6.2f}%  score={item['score']:.1f}"
+        )
+
+    prompt = f"""You are advising Tony on today's most tradable movers. Given the algorithm-scored
+top movers below (score = |change%| × log10(volume_usd), higher = more actionable), write a
+SHORT trading-focused narrative (3-5 sentences, plain text, no markdown).
+
+- Lead with 1-2 tickers that look most actionable today and why
+- Mention asset class spread (stocks vs crypto) if notable
+- Flag any thematic clusters (e.g. multiple semis selling off, crypto-correlated names)
+- Skip rephrasing the table — synthesize the trading read
+
+Top movers:
+{chr(10).join(rows)}"""
+
+    payload = json.dumps({
+        "model": "quick36:latest",
+        "prompt": prompt,
+        "stream": False,
+        "think": False,
+        "keep_alive": "10m",
+        "options": {"temperature": 0.4, "num_ctx": 8192, "num_predict": 400},
+    }).encode()
+
+    url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434") + "/api/generate"
+    req = urllib.request.Request(url, data=payload,
+                                  headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=90) as r:
+            return json.loads(r.read()).get("response", "").strip() or None
+    except Exception as e:
+        print(f"  narrative unavailable: {type(e).__name__}: {str(e)[:100]}", file=sys.stderr)
+        return None
+
+
 def format_telegram(watchlist):
-    """Format watchlist as a Telegram message."""
+    """Format watchlist as a Telegram message with an LLM-synthesized narrative on top."""
     if not watchlist:
         return "📊 Watchlist refresh: no movers found"
 
-    lines = ["📊 <b>Top 20 Watchlist Refresh</b>", ""]
+    narrative = generate_llm_narrative(watchlist)
+
+    lines = ["📊 <b>Top 20 Watchlist Refresh</b>"]
+    if narrative:
+        # html.escape would be ideal but Telegram parse_mode=HTML accepts the simple subset
+        # used here; the narrative is plain prose with no markup.
+        lines.append("")
+        lines.append(narrative)
+        lines.append("")
+        lines.append("— Movers —")
+    else:
+        lines.append("")
+
     for i, item in enumerate(watchlist[:20], 1):
         emoji = "🟢" if item["change_pct"] > 0 else "🔴"
         type_emoji = "₿" if item["asset_type"] == "crypto" else "📈"

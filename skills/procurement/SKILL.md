@@ -1,3 +1,5 @@
+**Status:** Archived 2026-04-23 — resumable. Crawl cron disabled; code + Supabase `tenders` table intact. See crontab comment for revival.
+
 ---
 name: procurement
 description: BC procurement intelligence aggregator. Crawls 10 municipal and provincial tender sources, stores in Supabase with pgvector embeddings for RAG search. Triggers on requests about tenders, RFPs, procurement, bids, or opportunities.

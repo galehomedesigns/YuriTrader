@@ -14,8 +14,8 @@ import subprocess
 import sys
 from datetime import datetime
 
-RCLONE_CONFIG = "/data/.config/rclone/rclone.conf"
-LOCAL_DIR = "/data/.openclaw/workspace/receipts"
+RCLONE_CONFIG = (os.path.expanduser("~/.config/rclone/rclone.conf") if not os.path.exists("/data/.openclaw") else "/data/.config/rclone/rclone.conf")
+LOCAL_DIR = (os.path.join(os.environ.get("OPENCLAW_ROOT", "/home/tonygale/openclaw"), "workspace", "receipts") if not os.path.exists("/data/.openclaw") else "/data/.openclaw/workspace/receipts")
 YEAR = datetime.now().strftime("%Y")
 EXCEL_NAME = f"Expenses_{YEAR}.xlsx"
 LOCAL_EXCEL = os.path.join(LOCAL_DIR, EXCEL_NAME)
@@ -158,7 +158,8 @@ def main():
     ws.cell(row=row, column=8).number_format = '#,##0.00'
     ws.cell(row=row, column=9, value=entry["currency"]).border = THIN_BORDER
     ws.cell(row=row, column=10, value=entry["payment_method"]).border = THIN_BORDER
-    ws.cell(row=row, column=11, value=entry["source"]).border = THIN_BORDER
+    # Source/reference goes in column 12 "Receipt/Gmail Ref".
+    ws.cell(row=row, column=12, value=entry["source"]).border = THIN_BORDER
 
     wb.save(LOCAL_EXCEL)
 

@@ -2,7 +2,8 @@
 
 Catches exhaustion moves by fading extreme RSI readings.
 Entry: RSI reverting from extreme (>75 dropping below 70, or <25 rising above 30) + declining volume
-Exit: +2% TP, -1.5% SL, RSI returns to 50 mid-range
+Exit: +3% TP, -1.5% SL, RSI returns to 50 mid-range
+       (+2% raised to +3% on 2026-05-13 to clear ~0.8% round-trip Kraken taker fees with margin)
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -83,7 +84,7 @@ class TrapCatcher(BaseBot):
             return None
         pnl_pct = (data.price - entry) / entry * 100
 
-        if pnl_pct >= 2.0:
+        if pnl_pct >= 3.0:
             return f"Take profit +{pnl_pct:.1f}%"
         if pnl_pct <= -1.5:
             return f"Stop loss {pnl_pct:.1f}%"

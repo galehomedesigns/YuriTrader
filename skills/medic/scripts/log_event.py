@@ -19,7 +19,6 @@ import httpx
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
-OPENAI_KEY = os.environ.get("OPENAI_API_KEY", "")
 MEMORY_DIR = Path("/data/.openclaw/workspace/memory")
 
 HEADERS = {
@@ -30,16 +29,17 @@ HEADERS = {
 
 
 def get_embedding(text):
-    """Generate embedding using OpenAI text-embedding-3-small."""
+    """Generate a 1024-dim embedding via local Ollama mxbai-embed-large."""
+    ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
     try:
         resp = httpx.post(
-            "https://api.openai.com/v1/embeddings",
-            headers={"Authorization": f"Bearer {OPENAI_KEY}", "Content-Type": "application/json"},
-            json={"model": "text-embedding-3-small", "input": text[:8000]},
+            f"{ollama_url}/api/embed",
+            headers={"Content-Type": "application/json"},
+            json={"model": "mxbai-embed-large", "input": text[:1500]},
             timeout=20,
         )
         resp.raise_for_status()
-        return resp.json()["data"][0]["embedding"]
+        return resp.json()["embeddings"][0]
     except Exception as e:
         print(f"  Embedding failed: {e}")
         return None

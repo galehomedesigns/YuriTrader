@@ -62,10 +62,13 @@ def get_leaderboard():
     return _supabase_get("arena_balances?order=total_pnl.desc") or []
 
 
-def run_once(bots):
-    """Run a single scan cycle across all bots."""
+def run_once(bots, crypto_only: bool = False):
+    """Run a single scan cycle across all bots.
+
+    crypto_only=True skips the stock-data fetch (for 24/7 crypto cron).
+    """
     print(f"\n{'='*60}")
-    print(f"Arena Scan — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Arena Scan{' (crypto-only)' if crypto_only else ''} — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"{'='*60}")
 
     # Global risk check
@@ -82,7 +85,7 @@ def run_once(bots):
 
     # Fetch market data
     print("\nFetching market data...")
-    market_data = fetch_all()
+    market_data = fetch_all(crypto_only=crypto_only)
     if not market_data:
         print("No market data available. Skipping cycle.")
         return
@@ -155,6 +158,7 @@ def main():
     parser.add_argument("--once", action="store_true", help="Run one cycle and exit")
     parser.add_argument("--status", action="store_true", help="Show bot statuses")
     parser.add_argument("--leaderboard", action="store_true", help="Show P&L leaderboard")
+    parser.add_argument("--crypto-only", action="store_true", help="Skip stock fetch (for 24/7 crypto cron)")
     args = parser.parse_args()
 
     if args.leaderboard:
@@ -172,7 +176,7 @@ def main():
         return
 
     if args.once:
-        run_once(bots)
+        run_once(bots, crypto_only=args.crypto_only)
         print_leaderboard()
         return
 
@@ -182,7 +186,7 @@ def main():
 
     while True:
         try:
-            run_once(bots)
+            run_once(bots, crypto_only=args.crypto_only)
             time.sleep(SCAN_INTERVAL)
         except KeyboardInterrupt:
             print("\nArena stopped.")

@@ -12,8 +12,8 @@ import httpx
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
-OLLAMA_URL = os.environ.get("OLLAMA_BASE_URL", "http://100.84.217.85:11434")
-OLLAMA_MODEL = "gemma:latest"
+OLLAMA_URL = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+OLLAMA_MODEL = "quality:latest"
 
 HEADERS = {
     "apikey": SUPABASE_KEY,

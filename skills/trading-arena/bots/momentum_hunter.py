@@ -2,7 +2,8 @@
 
 Scans for assets with volume surges + bullish momentum signals.
 Entry: RSI > 50 + MACD bullish + volume > 2x avg + price > EMA-50
-Exit: +2% TP, -1% SL, RSI > 80 overbought, MACD bearish cross
+Exit: +3% TP, -1% SL, RSI > 80 overbought, MACD bearish cross
+       (+2% raised to +3% on 2026-05-13 to clear ~0.8% round-trip Kraken taker fees with margin)
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -59,7 +60,7 @@ class MomentumHunter(BaseBot):
             return None
         pnl_pct = (data.price - entry) / entry * 100
 
-        if pnl_pct >= 2.0:
+        if pnl_pct >= 3.0:
             return f"Take profit +{pnl_pct:.1f}%"
         if pnl_pct <= -1.0:
             return f"Stop loss {pnl_pct:.1f}%"

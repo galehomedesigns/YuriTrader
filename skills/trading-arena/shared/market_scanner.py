@@ -288,14 +288,19 @@ def fetch_dynamic_watchlist() -> tuple:
         return (STOCK_SYMBOLS, CRYPTO_SYMBOLS)
 
 
-def fetch_all() -> Dict[str, AssetData]:
-    """Fetch all stock + crypto data using the dynamic watchlist."""
+def fetch_all(crypto_only: bool = False) -> Dict[str, AssetData]:
+    """Fetch all stock + crypto data using the dynamic watchlist.
+
+    crypto_only=True skips the stock fetch entirely (saves finnhub/twelvedata
+    quota when scanning 24/7 outside US market hours).
+    """
     stock_syms, crypto_syms = fetch_dynamic_watchlist()
     data = {}
-    print(f"  Scanning {len(stock_syms)} stocks...", file=sys.stderr, end=" ")
-    stocks = fetch_stock_data(stock_syms)
-    data.update(stocks)
-    print(f"{len(stocks)} found", file=sys.stderr)
+    if not crypto_only:
+        print(f"  Scanning {len(stock_syms)} stocks...", file=sys.stderr, end=" ")
+        stocks = fetch_stock_data(stock_syms)
+        data.update(stocks)
+        print(f"{len(stocks)} found", file=sys.stderr)
 
     print(f"  Scanning {len(crypto_syms)} crypto...", file=sys.stderr, end=" ")
     crypto = fetch_crypto_data(crypto_syms)

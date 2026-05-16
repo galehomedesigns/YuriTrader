@@ -29,7 +29,7 @@ import urllib.error
 AUTH_URL = "https://login.questrade.com/oauth2/token"
 TOKEN_FILE = os.environ.get(
     "QUESTRADE_TOKEN_FILE",
-    "/home/tonygale/openclaw/.openclaw/questrade_token.json",
+    "/home/tonygale/openclaw/state/questrade_token.json",
 )
 TOKEN_LOCK = TOKEN_FILE + ".lock"
 # Questrade sits behind Cloudflare, which blocks urllib's default User-Agent

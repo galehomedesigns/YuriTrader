@@ -38,7 +38,7 @@ module.exports = {
 
   ollama: {
     baseUrl: process.env.OLLAMA_BASE_URL || 'http://100.84.217.85:11434',
-    model: 'qwen2.5:7b',
+    model: 'quick36:latest',
     timeoutMs: 15000,
   },
 

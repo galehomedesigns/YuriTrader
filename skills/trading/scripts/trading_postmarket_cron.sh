@@ -57,14 +57,79 @@ SUMMARY="$(
 
 echo "$SUMMARY" >> "$LOG_FILE"
 
-MESSAGE="Post-Market Summary ($(date +%Y-%m-%d))
+# LLM narrative — quick36 synthesizes the day's data into a post-mortem paragraph
+NARRATIVE="$(SUMMARY_VAL="$SUMMARY" /home/tonygale/openclaw/.venv/bin/python - <<'PY' 2>>"$LOG_FILE"
+import json, os, sys, urllib.request, urllib.error
+
+summary = os.environ.get("SUMMARY_VAL", "")[:8000]
+if not summary.strip():
+    sys.exit(0)
+
+prompt = f"""You are writing Tony's post-market wrap-up. Given the raw end-of-day data below,
+produce a tight narrative (4-6 sentences, plain text, no markdown, no headings).
+
+Lead with portfolio change today (up/down/flat), then call out specific gainers/losers in the watchlist,
+any trades that closed today (with P&L), open positions left overnight, and auto-trader status.
+Skip headers, dollar tables, and section labels — synthesize.
+Do not invent numbers; only use what's in the summary.
+
+Raw summary:
+{summary}"""
+
+payload = json.dumps({
+    "model": "quick36:latest",
+    "prompt": prompt,
+    "stream": False,
+    "think": False,
+    "keep_alive": "10m",
+    "options": {"temperature": 0.4, "num_ctx": 16384, "num_predict": 500},
+}).encode()
+
+url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434") + "/api/generate"
+req = urllib.request.Request(url, data=payload,
+                              headers={"Content-Type": "application/json"}, method="POST")
+try:
+    with urllib.request.urlopen(req, timeout=120) as r:
+        text = json.loads(r.read()).get("response", "").strip()
+        print(text)
+except Exception as e:
+    print(f"(narrative unavailable: {type(e).__name__}: {str(e)[:100]})", file=sys.stderr)
+PY
+)"
+
+HEADER="📉 Post-Market Summary — $(date '+%a %b %d, %Y')"
+if [ -n "$NARRATIVE" ] && [ ${#NARRATIVE} -gt 50 ]; then
+    MESSAGE="${HEADER}
+
+${NARRATIVE}
+
+— Details —
+${SUMMARY}
+Dashboard: ${DASHBOARD_URL}"
+else
+    MESSAGE="${HEADER}
 
 ${SUMMARY}
 Dashboard: ${DASHBOARD_URL}"
+fi
 
 if [ ${#MESSAGE} -gt 4000 ]; then
-    MESSAGE="${MESSAGE:0:4000}
+    if [ -n "$NARRATIVE" ] && [ ${#NARRATIVE} -gt 50 ]; then
+        BUDGET=$((3700 - ${#HEADER} - ${#NARRATIVE}))
+        [ "$BUDGET" -lt 200 ] && BUDGET=200
+        SUMMARY_TRIM="${SUMMARY:0:$BUDGET}"
+        MESSAGE="${HEADER}
+
+${NARRATIVE}
+
+— Details —
+${SUMMARY_TRIM}
+...[full in postmarket.log]
+Dashboard: ${DASHBOARD_URL}"
+    else
+        MESSAGE="${MESSAGE:0:4000}
 ...[truncated]"
+    fi
 fi
 
 curl -sS --max-time 15 \

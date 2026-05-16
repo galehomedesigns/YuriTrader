@@ -51,7 +51,7 @@ def call_llm(prompt):
     try:
         r = httpx.post(
             f"{OLLAMA_URL}/api/generate",
-            json={"model": "quick:latest", "prompt": prompt, "stream": False,
+            json={"model": "quick36:latest", "prompt": prompt, "stream": False,
                    "options": opts},
             timeout=300,
         )
@@ -62,7 +62,7 @@ def call_llm(prompt):
     try:
         r = httpx.post(
             f"{OLLAMA_URL}/api/generate",
-            json={"model": "gemma:latest", "prompt": prompt, "stream": False,
+            json={"model": "quality:latest", "prompt": prompt, "stream": False,
                    "options": opts},
             timeout=300,
         )

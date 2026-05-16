@@ -14,8 +14,8 @@ except ImportError:
     print("Error: openpyxl not installed", file=sys.stderr)
     sys.exit(1)
 
-RCLONE_CONFIG = "/data/.config/rclone/rclone.conf"
-LOCAL_DIR = "/data/.openclaw/workspace/receipts"
+RCLONE_CONFIG = (os.path.expanduser("~/.config/rclone/rclone.conf") if not os.path.exists("/data/.openclaw") else "/data/.config/rclone/rclone.conf")
+LOCAL_DIR = (os.path.join(os.environ.get("OPENCLAW_ROOT", "/home/tonygale/openclaw"), "workspace", "receipts") if not os.path.exists("/data/.openclaw") else "/data/.openclaw/workspace/receipts")
 YEAR = datetime.now().strftime("%Y")
 EXCEL_NAME = f"Expenses_{YEAR}.xlsx"
 LOCAL_EXCEL = os.path.join(LOCAL_DIR, EXCEL_NAME)

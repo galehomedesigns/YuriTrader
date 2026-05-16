@@ -48,12 +48,74 @@ if [ "$VERBOSE" -eq 0 ] && echo "$ALERTS" | grep -qx "No alerts triggered."; the
     exit 0
 fi
 
-MESSAGE="Market alerts ($(date +%H:%M\ %Z))
+NARRATIVE="$(ALERTS_VAL="$ALERTS" /home/tonygale/openclaw/.venv/bin/python - <<'PY' 2>>"$LOG_FILE"
+import json, os, sys, urllib.request, urllib.error
+
+alerts = os.environ.get("ALERTS_VAL", "")[:6000]
+if not alerts.strip():
+    sys.exit(0)
+
+prompt = f"""You are summarizing market alerts for Tony, a trader. Given the raw alert dump below,
+write a tight impact-focused brief (2-4 sentences, plain text, no markdown).
+
+- Lead with the highest-impact tickers/events
+- Note direction (bullish/bearish) and rough magnitude
+- Skip duplicate or low-signal items
+- Do not invent numbers — only use what's in the alerts
+
+Raw alerts:
+{alerts}"""
+
+payload = json.dumps({
+    "model": "quick36:latest",
+    "prompt": prompt,
+    "stream": False,
+    "think": False,
+    "keep_alive": "10m",
+    "options": {"temperature": 0.3, "num_ctx": 8192, "num_predict": 350},
+}).encode()
+
+url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434") + "/api/generate"
+req = urllib.request.Request(url, data=payload,
+                              headers={"Content-Type": "application/json"}, method="POST")
+try:
+    with urllib.request.urlopen(req, timeout=90) as r:
+        print(json.loads(r.read()).get("response", "").strip())
+except Exception as e:
+    print(f"(narrative unavailable: {type(e).__name__}: {str(e)[:100]})", file=sys.stderr)
+PY
+)"
+
+HEADER="📰 Market alerts — $(date '+%H:%M %Z')"
+if [ -n "$NARRATIVE" ] && [ ${#NARRATIVE} -gt 30 ]; then
+    MESSAGE="${HEADER}
+
+${NARRATIVE}
+
+— Raw —
+${ALERTS}"
+else
+    MESSAGE="${HEADER}
 
 ${ALERTS}"
+fi
+
 if [ ${#MESSAGE} -gt 4000 ]; then
-    MESSAGE="${MESSAGE:0:4000}
+    if [ -n "$NARRATIVE" ] && [ ${#NARRATIVE} -gt 30 ]; then
+        BUDGET=$((3800 - ${#HEADER} - ${#NARRATIVE}))
+        [ "$BUDGET" -lt 200 ] && BUDGET=200
+        ALERTS_TRIM="${ALERTS:0:$BUDGET}"
+        MESSAGE="${HEADER}
+
+${NARRATIVE}
+
+— Raw —
+${ALERTS_TRIM}
+...[full in news.log]"
+    else
+        MESSAGE="${MESSAGE:0:4000}
 ...[truncated]"
+    fi
 fi
 
 curl -sS --max-time 15 \

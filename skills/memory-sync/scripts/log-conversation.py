@@ -22,7 +22,8 @@ from datetime import datetime, timezone, date
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
-OPENAI_KEY = os.environ.get("OPENAI_API_KEY", "")
+OLLAMA_URL = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+EMBED_MODEL = "mxbai-embed-large"
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -32,16 +33,15 @@ HEADERS = {
 
 
 def get_embedding(text):
-    if not OPENAI_KEY:
+    """Returns a 1024-dim vector from local Ollama mxbai-embed-large."""
+    url = f"{OLLAMA_URL}/api/embed"
+    data = json.dumps({"model": EMBED_MODEL, "input": text[:1500]}).encode()
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode())["embeddings"][0]
+    except (urllib.error.URLError, urllib.error.HTTPError, KeyError):
         return None
-    url = "https://api.openai.com/v1/embeddings"
-    data = json.dumps({"input": text[:8000], "model": "text-embedding-3-small"}).encode()
-    req = urllib.request.Request(url, data=data, headers={
-        "Authorization": f"Bearer {OPENAI_KEY}",
-        "Content-Type": "application/json",
-    })
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read().decode())["data"][0]["embedding"]
 
 
 def main():

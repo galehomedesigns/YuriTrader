@@ -13,6 +13,7 @@ from config import (
     TELEGRAM_TOKEN, TELEGRAM_CHAT_ID,
     LIVE_TRADING_ENABLED, LIVE_TRADING_BOTS, LIVE_MAX_POSITION_USD,
     LIVE_MAX_EXPOSURE_USD, LIVE_DAILY_LOSS_LIMIT,
+    RE_ENTRY_COOLDOWN_MINUTES,
 )
 # Live trading executor (lazy-loaded to keep paper-only setups working)
 try:
@@ -126,6 +127,24 @@ class PaperTrader:
         )
         return bool(positions)
 
+    def _minutes_since_last_close(self, symbol):
+        """Minutes since this bot's most recent closed trade on this symbol.
+        Returns None if no prior closed trade exists. Used to enforce the
+        re-entry cooldown — without it, paper P&L looks good but live P&L
+        gets eaten by Kraken's 0.40% taker fee on every round trip."""
+        rows = _supabase_get(
+            f"arena_trades?bot_id=eq.{self.bot_id}&symbol=eq.{symbol}"
+            f"&status=eq.closed&order=closed_at.desc&select=closed_at&limit=1"
+        ) or []
+        if not rows or not rows[0].get("closed_at"):
+            return None
+        closed_str = rows[0]["closed_at"].replace("Z", "+00:00")
+        try:
+            closed = datetime.fromisoformat(closed_str)
+        except ValueError:
+            return None
+        return (datetime.now(timezone.utc) - closed).total_seconds() / 60.0
+
     def can_open_position(self):
         """Check if bot can open a new position."""
         return self.get_position_count() < MAX_CONCURRENT_POS
@@ -190,6 +209,12 @@ class PaperTrader:
         if self.has_position(symbol):
             return None
         if not self.can_open_position():
+            return None
+
+        # Re-entry cooldown — block fast same-symbol re-entries that would
+        # be eaten by fees in live mode.
+        minutes_since = self._minutes_since_last_close(symbol)
+        if minutes_since is not None and minutes_since < RE_ENTRY_COOLDOWN_MINUTES:
             return None
 
         position_size = min(self.balance * MAX_POSITION_PCT, MAX_POSITION_USD)
