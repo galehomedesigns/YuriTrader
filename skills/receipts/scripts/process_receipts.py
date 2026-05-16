@@ -17,11 +17,11 @@ except ImportError:
     print("Error: openpyxl not installed. Run: pip install openpyxl", file=sys.stderr)
     sys.exit(1)
 
-RCLONE_CONFIG = "/data/.config/rclone/rclone.conf"
+RCLONE_CONFIG = (os.path.expanduser("~/.config/rclone/rclone.conf") if not os.path.exists("/data/.openclaw") else "/data/.config/rclone/rclone.conf")
 DRIVE_RECEIPTS = "gdrive:Receipts/"
 DRIVE_PROCESSED = "gdrive:Receipts/Processed/"
 DRIVE_ACCOUNTANT = "gdrive:Accountant/"
-LOCAL_DIR = "/data/.openclaw/workspace/receipts"
+LOCAL_DIR = (os.path.join(os.environ.get("OPENCLAW_ROOT", "/home/tonygale/openclaw"), "workspace", "receipts") if not os.path.exists("/data/.openclaw") else "/data/.openclaw/workspace/receipts")
 YEAR = datetime.now().strftime("%Y")
 EXCEL_NAME = f"Expenses_{YEAR}.xlsx"
 LOCAL_EXCEL = os.path.join(LOCAL_DIR, EXCEL_NAME)
@@ -103,30 +103,17 @@ def download_receipt(filename):
 
 
 def analyze_receipt_with_gemini(image_path):
-    """Send receipt image to Gemini for analysis."""
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        print("Error: GEMINI_API_KEY not set", file=sys.stderr)
-        return None
-
+    """Send receipt image to local qwen2.5vl:72b (via Ollama) for vision OCR
+    + structured extraction. (Function name kept for caller compatibility.)"""
     with open(image_path, "rb") as f:
         image_data = base64.b64encode(f.read()).decode()
 
-    ext = image_path.rsplit(".", 1)[-1].lower()
-    mime_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
-                "webp": "image/webp", "heic": "image/heic", "pdf": "application/pdf"}
-    mime_type = mime_map.get(ext, "image/jpeg")
-
     categories_str = ", ".join(CRA_CATEGORIES)
-
-    payload = {
-        "contents": [{
-            "parts": [
-                {"inline_data": {"mime_type": mime_type, "data": image_data}},
-                {"text": f"""Analyze this receipt image and extract the following information as JSON:
+    prompt = f"""Analyze this receipt image and extract the following information as JSON:
 {{
   "vendor": "Store/business name",
   "date": "YYYY-MM-DD",
+  "dates_found": ["YYYY-MM-DD", "..."],
   "subtotal": 0.00,
   "tax_gst_hst": 0.00,
   "tax_pst": 0.00,
@@ -143,44 +130,51 @@ Rules:
 - For Canadian receipts, separate GST/HST and PST if shown
 - Choose the most appropriate CRA category from the list
 - If date is unclear, use null
-- Return ONLY valid JSON, no other text"""}
-            ]
-        }],
-        "generationConfig": {
-            "temperature": 0.1,
-            "topP": 0.8,
-            "maxOutputTokens": 4096
-        }
+- dates_found: list EVERY distinct transaction/print date visible on the receipt (header, footer, timestamp, payment line, etc.) in YYYY-MM-DD form. Exclude "best before"/expiry/coupon dates. Most receipts print the same date 2-3 times — use this to cross-check yourself. If they disagree, set "date" to null.
+- Beware misread year digits. "2020" vs "2026" or "2025" vs "2026" are common OCR failures on 0/5/6. If two dates differ only in year, trust the one that appears more often or is most legible.
+- Return ONLY valid JSON, no markdown fences, no other text."""
+
+    ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+    payload = {
+        "model": "qwen2.5vl:72b",
+        "prompt": prompt,
+        "images": [image_data],
+        "stream": False,
+        "format": "json",
+        "keep_alive": "30m",
+        "options": {"temperature": 0.1, "num_ctx": 8192, "num_predict": 2048},
     }
 
     import urllib.request
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-    req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+    headers = {"Content-Type": "application/json"}
+    api_key = os.environ.get("OLLAMA_API_KEY")
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    url = f"{ollama_url}/api/generate"
+    req = urllib.request.Request(url, data=json.dumps(payload).encode(),
+                                 headers=headers)
 
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=300) as resp:
             result = json.loads(resp.read())
-
-        if "candidates" not in result or not result["candidates"]:
-            print(f"Gemini API error: {result}", file=sys.stderr)
-            return None
-
-        text = result["candidates"][0]["content"]["parts"][0]["text"]
-        # Clean up potential markdown code blocks
-        text = text.strip()
+        text = (result.get("response") or "").strip()
         if text.startswith("```"):
-            # Remove ```json or ``` line
             text = text.split("\n", 1)[1] if "\n" in text else text[3:]
         if text.endswith("```"):
             text = text[:-3]
         text = text.strip()
-        # Handle potential truncation
         if not text.endswith("}"):
-            print("Warning: Gemini response may be truncated", file=sys.stderr)
+            print("Warning: Ollama response may be truncated", file=sys.stderr)
             return None
-        return json.loads(text)
+        parsed = json.loads(text)
+        dates_found = parsed.get("dates_found") or []
+        distinct = sorted({d for d in dates_found if d})
+        if len(distinct) > 1:
+            print(f"  date conflict: {distinct} — nulling date", file=sys.stderr)
+            parsed["date"] = None
+        return parsed
     except Exception as e:
-        print(f"Gemini API error: {e}", file=sys.stderr)
+        print(f"Ollama vision error: {e}", file=sys.stderr)
         return None
 
 
@@ -260,7 +254,8 @@ def add_transaction(wb, data, filename):
     ws.cell(row=row, column=8).number_format = '#,##0.00'
     ws.cell(row=row, column=9, value=data.get("currency", "CAD")).border = THIN_BORDER
     ws.cell(row=row, column=10, value=data.get("payment_method", "")).border = THIN_BORDER
-    ws.cell(row=row, column=11, value=filename).border = THIN_BORDER
+    # Filename goes in column 12 "Receipt/Gmail Ref" (column 11 "Card Ref" is left empty).
+    ws.cell(row=row, column=12, value=filename).border = THIN_BORDER
 
     wb.save(LOCAL_EXCEL)
 

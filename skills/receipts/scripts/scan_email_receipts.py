@@ -28,15 +28,15 @@ import sys
 from datetime import datetime, timedelta
 from email.header import decode_header
 
-RCLONE_CONFIG = "/data/.config/rclone/rclone.conf"
-LOCAL_DIR = "/data/.openclaw/workspace/receipts"
+RCLONE_CONFIG = (os.path.expanduser("~/.config/rclone/rclone.conf") if not os.path.exists("/data/.openclaw") else "/data/.config/rclone/rclone.conf")
+LOCAL_DIR = (os.path.join(os.environ.get("OPENCLAW_ROOT", "/home/tonygale/openclaw"), "workspace", "receipts") if not os.path.exists("/data/.openclaw") else "/data/.openclaw/workspace/receipts")
 YEAR = datetime.now().strftime("%Y")
 EXCEL_NAME = f"Expenses_{YEAR}.xlsx"
 LOCAL_EXCEL = os.path.join(LOCAL_DIR, EXCEL_NAME)
 DRIVE_ACCOUNTANT = "gdrive:Accountant/"
 
 # Tracker file — stores which emails have already been processed
-TRACKER_FILE = "/data/.openclaw/workspace/receipts/processed_emails.json"
+TRACKER_FILE = os.path.join(LOCAL_DIR, "processed_emails.json")
 
 GMAIL_USER = os.environ.get("GMAIL_USER", "")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
@@ -204,10 +204,8 @@ def is_receipt_email(from_addr, subject):
 # --- Gemini extraction ---
 
 def extract_expense_with_gemini(email_text, from_addr, subject, date_str):
-    """Use Gemini to extract expense data from email text."""
-    if not GEMINI_API_KEY:
-        return None
-
+    """Use local Ollama quality:latest to extract expense data from email text.
+    (Function name retained for caller compatibility.)"""
     prompt = f"""Extract expense/receipt information from this email. Return ONLY valid JSON with these fields:
 {{
     "is_receipt": true/false,
@@ -233,26 +231,33 @@ Subject: {subject}
 Body:
 {email_text}"""
 
-    import urllib.request
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
-
+    ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
     payload = json.dumps({
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 2048}
+        "model": "quality:latest",
+        "prompt": prompt,
+        "stream": False,
+        "format": "json",
+        "keep_alive": "10m",
+        "options": {"temperature": 0.1, "num_ctx": 8192, "num_predict": 1024},
     }).encode()
 
-    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+    import urllib.request
+    headers = {"Content-Type": "application/json"}
+    api_key = os.environ.get("OLLAMA_API_KEY")
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    req = urllib.request.Request(f"{ollama_url}/api/generate", data=payload,
+                                 headers=headers)
 
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=180) as resp:
             result = json.loads(resp.read())
-            text = result["candidates"][0]["content"]["parts"][0]["text"]
-            # Strip markdown code blocks
-            text = re.sub(r'^```json\s*', '', text.strip())
-            text = re.sub(r'\s*```$', '', text.strip())
+            text = (result.get("response") or "").strip()
+            text = re.sub(r'^```json\s*', '', text)
+            text = re.sub(r'\s*```$', '', text)
             return json.loads(text)
     except Exception as e:
-        print(f"  Gemini error: {e}", file=sys.stderr)
+        print(f"  Ollama error: {e}", file=sys.stderr)
         return None
 
 
@@ -382,7 +387,8 @@ def save_expense(entry):
     ws.cell(row=row, column=8).number_format = '#,##0.00'
     ws.cell(row=row, column=9, value=entry.get("currency", "CAD")).border = THIN_BORDER
     ws.cell(row=row, column=10, value=entry.get("payment_method", "")).border = THIN_BORDER
-    ws.cell(row=row, column=11, value="Email receipt").border = THIN_BORDER
+    # Source label goes in column 12 "Receipt/Gmail Ref".
+    ws.cell(row=row, column=12, value="Email receipt").border = THIN_BORDER
 
     wb.save(LOCAL_EXCEL)
     return {"saved": True}
