@@ -1,0 +1,19 @@
+[Unit]
+Description=Dashboard auth proxy — Caddy basic-auth in front of dashboards.service
+Documentation=https://github.com/galehomedesigns/openclaw-xrt9
+After=network-online.target dashboards.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/tonygale/openclaw/dashboard-proxy
+ExecStart=/home/tonygale/openclaw/bin/caddy run --config /home/tonygale/openclaw/dashboard-proxy/Caddyfile --adapter caddyfile
+ExecReload=/home/tonygale/openclaw/bin/caddy reload --config /home/tonygale/openclaw/dashboard-proxy/Caddyfile --adapter caddyfile --force
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=dashboard-proxy
+
+[Install]
+WantedBy=default.target
