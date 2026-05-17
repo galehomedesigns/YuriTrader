@@ -13,7 +13,7 @@ from config import (
     TELEGRAM_TOKEN, TELEGRAM_CHAT_ID,
     LIVE_TRADING_ENABLED, LIVE_TRADING_BOTS, LIVE_MAX_POSITION_USD,
     LIVE_MAX_EXPOSURE_USD, LIVE_DAILY_LOSS_LIMIT,
-    RE_ENTRY_COOLDOWN_MINUTES,
+    RE_ENTRY_COOLDOWN_MINUTES, KRAKEN_ROUNDTRIP_FEE_PCT,
 )
 # Live trading executor (lazy-loaded to keep paper-only setups working)
 try:
@@ -339,15 +339,26 @@ class PaperTrader:
                 )
 
         if side == "BUY":
-            pnl = (current_price - entry) * qty
-            pnl_pct = ((current_price - entry) / entry * 100) if entry else 0
+            gross_pnl = (current_price - entry) * qty
         else:  # SHORT
-            pnl = (entry - current_price) * qty
-            pnl_pct = ((entry - current_price) / entry * 100) if entry else 0
+            gross_pnl = (entry - current_price) * qty
+
+        # Round-trip Kraken taker fee. The executor never calls QueryOrders to
+        # fetch the exact fill fee, so for LIVE trades we subtract a
+        # conservative estimate here — otherwise recorded pnl is price-only and
+        # the live daily-loss kill switch (_live_daily_pnl / LIVE_DAILY_LOSS_LIMIT)
+        # trips late. Paper trades keep price-only pnl (paper-arena leaderboard
+        # unaffected) but still write fees_paid=0.0 so the column is explicit,
+        # never silently absent.
+        fees_paid = round(KRAKEN_ROUNDTRIP_FEE_PCT * qty * current_price, 4) if is_live else 0.0
+        pnl = gross_pnl - fees_paid
+        cost_basis = entry * qty
+        pnl_pct = (pnl / cost_basis * 100) if cost_basis else 0
 
         trade_id = position.get("id")
         update_data = {
             "exit_price": current_price,
+            "fees_paid": fees_paid,
             "pnl": round(pnl, 4),
             "pnl_pct": round(pnl_pct, 4),
             "status": "closed",

@@ -62,6 +62,15 @@ LIVE_TRADING_BOTS = [b.strip() for b in os.environ.get("LIVE_TRADING_BOTS", "").
 LIVE_MAX_POSITION_USD = float(os.environ.get("LIVE_MAX_POSITION_USD", "5.0"))
 LIVE_MAX_EXPOSURE_USD = float(os.environ.get("LIVE_MAX_EXPOSURE_USD", "10.0"))
 LIVE_DAILY_LOSS_LIMIT = float(os.environ.get("LIVE_DAILY_LOSS_LIMIT", "-3.0"))
+# Estimated round-trip Kraken taker fee (entry + exit) as a fraction of
+# notional. Kraken taker ≈ 0.40%/side ⇒ ~0.80% round trip. The executor does
+# not call QueryOrders to fetch the exact fill fee, so recorded live P&L was
+# price-only and the LIVE_DAILY_LOSS_LIMIT kill switch read an understated
+# number (tripped late). paper_trader subtracts this estimate from live pnl at
+# close; trap_catcher uses it as a profit hurdle so it stops scratching wins
+# that fees turn negative. Conservative; override via .env if the fee tier
+# changes, or replace with exact QueryOrders capture later.
+KRAKEN_ROUNDTRIP_FEE_PCT = float(os.environ.get("KRAKEN_ROUNDTRIP_FEE_PCT", "0.008"))
 
 # === HUMAN-IN-THE-LOOP CONCIERGE (Telegram) ===
 MANUAL_TRADING_ENABLED = os.environ.get("MANUAL_TRADING_ENABLED", "false").lower() == "true"
