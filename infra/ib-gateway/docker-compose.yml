@@ -1,0 +1,67 @@
+services:
+  ib-gateway:
+    image: ghcr.io/gnzsnz/ib-gateway:stable
+    container_name: ib-gateway
+    restart: unless-stopped
+    environment:
+      # === Mode ===
+      # "paper" → API on port 4002, no real money
+      # "live"  → API on port 4001, real money
+      TRADING_MODE: ${IBKR_TRADING_MODE:-paper}
+
+      # === Credentials ===
+      # IMPORTANT: this image only swaps in the *_PAPER vars when running
+      # DUAL mode (TRADING_MODE=both). In single paper OR live mode it logs
+      # in with TWS_USERID / TWS_PASSWORD *verbatim* (see scripts/run.sh —
+      # the TWS_USERID=$TWS_USERID_PAPER reassignment is inside the DUAL_MODE
+      # block only). So TWS_USERID/TWS_PASSWORD must carry the ACTIVE account's
+      # creds: use the live creds if IBKR_USERID is set, otherwise fall back to
+      # the paper creds (the paper phase leaves IBKR_USERID blank). This makes
+      # both the paper phase and the go-live switch work with the same wiring.
+      TWS_USERID: ${IBKR_USERID:-${IBKR_USERID_PAPER:-changeme}}
+      TWS_PASSWORD: ${IBKR_PASSWORD:-${IBKR_PASSWORD_PAPER:-changeme}}
+      # Only consulted in DUAL mode (TRADING_MODE=both); harmless otherwise.
+      TWS_USERID_PAPER: ${IBKR_USERID_PAPER:-changeme}
+      TWS_PASSWORD_PAPER: ${IBKR_PASSWORD_PAPER:-changeme}
+
+      # === API behavior ===
+      # "no" → API accepts orders (what we want).
+      # "yes" → portfolio-only, all orders rejected.
+      READ_ONLY_API: ${IBKR_READ_ONLY_API:-no}
+
+      # Skip the "API uses defaults" warning dialog on Gateway startup.
+      BYPASS_WARNING: "yes"
+
+      # Daily auto-restart (IBKR forces a session restart every ~24h anyway).
+      # Picked 03:00 ET (07:00 UTC during DST / 08:00 UTC standard) — quiet hours
+      # for US equities and after the nightly crypto position_watcher tick window.
+      AUTO_RESTART_TIME: "07:00 AM"
+      TIME_ZONE: ${TZ:-America/Toronto}
+      TZ: ${TZ:-America/Toronto}
+
+      # If 2FA times out: "restart" the login attempt (vs "exit"). Cleaner for cron.
+      TWOFA_TIMEOUT_ACTION: "restart"
+
+      # VNC password — for debugging the Gateway GUI when something is wrong.
+      # Connect with: vncviewer localhost:5900
+      VNC_SERVER_PASSWORD: ${IBKR_VNC_PASSWORD:-changeme}
+
+    ports:
+      # This image binds the real IB API to loopback INSIDE the container
+      # (127.0.0.1:4001/4002) and exposes it via socat on 4003 (live) / 4004
+      # (paper). So the host port must target the socat port, not the raw API
+      # port — otherwise the API resets the connection ("connection reset by
+      # peer"). Host side stays 4001/4002 so ibkr_executor.py is unchanged.
+      # Live API   (host 4001 -> container socat 4003 -> internal 4001)
+      - "127.0.0.1:4001:4003"
+      # Paper API  (host 4002 -> container socat 4004 -> internal 4002)
+      - "127.0.0.1:4002:4004"
+      # VNC (loopback only — never expose to LAN)
+      - "127.0.0.1:5900:5900"
+
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 4002 || nc -z localhost 4001"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s

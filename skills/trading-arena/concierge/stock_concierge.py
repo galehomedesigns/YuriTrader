@@ -45,7 +45,7 @@ _load_env()
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from shared.questrade_executor import QuestradeExecutor, QuestradeExecutorError
+from shared.stock_broker import get_executor, get_broker_name, StockExecutorError
 from concierge import advisor
 from concierge import state
 
@@ -270,7 +270,7 @@ def cmd_positions(_):
         return
 
     try:
-        executor = QuestradeExecutor()
+        executor = get_executor()
     except Exception as e:
         send_message(f"❌ Questrade init error: <code>{str(e)[:200]}</code>")
         return
@@ -303,7 +303,7 @@ def cmd_positions(_):
 def cmd_balance(_):
     """Show Questrade balance + stock exposure."""
     try:
-        executor = QuestradeExecutor()
+        executor = get_executor()
         balance = executor.get_balance()
     except Exception as e:
         send_message(f"❌ Questrade error: <code>{str(e)[:200]}</code>")
@@ -327,11 +327,13 @@ def cmd_balance(_):
     lines.append(f"<b>Open manual stock exposure:</b> ${exposure:,.2f}")
     lines.append(f"<b>Max allowed:</b> ${MANUAL_STOCK_MAX_EXPOSURE_USD:,.2f}")
 
+    # Broker-specific "allow trading" gate (Questrade vs IBKR).
+    allow_gate = "IBKR_ALLOW_TRADING" if get_broker_name() == "ibkr" else "QUESTRADE_ALLOW_TRADING"
     mode = "LIVE" if (
         os.environ.get("MANUAL_STOCK_TRADING_ENABLED", "false").lower() == "true"
-        and os.environ.get("QUESTRADE_ALLOW_TRADING", "false").lower() == "true"
+        and os.environ.get(allow_gate, "false").lower() == "true"
     ) else "VALIDATE-ONLY"
-    lines.append(f"<b>Mode:</b> {mode}")
+    lines.append(f"<b>Mode:</b> {mode} ({get_broker_name()})")
 
     send_message("\n".join(lines))
 
@@ -370,7 +372,7 @@ def cmd_kill(_):
     """Cancel all open Questrade orders."""
     send_message("🛑 <b>KILL SWITCH — cancelling all open Questrade orders</b>")
     try:
-        executor = QuestradeExecutor()
+        executor = get_executor()
         result = executor.cancel_all()
         send_message(f"✅ Cancelled <b>{result['count']}</b> open orders.")
     except Exception as e:
@@ -397,9 +399,9 @@ def handle_buy_callback(action_data):
     send_message(f"⏳ Placing <b>buy {qty} share(s)</b> of {html.escape(symbol)}...")
 
     try:
-        executor = QuestradeExecutor()
+        executor = get_executor()
         result = executor.execute_manual_trade(symbol=symbol, side="buy", qty=qty)
-    except QuestradeExecutorError as e:
+    except StockExecutorError as e:
         send_message(f"❌ Trade rejected: <code>{str(e)[:250]}</code>")
         return
     except Exception as e:
@@ -463,7 +465,7 @@ def handle_sell_callback(action_data):
         return
 
     try:
-        executor = QuestradeExecutor()
+        executor = get_executor()
         quote = executor.get_quote(symbol)
         current_price = quote["last"] or quote["bid"]
     except Exception as e:
@@ -474,7 +476,7 @@ def handle_sell_callback(action_data):
 
     try:
         result = executor.execute_manual_trade(symbol=symbol, side="sell", qty=qty)
-    except QuestradeExecutorError as e:
+    except StockExecutorError as e:
         send_message(f"❌ Sell rejected: <code>{str(e)[:250]}</code>")
         return
     except Exception as e:
