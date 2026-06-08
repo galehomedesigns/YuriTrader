@@ -3,8 +3,11 @@
 TradingView Webhook Receiver — listens for alerts from TradingView
 and logs them to Supabase + sends Telegram notifications.
 
-TradingView's broker integration with Questrade handles order execution
-directly. This webhook receiver logs, monitors, and notifies.
+This receiver does NOT place any orders. TradingView has no Questrade
+order-routing integration, and the Questrade API token is read-only-scoped
+(order placement returns HTTP 403 / code 1016). So this server only logs
+incoming alerts to Supabase and sends a Telegram notification — nothing
+here executes a trade. See skills/trading-arena/QUESTRADE_NEXT_STEPS.md.
 
 Runs as a simple HTTP server on port 8089 inside the container.
 Caddy reverse proxies /webhook to this port.

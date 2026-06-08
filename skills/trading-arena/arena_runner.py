@@ -33,9 +33,22 @@ try:
     from bots.volume_whisperer import VolumeWhisperer
     from bots.correlation_hunter import CorrelationHunter
     from bots.news_sniper import NewsSniper
+    # 2026-05-17: low-frequency Donchian trend-follower. Backtest showed the
+    # only mean gross return that dwarfs the fee (+8.2%/trade daily) BUT
+    # statistically unproven (95% CI lo < 0, n=58, fat-tailed). Runs PAPER
+    # ONLY here; the fee-aware promotion gate blocks it from live until ≥100
+    # paper trades prove a significant positive net edge. This deployment IS
+    # the proof mechanism — let forward data decide, no live money.
+    from bots.trend_breakout import TrendBreakout
+    # 2026-05-18: fee-aware momentum-notice chaser. Rides the widened, fee-aware
+    # dynamic watchlist (now every Kraken USD pair, not the hardcoded 6). PAPER
+    # ONLY — intentionally NOT in LIVE_TRADING_BOTS; the promotion gate decides
+    # if it ever earns real money, same as TrendBreakout.
+    from bots.momentum_burst import MomentumBurst
     ALL_BOT_CLASSES = [
         MomentumHunter, TheReverter, NanoSniper, TrendRider, SqueezeBreaker,
         FlagRider, TrapCatcher, VolumeWhisperer, CorrelationHunter, NewsSniper,
+        TrendBreakout, MomentumBurst,
     ]
 except ImportError as e:
     print(f"Warning: Some bots not yet available: {e}", file=sys.stderr)

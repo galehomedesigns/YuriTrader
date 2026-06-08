@@ -212,12 +212,20 @@ def fetch_stock_data_questrade(symbols: List[str], interval="FifteenMinutes") ->
     return result
 
 
-def fetch_crypto_data(symbols: List[str]) -> Dict[str, AssetData]:
-    """Fetch crypto data from Kraken public API."""
+def fetch_crypto_data(symbols: List[str],
+                      pair_map: Optional[Dict[str, str]] = None) -> Dict[str, AssetData]:
+    """Fetch crypto data from Kraken public API.
+
+    pair_map: optional {symbol -> kraken_pair} override sourced from the dynamic
+    watchlist, so momentum movers OUTSIDE the hardcoded config.KRAKEN_PAIRS 6 are
+    actually fetched instead of silently dropped. Falls back to config.KRAKEN_PAIRS
+    for the legacy symbols, so existing callers (passing no map) are unaffected.
+    """
+    pair_map = pair_map or {}
     result = {}
 
     for sym in symbols:
-        pair = KRAKEN_PAIRS.get(sym)
+        pair = pair_map.get(sym) or KRAKEN_PAIRS.get(sym)
         if not pair:
             continue
         data = AssetData(symbol=sym, asset_type="crypto")
@@ -288,6 +296,35 @@ def fetch_dynamic_watchlist() -> tuple:
         return (STOCK_SYMBOLS, CRYPTO_SYMBOLS)
 
 
+def _latest_watchlist_crypto_pairs() -> Dict[str, str]:
+    """{symbol -> kraken_pair} for crypto items in the latest arena_watchlist
+    row that carry a `kraken_pair` (written by the widened dynamic_watchlist
+    scanner). Returns {} on any failure — fully backward compatible: legacy
+    rows without `kraken_pair` resolve via config.KRAKEN_PAIRS downstream."""
+    from config import SUPABASE_URL as SB_URL, SUPABASE_KEY as SB_KEY
+    if not SB_URL or not SB_KEY:
+        return {}
+    try:
+        url = f"{SB_URL}/rest/v1/arena_watchlist?order=created_at.desc&limit=1"
+        req = urllib.request.Request(url, headers={
+            "apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            rows = json.loads(resp.read().decode())
+        if not rows:
+            return {}
+        details = rows[0].get("details")
+        if isinstance(details, str):
+            details = json.loads(details)
+        return {
+            it["symbol"]: it["kraken_pair"]
+            for it in (details or [])
+            if it.get("asset_type") == "crypto" and it.get("kraken_pair")
+        }
+    except Exception as e:
+        print(f"  watchlist pair-map fetch error: {e}", file=sys.stderr)
+        return {}
+
+
 def fetch_all(crypto_only: bool = False) -> Dict[str, AssetData]:
     """Fetch all stock + crypto data using the dynamic watchlist.
 
@@ -295,6 +332,7 @@ def fetch_all(crypto_only: bool = False) -> Dict[str, AssetData]:
     quota when scanning 24/7 outside US market hours).
     """
     stock_syms, crypto_syms = fetch_dynamic_watchlist()
+    crypto_pairs = _latest_watchlist_crypto_pairs()
     data = {}
     if not crypto_only:
         print(f"  Scanning {len(stock_syms)} stocks...", file=sys.stderr, end=" ")
@@ -303,7 +341,7 @@ def fetch_all(crypto_only: bool = False) -> Dict[str, AssetData]:
         print(f"{len(stocks)} found", file=sys.stderr)
 
     print(f"  Scanning {len(crypto_syms)} crypto...", file=sys.stderr, end=" ")
-    crypto = fetch_crypto_data(crypto_syms)
+    crypto = fetch_crypto_data(crypto_syms, crypto_pairs)
     data.update(crypto)
     print(f"{len(crypto)} found", file=sys.stderr)
 

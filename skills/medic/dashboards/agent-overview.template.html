@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yuri Agent Architecture</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0e1a; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 20px; line-height: 1.5; }
+  h1 { color: #7c8aff; font-size: 1.8em; margin-bottom: 5px; }
+  .subtitle { color: #666; margin-bottom: 25px; font-size: 0.9em; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 25px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: #111528; border: 1px solid #1e2444; border-radius: 10px; padding: 18px; }
+  .card h2 { font-size: 1.1em; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .card.trading h2 { color: #4fc3f7; }
+  .card.content h2 { color: #ce93d8; }
+  .card.procurement h2 { color: #81c784; }
+  .card.youtube h2 { color: #ef5350; }
+  .card.system h2 { color: #ffb74d; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.7em; font-weight: 600; }
+  .badge.live { background: #1b5e20; color: #69f0ae; }
+  .badge.cron { background: #1a237e; color: #82b1ff; }
+  .badge.ondemand { background: #4a148c; color: #ce93d8; }
+  .badge.disabled { background: #333; color: #888; }
+  .agent-list { list-style: none; }
+  .agent-list li { padding: 8px 0; border-bottom: 1px solid #1a1f3a; font-size: 0.88em; }
+  .agent-list li:last-child { border-bottom: none; }
+  .agent-name { color: #fff; font-weight: 600; }
+  .agent-detail { color: #888; font-size: 0.85em; margin-top: 2px; }
+  .schedule { color: #7c8aff; font-size: 0.8em; }
+  .connects { margin-top: 12px; padding-top: 10px; border-top: 1px solid #1a1f3a; }
+  .connects-title { color: #999; font-size: 0.75em; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .tag { display: inline-block; background: #1a1f3a; color: #9fa8da; padding: 2px 8px; border-radius: 3px; font-size: 0.75em; margin: 2px 2px; }
+  .tag.social { background: #1a2a1a; color: #81c784; }
+  .tag.api { background: #1a1a2a; color: #82b1ff; }
+  .tag.data { background: #2a1a1a; color: #ef9a9a; }
+  .flow { background: #111528; border: 1px solid #1e2444; border-radius: 10px; padding: 18px; margin-bottom: 25px; }
+  .flow h2 { color: #7c8aff; font-size: 1.1em; margin-bottom: 15px; }
+  .flow-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .flow-box { background: #1a1f3a; border-radius: 6px; padding: 8px 14px; font-size: 0.82em; white-space: nowrap; }
+  .flow-arrow { color: #7c8aff; font-size: 1.2em; }
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 25px; }
+  @media (max-width: 700px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+  .stat { background: #111528; border: 1px solid #1e2444; border-radius: 8px; padding: 14px; text-align: center; }
+  .stat-num { font-size: 2em; font-weight: 700; color: #7c8aff; }
+  .stat-label { font-size: 0.75em; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+  .full-width { grid-column: 1 / -1; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+  th { text-align: left; padding: 8px 10px; background: #1a1f3a; color: #7c8aff; font-weight: 600; }
+  td { padding: 8px 10px; border-bottom: 1px solid #1a1f3a; }
+  tr:hover td { background: #151a30; }
+  .model-tag { font-size: 0.75em; padding: 2px 6px; border-radius: 3px; }
+  .model-tag.ollama { background: #1a2a1a; color: #69f0ae; }
+  .model-tag.gemini { background: #1a1a2a; color: #82b1ff; }
+  .model-tag.openai { background: #2a2a1a; color: #ffe082; }
+  .section-title { color: #7c8aff; font-size: 1.2em; margin: 25px 0 12px 0; border-bottom: 1px solid #1e2444; padding-bottom: 6px; }
+</style>
+</head>
+<body>
+<div id="openclaw-suite-banner" style="background:#161b22;border:1px solid #21262d;border-radius:8px;color:#8b95a7;padding:10px 14px;margin:16px auto;max-width:1160px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+<span>Part of the OpenClaw dashboard suite on GX10.</span>
+<a href="/index.html" style="color:#7c8aff;text-decoration:none;font-weight:600;">&larr; All dashboards</a>
+</div>
+
+<h1>Yuri Agent Architecture</h1>
+<p class="subtitle">OpenClaw agent ecosystem for Tony Gale / Decades Developments</p>
+
+<!-- Stats -->
+<div class="stats-grid">
+  <div class="stat"><div class="stat-num">4</div><div class="stat-label">Agent Projects</div></div>
+  <div class="stat"><div class="stat-num">17</div><div class="stat-label">Sub-Agents</div></div>
+  <div class="stat"><div class="stat-num">13</div><div class="stat-label">Active Cron Jobs</div></div>
+  <div class="stat"><div class="stat-num">3</div><div class="stat-label">Always-On Containers</div></div>
+</div>
+
+<!-- Data Flow -->
+<div class="flow">
+  <h2>Data Flow</h2>
+  <div class="flow-row">
+    <div class="flow-box" style="border-left: 3px solid #4fc3f7;">Questrade API</div>
+    <div class="flow-box" style="border-left: 3px solid #4fc3f7;">Truth Social</div>
+    <div class="flow-box" style="border-left: 3px solid #4fc3f7;">News RSS (7 feeds)</div>
+    <div class="flow-box" style="border-left: 3px solid #ef5350;">YouTube Channels</div>
+    <div class="flow-box" style="border-left: 3px solid #81c784;">Tender Sites (11+)</div>
+    <div class="flow-box" style="border-left: 3px solid #81c784;">Association Dirs</div>
+  </div>
+  <div style="text-align:center; color:#7c8aff; font-size:1.2em; margin: 5px 0;">--- agents process & analyze ---</div>
+  <div class="flow-row">
+    <div class="flow-box" style="border-left: 3px solid #ffb74d;">Supabase (10+ tables)</div>
+    <span class="flow-arrow">--></span>
+    <div class="flow-box" style="border-left: 3px solid #ce93d8;">Telegram Alerts</div>
+    <div class="flow-box" style="border-left: 3px solid #ce93d8;">HTTPS Dashboards</div>
+    <div class="flow-box" style="border-left: 3px solid #ce93d8;">Draft Files</div>
+    <div class="flow-box" style="border-left: 3px solid #ce93d8;">Questrade Orders</div>
+  </div>
+</div>
+
+<!-- Agent Cards -->
+<div class="grid">
+
+  <!-- STOCK MONITOR -->
+  <div class="card trading">
+    <h2>Stock Monitor <span class="badge live">LIVE 24/7</span></h2>
+    <ul class="agent-list">
+      <li>
+        <div class="agent-name">Orchestrator</div>
+        <div class="agent-detail"><span class="model-tag ollama">Gemma 4 31B</span> Coordinates 5 sub-agents for day trading</div>
+      </li>
+      <li>
+        <div class="agent-name">Market Monitor</div>
+        <div class="agent-detail">Live quotes, snapshots, alert conditions</div>
+      </li>
+      <li>
+        <div class="agent-name">Trend Analyzer</div>
+        <div class="agent-detail">SMA-5/20/50, volume ratios, BULLISH/BEARISH signals</div>
+      </li>
+      <li>
+        <div class="agent-name">Social Monitor</div>
+        <div class="agent-detail">Truth Social + political news scanning</div>
+        <div class="schedule">Every 15 min, 24/7</div>
+      </li>
+      <li>
+        <div class="agent-name">News Analyzer</div>
+        <div class="agent-detail">7 RSS feeds (Reuters, CNBC, Bloomberg, etc.)</div>
+      </li>
+      <li>
+        <div class="agent-name">Auto Trader</div>
+        <div class="agent-detail">9 buy flags, 6 sell flags, max $9/trade, $50 exposure</div>
+      </li>
+    </ul>
+    <div class="connects">
+      <div class="connects-title">Connected Services</div>
+      <span class="tag api">Questrade API</span>
+      <span class="tag api">TwelveData</span>
+      <span class="tag api">AlphaVantage</span>
+      <span class="tag api">Finnhub</span>
+      <span class="tag social">Truth Social</span>
+      <span class="tag data">Supabase</span>
+      <span class="tag social">Telegram</span>
+    </div>
+  </div>
+
+  <!-- YOUTUBE STRATEGY -->
+  <div class="card youtube">
+    <h2>YouTube Strategy <span class="badge cron">CRON</span></h2>
+    <ul class="agent-list">
+      <li>
+        <div class="agent-name">Orchestrator</div>
+        <div class="agent-detail"><span class="model-tag ollama">Gemma 4 31B</span> Scan, transcribe, analyze trading YouTubers</div>
+      </li>
+      <li>
+        <div class="agent-name">Channel Scanner</div>
+        <div class="agent-detail">Enumerate all videos from a channel via yt-dlp</div>
+      </li>
+      <li>
+        <div class="agent-name">Transcript Fetcher</div>
+        <div class="agent-detail">youtube-transcript-api via GX10 residential proxy</div>
+        <div class="schedule">Every 30 min (batch 20)</div>
+      </li>
+      <li>
+        <div class="agent-name">Strategy Analyzer</div>
+        <div class="agent-detail"><span class="model-tag gemini">Gemini Flash</span> Extract entry/exit rules, indicators, risk mgmt</div>
+        <div class="schedule">Hourly (batch 5)</div>
+      </li>
+    </ul>
+    <div class="connects">
+      <div class="connects-title">Target Channels</div>
+      <span class="tag">Rayner Teo (18.3M)</span>
+      <span class="tag">Warrior Trading (2M)</span>
+      <span class="tag">Trading Channel (2.4M)</span>
+      <span class="tag">Adam Khoo (954K)</span>
+      <span class="tag">Patrick Wieland (1.1M)</span>
+    </div>
+  </div>
+
+  <!-- CONTENT PIPELINE -->
+  <div class="card content">
+    <h2>Content Pipeline <span class="badge ondemand">ON DEMAND</span></h2>
+    <ul class="agent-list">
+      <li>
+        <div class="agent-name">Orchestrator</div>
+        <div class="agent-detail"><span class="model-tag ollama">Gemma 4 31B</span> Coordinate research -> write -> format</div>
+      </li>
+      <li>
+        <div class="agent-name">Topic Researcher</div>
+        <div class="agent-detail">Trending construction/AI/procurement topics + Supabase stats</div>
+      </li>
+      <li>
+        <div class="agent-name">Content Writer</div>
+        <div class="agent-detail">LinkedIn articles, blog outlines, YouTube scripts, newsletters</div>
+      </li>
+      <li>
+        <div class="agent-name">Platform Formatter</div>
+        <div class="agent-detail">Adapts for LinkedIn, Facebook, YouTube, email</div>
+      </li>
+    </ul>
+    <div class="connects">
+      <div class="connects-title">Social Accounts</div>
+      <span class="tag social">LinkedIn (Tony Gale)</span>
+      <span class="tag social">YouTube Channel</span>
+      <span class="tag social">Facebook Groups</span>
+      <span class="tag social">Email Newsletter</span>
+      <span class="tag">myprojectwheel.ca</span>
+    </div>
+  </div>
+
+  <!-- PROCUREMENT PIPELINE -->
+  <div class="card procurement">
+    <h2>Procurement Pipeline <span class="badge cron">EVERY 3H</span></h2>
+    <ul class="agent-list">
+      <li>
+        <div class="agent-name">Orchestrator</div>
+        <div class="agent-detail"><span class="model-tag ollama">Gemma 4 31B</span> Crawl -> Evaluate -> Enrich -> Publish</div>
+      </li>
+      <li>
+        <div class="agent-name">Crawler</div>
+        <div class="agent-detail">11 provinces + federal, 6+ tender sources</div>
+        <div class="schedule">Every 3 hours</div>
+      </li>
+      <li>
+        <div class="agent-name">Evaluator</div>
+        <div class="agent-detail">Filter noise, check relevance, flag login-required</div>
+      </li>
+      <li>
+        <div class="agent-name">Enricher</div>
+        <div class="agent-detail">Geocode, categorize, embed, deduplicate</div>
+      </li>
+      <li>
+        <div class="agent-name">Newsletter Writer</div>
+        <div class="agent-detail">Weekly procurement digest email</div>
+      </li>
+      <li>
+        <div class="agent-name">Social Poster</div>
+        <div class="agent-detail">Facebook (4 regions) + LinkedIn weekly drafts</div>
+      </li>
+      <li>
+        <div class="agent-name">Network Intelligence</div>
+        <div class="agent-detail">Scrape association directories for CRM leads</div>
+      </li>
+    </ul>
+    <div class="connects">
+      <div class="connects-title">Data Sources</div>
+      <span class="tag api">Bonfire</span>
+      <span class="tag api">ConstructConnect</span>
+      <span class="tag api">BC Bid</span>
+      <span class="tag api">CivicInfo BC</span>
+      <span class="tag api">Firecrawl</span>
+      <span class="tag api">OpenAI (embeddings)</span>
+      <span class="tag data">Supabase</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- YouTube Strategy Pipeline Progress -->
+<div class="section-title">YouTube Strategy Pipeline — Rayner Teo</div>
+<div id="yt-progress" class="card" style="margin-bottom:25px;">
+  <div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:15px;">
+    <div style="text-align:center; flex:1; min-width:100px;">
+      <div style="font-size:2em; font-weight:700; color:#ef5350;" id="yt-total">781</div>
+      <div style="font-size:0.75em; color:#888;">Total Videos</div>
+    </div>
+    <div style="text-align:center; flex:1; min-width:100px;">
+      <div style="font-size:2em; font-weight:700; color:#4fc3f7;" id="yt-transcribed">—</div>
+      <div style="font-size:0.75em; color:#888;">Transcribed</div>
+    </div>
+    <div style="text-align:center; flex:1; min-width:100px;">
+      <div style="font-size:2em; font-weight:700; color:#ce93d8;" id="yt-analyzed">—</div>
+      <div style="font-size:0.75em; color:#888;">Analyzed</div>
+    </div>
+    <div style="text-align:center; flex:1; min-width:100px;">
+      <div style="font-size:2em; font-weight:700; color:#81c784;" id="yt-strategies">—</div>
+      <div style="font-size:0.75em; color:#888;">Strategies Found</div>
+    </div>
+    <div style="text-align:center; flex:1; min-width:100px;">
+      <div style="font-size:2em; font-weight:700;" id="yt-pending">—</div>
+      <div style="font-size:0.75em; color:#888;">Pending</div>
+    </div>
+  </div>
+  <!-- Progress bar -->
+  <div style="background:#1a1f3a; border-radius:6px; height:24px; overflow:hidden; position:relative;">
+    <div id="yt-bar-transcribed" style="position:absolute; left:0; top:0; height:100%; background:#4fc3f7; opacity:0.7; width:0%; transition:width 0.5s;"></div>
+    <div id="yt-bar-analyzed" style="position:absolute; left:0; top:0; height:100%; background:#ce93d8; opacity:0.7; width:0%; transition:width 0.5s;"></div>
+    <div style="position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:0.75em; color:#fff; z-index:1;" id="yt-pct">Loading...</div>
+  </div>
+  <div style="display:flex; gap:15px; margin-top:10px; font-size:0.75em; color:#888;">
+    <span><span style="display:inline-block; width:10px; height:10px; background:#4fc3f7; border-radius:2px;"></span> Transcribed</span>
+    <span><span style="display:inline-block; width:10px; height:10px; background:#ce93d8; border-radius:2px;"></span> Analyzed</span>
+    <span><span style="display:inline-block; width:10px; height:10px; background:#1a1f3a; border-radius:2px; border:1px solid #333;"></span> Pending</span>
+  </div>
+  <!-- Services status -->
+  <div style="margin-top:15px; padding-top:12px; border-top:1px solid #1a1f3a; display:flex; gap:15px; flex-wrap:wrap;">
+    <div style="font-size:0.8em;">
+      <span style="color:#888;">Transcript Proxy (GX10):</span>
+      <span id="proxy-status" style="color:#888;">checking...</span>
+    </div>
+    <div style="font-size:0.8em;">
+      <span style="color:#888;">Transcribe Cron:</span>
+      <span style="color:#69f0ae;">Every 30 min</span>
+    </div>
+    <div style="font-size:0.8em;">
+      <span style="color:#888;">Analyze Cron:</span>
+      <span style="color:#69f0ae;">Hourly</span>
+    </div>
+    <div style="font-size:0.8em;">
+      <span style="color:#888;">Report Cron:</span>
+      <span style="color:#69f0ae;">Daily 6 AM</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// Fetch live YouTube pipeline stats from Supabase
+(async function() {
+  const SUPABASE_URL = 'https://qrszwxlfsvvtyonkpfjm.supabase.co';
+  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFyc3p3eGxmc3Z2dHlvbmtwZmptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3MDM3MDcsImV4cCI6MjA4OTI3OTcwN30.hRyaGJAPg8MhhGkrT9qdZ-qtuhLQjph4phvkksO0TZI';
+  const headers = {'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY};
+  const channel = 'UCFSn-h8wTnhpKJMteN76Abg';
+
+  try {
+    // Get transcript status counts
+    const r1 = await fetch(SUPABASE_URL + '/rest/v1/rpc/exec_sql', {method:'POST', headers:{...headers,'Content-Type':'application/json'}, body: JSON.stringify({query:"SELECT transcript_status, count(*) as count FROM yt_videos WHERE channel_id='"+channel+"' GROUP BY transcript_status"})});
+
+    // Fallback: count individually via REST
+    const countReq = async (params) => {
+      const r = await fetch(SUPABASE_URL + '/rest/v1/yt_videos?channel_id=eq.' + channel + '&' + params + '&select=video_id', {headers: {...headers, 'Prefer': 'count=exact'}, method: 'HEAD'});
+      return parseInt(r.headers.get('content-range')?.split('/')[1] || '0');
+    };
+
+    const total = await countReq('');
+    const transcribed = await countReq('transcript_status=eq.transcribed');
+    const pending = await countReq('transcript_status=eq.pending');
+    const analyzed = await countReq('analysis_status=eq.analyzed');
+
+    // Strategy count
+    const r2 = await fetch(SUPABASE_URL + '/rest/v1/yt_strategies?channel_id=eq.' + channel + '&select=id', {headers: {...headers, 'Prefer': 'count=exact'}, method: 'HEAD'});
+    const strategies = parseInt(r2.headers.get('content-range')?.split('/')[1] || '0');
+
+    document.getElementById('yt-total').textContent = total;
+    document.getElementById('yt-transcribed').textContent = transcribed;
+    document.getElementById('yt-analyzed').textContent = analyzed;
+    document.getElementById('yt-strategies').textContent = strategies;
+    document.getElementById('yt-pending').textContent = pending;
+    document.getElementById('yt-pending').style.color = pending > 0 ? '#ffb74d' : '#69f0ae';
+
+    const tPct = total > 0 ? (transcribed / total * 100) : 0;
+    const aPct = total > 0 ? (analyzed / total * 100) : 0;
+    document.getElementById('yt-bar-transcribed').style.width = tPct + '%';
+    document.getElementById('yt-bar-analyzed').style.width = aPct + '%';
+    document.getElementById('yt-pct').textContent = Math.round(tPct) + '% transcribed / ' + Math.round(aPct) + '% analyzed';
+  } catch(e) {
+    document.getElementById('yt-pct').textContent = 'Could not load stats';
+  }
+
+  // Check transcript proxy health
+  try {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 5000);
+    const r = await fetch('http://100.84.217.85:8765/health', {signal: controller.signal});
+    const d = await r.json();
+    const el = document.getElementById('proxy-status');
+    if (d.status === 'ok') {
+      el.textContent = 'Online';
+      el.style.color = '#69f0ae';
+    } else {
+      el.textContent = 'Error';
+      el.style.color = '#ef5350';
+    }
+  } catch(e) {
+    const el = document.getElementById('proxy-status');
+    el.textContent = 'Offline';
+    el.style.color = '#ef5350';
+  }
+})();
+</script>
+
+<!-- Always-On Containers -->
+<div class="section-title">Always-On Services</div>
+<div class="grid" style="grid-template-columns: repeat(4, 1fr);">
+  <div class="card system">
+    <h2 style="font-size:1em;">Transcript Proxy <span class="badge live">LIVE</span></h2>
+    <div style="font-size:0.85em;">
+      <div>GX10 residential IP</div>
+      <div style="color:#888; margin-top:4px;">Port 8765 — YouTube transcript fetcher</div>
+      <div style="color:#888; margin-top:4px;">~15 MB RAM, no GPU</div>
+    </div>
+  </div>
+  <div class="card system">
+    <h2 style="font-size:1em;">Trading Agent <span class="badge live">LIVE</span></h2>
+    <div style="font-size:0.85em;">
+      <div>10-second polling loop</div>
+      <div style="color:#888; margin-top:4px;">AAPL, MSFT, NVDA, TSLA, SPY, RY.TO, TD.TO, SHOP.TO</div>
+    </div>
+  </div>
+  <div class="card system">
+    <h2 style="font-size:1em;">Yuri Crypto <span class="badge live">LIVE</span></h2>
+    <div style="font-size:0.85em;">
+      <div>BTC/CAD on Kraken</div>
+      <div style="color:#888; margin-top:4px;">50 SMA + First Candle Breakout</div>
+    </div>
+  </div>
+  <div class="card system">
+    <h2 style="font-size:1em;">TV Webhook <span class="badge live">LIVE</span></h2>
+    <div style="font-size:0.85em;">
+      <div>TradingView signal receiver</div>
+      <div style="color:#888; margin-top:4px;">Port 8089</div>
+    </div>
+  </div>
+</div>
+
+<!-- Cron Schedule — LLM-driven user-facing reports -->
+<div class="section-title">Cron Schedule — LLM-Driven Reports (Eastern Time)</div>
+<div class="card" style="overflow-x:auto;">
+  <table>
+    <thead><tr><th>Job</th><th>Schedule</th><th>Model</th><th>Delivery</th><th>Status</th></tr></thead>
+    <tbody id="llm-jobs"></tbody>
+  </table>
+  <p style="color:#666;font-size:0.85em;margin-top:12px;">All 14 LLM-driven jobs run on local Ollama models — zero cloud LLM calls.</p>
+</div>
+
+<!-- Background Daemons — algorithmic infrastructure, no LLM by design -->
+<div class="section-title">Background Daemons (algorithmic, no LLM by design)</div>
+<div class="card" style="overflow-x:auto;">
+  <table>
+    <thead><tr><th>Job</th><th>Schedule</th><th>What it does</th><th>Delivery</th><th>Status</th></tr></thead>
+    <tbody id="bg-daemons"></tbody>
+  </table>
+  <p style="color:#666;font-size:0.85em;margin-top:12px;">These are machine-to-machine plumbing — LLM calls here would burn GPU without user value. Listed separately so the LLM Schedule above is unambiguous.</p>
+</div>
+
+<!-- LLM Models -->
+<div class="section-title">LLM Models Available</div>
+<div class="grid" style="grid-template-columns: 1fr 1fr;">
+  <div class="card">
+    <h2 style="color:#69f0ae;">Local (GX10 / Ollama)</h2>
+    <ul class="agent-list" id="local-models"></ul>
+  </div>
+  <div class="card">
+    <h2 style="color:#82b1ff;">Cloud (Fallback)</h2>
+    <ul class="agent-list">
+      <li><span class="agent-name">Gemini 3 Flash Preview</span> <span style="color:#888;">Google — Fallback #1</span></li>
+      <li><span class="agent-name">Gemini 2.5 Flash</span> <span style="color:#888;">Google — Fallback #2 + Strategy Analysis</span></li>
+      <li><span class="agent-name">GPT-4.1</span> <span style="color:#888;">OpenAI — Fallback #3</span></li>
+      <li><span class="agent-name">GPT-5.4</span> <span style="color:#888;">OpenAI — Available (not active)</span></li>
+    </ul>
+  </div>
+</div>
+
+<div style="text-align:center; color:#444; font-size:0.75em; margin-top:30px;">
+  Yuri / OpenClaw Agent Architecture &mdash; Decades Developments
+  &middot; Last regenerated: <span id="updated-at">—</span>
+</div>
+
+<script id="dashboard-data" type="application/json">{{DATA}}</script>
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('dashboard-data').textContent);
+
+  document.getElementById('updated-at').textContent =
+    data.generated_at ? new Date(data.generated_at).toLocaleString() : '—';
+
+  function modelCell(m) {
+    if (!m || !m.name) return '<td><span style="color:#888;">—</span></td>';
+    const tag = `<span class="model-tag ollama">${m.name}</span>`;
+    const note = m.note ? ` <span style="color:#666;font-size:0.85em;">${m.note}</span>` : '';
+    return `<td>${tag}${note}</td>`;
+  }
+
+  function statusCell(s) {
+    const color = s === 'OK' ? '#69f0ae' : s === 'WARN' ? '#ffc107' : '#ff1744';
+    return `<td style="color:${color};">${s || '?'}</td>`;
+  }
+
+  const llmTbody = document.getElementById('llm-jobs');
+  if (llmTbody) {
+    llmTbody.innerHTML = (data.llm_jobs || []).map(j => `
+      <tr>
+        <td>${j.job}</td>
+        <td>${j.schedule}</td>
+        ${modelCell(j.model)}
+        <td>${j.delivery}</td>
+        ${statusCell(j.status)}
+      </tr>`).join('');
+  }
+
+  const bgTbody = document.getElementById('bg-daemons');
+  if (bgTbody) {
+    bgTbody.innerHTML = (data.bg_daemons || []).map(j => `
+      <tr>
+        <td>${j.job}</td>
+        <td>${j.schedule}</td>
+        <td>${j.what_it_does}</td>
+        <td>${j.delivery}</td>
+        ${statusCell(j.status)}
+      </tr>`).join('');
+  }
+
+  const modelsUl = document.getElementById('local-models');
+  if (modelsUl) {
+    modelsUl.innerHTML = (data.local_models || []).map(m => `
+      <li>
+        <span class="agent-name"${m.dim ? ' style="color:#888;"' : ''}>${m.name}</span>
+        <span style="color:#888;"> ${m.size} — ${m.role}</span>
+      </li>`).join('');
+  }
+})();
+</script>
+</body>
+</html>

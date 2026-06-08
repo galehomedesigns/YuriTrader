@@ -155,6 +155,20 @@ class KrakenExecutor:
                 return int(info.get("lot_decimals", 8))
         return 8
 
+    def get_price_decimals(self, kraken_pair):
+        """Returns the PRICE decimal precision (for limit-order pricing)."""
+        pairs = self.get_asset_pairs()
+        for name, info in pairs.items():
+            if info.get("altname") == kraken_pair or name == kraken_pair:
+                return int(info.get("pair_decimals", 5))
+        return 5
+
+    def get_best_quote(self, kraken_pair):
+        """Returns (best_bid, best_ask) from the public Ticker."""
+        t = self._public("Ticker", {"pair": kraken_pair})
+        info = list(t.values())[0]
+        return float(info["b"][0]), float(info["a"][0])
+
     def get_open_orders(self):
         return self._private("OpenOrders").get("open", {})
 
@@ -205,6 +219,54 @@ class KrakenExecutor:
             "raw": result,
         }
 
+    def place_post_only_order(self, kraken_pair, side, volume, validate=True):
+        """Place a POST-ONLY limit order (maker — Kraken rejects it if it would
+        cross the spread, so the fill always pays the lower maker fee).
+
+        Rests passively: buy at best bid, sell at best ask. The round-trip cost
+        drops ~0.8% → ~0.5% (see config.KRAKEN_*_FEE_PCT).
+
+        ⚠️ A post-only order is NOT guaranteed to fill — it can sit on the book
+        indefinitely or be rejected. The arena's open/close logic assumes an
+        immediate fill at the scan price, so using this for real trades needs
+        fill-management (poll QueryOrders, reprice/cancel on timeout, reconcile
+        the arena position) which is a deliberate follow-up, NOT built here.
+        execute_arena_trade() refuses a real post-only order unless
+        KRAKEN_POST_ONLY_CONFIRMED=true so this can't silently leave dangling
+        orders the system treats as positions.
+        """
+        decimals = self.get_pair_decimals(kraken_pair)
+        volume_str = f"{volume:.{decimals}f}".rstrip("0").rstrip(".")
+        if not volume_str or volume_str == "0":
+            raise KrakenExecutorError(f"volume rounds to zero at {decimals} decimals")
+
+        bid, ask = self.get_best_quote(kraken_pair)
+        price = bid if side == "buy" else ask
+        pdec = self.get_price_decimals(kraken_pair)
+        price_str = f"{price:.{pdec}f}"
+
+        params = {
+            "pair": kraken_pair,
+            "type": side,
+            "ordertype": "limit",
+            "price": price_str,
+            "volume": volume_str,
+            "oflags": "post",  # post-only: reject if it would take liquidity
+        }
+        if validate:
+            params["validate"] = "true"
+
+        result = self._private("AddOrder", params)
+        order_ids = result.get("txid", [])
+        return {
+            "dry_run": validate,
+            "order_id": order_ids[0] if order_ids else None,
+            "descr": result.get("descr", {}).get("order", ""),
+            "post_only": True,
+            "limit_price": price,
+            "raw": result,
+        }
+
     def cancel_order(self, order_id):
         """Cancel a specific order by its txid."""
         return self._private("CancelOrder", {"txid": order_id})
@@ -247,8 +309,21 @@ class KrakenExecutor:
         env_allow = os.environ.get("KRAKEN_ALLOW_TRADING", "false").lower() == "true"
         validate = not env_allow  # validate=true if env gate is closed
 
-        # Place the order
-        result = self.place_market_order(kraken_pair, side, volume, validate=validate)
+        # Order mode: market (taker, default) or post_only (maker, cheaper but
+        # may not fill). A REAL post-only order is refused unless explicitly
+        # confirmed, because the arena assumes immediate fills and post-only
+        # fill-management is not built yet (see place_post_only_order docstring).
+        mode = os.environ.get("KRAKEN_ORDER_MODE", "market").strip().lower()
+        if mode == "post_only":
+            if not validate and os.environ.get("KRAKEN_POST_ONLY_CONFIRMED", "false").lower() != "true":
+                raise KrakenExecutorError(
+                    "KRAKEN_ORDER_MODE=post_only but KRAKEN_POST_ONLY_CONFIRMED!=true — "
+                    "real post-only orders need fill-management (not built); refusing "
+                    "to risk a dangling unfilled order the arena treats as a position"
+                )
+            result = self.place_post_only_order(kraken_pair, side, volume, validate=validate)
+        else:
+            result = self.place_market_order(kraken_pair, side, volume, validate=validate)
         result["volume"] = volume
         result["kraken_pair"] = kraken_pair
         result["position_size_usd"] = position_size_usd

@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# One-screen GX10 health summary, designed to be readable on a phone.
+# Every line is queried live — nothing here is hard-coded status.
+set -uo pipefail
+
+c_g=$'\e[32m'; c_y=$'\e[33m'; c_r=$'\e[31m'; c_b=$'\e[1m'; c_0=$'\e[0m'
+ok(){ printf "  ${c_g}OK${c_0}  %s\n" "$1"; }
+warn(){ printf " ${c_y}WARN${c_0} %s\n" "$1"; }
+bad(){ printf " ${c_r}DOWN${c_0} %s\n" "$1"; }
+hdr(){ printf "\n${c_b}== %s ==${c_0}\n" "$1"; }
+
+printf "${c_b}%s${c_0}  %s\n" "$(hostname)" "$(date '+%a %d %b %H:%M')"
+printf "uptime%s | load%s\n" \
+  "$(uptime -p | sed 's/up //')" \
+  "$(cut -d' ' -f1-3 /proc/loadavg)"
+
+hdr "RESOURCES"
+# Memory
+read -r _ mt mu _ < <(free -m | awk '/^Mem:/{print $1,$2,$3}')
+printf "mem   %s/%s MB (%d%%)\n" "$mu" "$mt" "$((mu*100/mt))"
+# Disk
+df -h / | awk 'NR==2{printf "disk  %s/%s (%s used)\n",$3,$2,$5}'
+# GPU
+if command -v nvidia-smi >/dev/null; then
+  nvidia-smi --query-gpu=name,utilization.gpu,temperature.gpu \
+    --format=csv,noheader,nounits 2>/dev/null | \
+    awk -F', ' '{printf "gpu   %s  %s%% util  %sC\n",$1,$2,$3}'
+fi
+
+hdr "SERVICES"
+for s in dgx-dashboard dgx-dashboard-admin tailscaled cron; do
+  if systemctl is-active --quiet "$s"; then ok "$s"; else bad "$s"; fi
+done
+
+hdr "TAILSCALE"
+if tailscale status >/dev/null 2>&1; then
+  self=$(tailscale ip -4 2>/dev/null)
+  online=$(tailscale status 2>/dev/null | grep -cvE 'offline|^#|^$')
+  printf "self %s | %s peer(s) online\n" "$self" "$((online-1))"
+else
+  bad "tailscale not up"
+fi
+
+hdr "CRON FRESHNESS"
+# A cron job that's firing keeps its log file recently modified.
+L=~/openclaw/skills/trading-arena/logs
+now=$(date +%s)
+for f in position_watcher stock_position_watcher buy_watcher arena_scan; do
+  p="$L/$f.log"
+  if [[ -f "$p" ]]; then
+    age=$(( (now - $(stat -c %Y "$p")) / 60 ))
+    msg=$(printf "%-22s %4dm ago" "$f" "$age")
+    if   (( age < 60 ));  then ok "$msg"
+    elif (( age < 360 )); then warn "$msg"
+    else bad "$msg"; fi
+  else
+    warn "$(printf '%-22s missing' "$f")"
+  fi
+done
+echo

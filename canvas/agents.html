@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yuri Agent Ecosystem — Decades Developments</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0e1a; color: #e0e0e0; min-height: 100vh; }
+
+  .header { background: linear-gradient(135deg, #1a1f35 0%, #0d1117 100%); padding: 24px 32px; border-bottom: 1px solid #2a2f45; }
+  .header h1 { font-size: 24px; color: #fff; }
+  .header h1 span { color: #7c8aff; }
+  .header p { color: #8890a0; font-size: 14px; margin-top: 4px; }
+
+  .stats-bar { display: flex; gap: 16px; padding: 16px 32px; background: #0d1117; border-bottom: 1px solid #1a1f35; flex-wrap: wrap; }
+  .stat { background: #151b2b; border: 1px solid #2a2f45; border-radius: 8px; padding: 12px 20px; min-width: 140px; }
+  .stat .label { font-size: 11px; text-transform: uppercase; color: #6a7080; letter-spacing: 1px; }
+  .stat .value { font-size: 22px; font-weight: 700; color: #7c8aff; margin-top: 2px; }
+
+  .container { padding: 24px 32px; }
+
+  .pipeline { background: #111827; border: 1px solid #2a2f45; border-radius: 12px; margin-bottom: 20px; overflow: hidden; }
+  .pipeline-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; cursor: pointer; user-select: none; }
+  .pipeline-header:hover { background: #151b2b; }
+  .pipeline-title { display: flex; align-items: center; gap: 12px; }
+  .pipeline-icon { font-size: 24px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
+  .pipeline-name { font-size: 18px; font-weight: 600; color: #fff; }
+  .pipeline-desc { font-size: 13px; color: #8890a0; margin-top: 2px; }
+  .pipeline-meta { display: flex; align-items: center; gap: 12px; }
+  .pipeline-schedule { font-size: 12px; color: #6a7080; background: #1a1f35; padding: 4px 10px; border-radius: 12px; }
+  .pipeline-model { font-size: 11px; color: #7c8aff; background: rgba(124,138,255,0.1); padding: 4px 10px; border-radius: 12px; }
+  .toggle-arrow { color: #6a7080; font-size: 18px; transition: transform 0.2s; }
+  .pipeline.open .toggle-arrow { transform: rotate(180deg); }
+
+  .pipeline-body { display: none; border-top: 1px solid #1e2435; padding: 16px 20px; }
+  .pipeline.open .pipeline-body { display: block; }
+
+  .workflow-label { font-size: 12px; text-transform: uppercase; color: #6a7080; letter-spacing: 1px; margin-bottom: 12px; }
+
+  .agents-flow { display: flex; align-items: flex-start; gap: 0; flex-wrap: wrap; }
+  .agent-card { background: #1a1f35; border: 1px solid #2a3050; border-radius: 10px; padding: 14px 16px; width: 220px; flex-shrink: 0; }
+  .agent-card .agent-name { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+  .agent-card .agent-role { font-size: 12px; color: #8890a0; line-height: 1.4; margin-bottom: 8px; }
+  .agent-card .agent-model { font-size: 11px; color: #5a6a8a; }
+  .agent-card .agent-tools { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .agent-card .tool-tag { font-size: 10px; background: rgba(124,138,255,0.1); color: #7c8aff; padding: 2px 8px; border-radius: 8px; }
+  .flow-arrow { display: flex; align-items: center; justify-content: center; width: 36px; color: #3a4060; font-size: 20px; flex-shrink: 0; padding-top: 20px; }
+
+  .skills-section { margin-top: 12px; }
+  .skills-section .section-label { font-size: 12px; text-transform: uppercase; color: #6a7080; letter-spacing: 1px; margin-bottom: 8px; }
+  .skills-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .skill-badge { font-size: 11px; background: #1a2535; border: 1px solid #2a3a50; color: #60a0c0; padding: 4px 10px; border-radius: 6px; }
+
+  .safety-rules { margin-top: 16px; padding: 12px 16px; background: rgba(255,180,50,0.05); border: 1px solid rgba(255,180,50,0.15); border-radius: 8px; }
+  .safety-rules .rule-title { font-size: 12px; color: #e0a040; font-weight: 600; margin-bottom: 6px; }
+  .safety-rules ul { list-style: none; padding: 0; }
+  .safety-rules li { font-size: 12px; color: #8890a0; padding: 2px 0; }
+  .safety-rules li::before { content: ""; margin-right: 6px; }
+
+  .color-procurement .pipeline-icon { background: rgba(80,200,120,0.15); color: #50c878; }
+  .color-content .pipeline-icon { background: rgba(100,149,237,0.15); color: #6495ed; }
+  .color-email .pipeline-icon { background: rgba(255,165,0,0.15); color: #ffa500; }
+  .color-expense .pipeline-icon { background: rgba(220,100,100,0.15); color: #dc6464; }
+  .color-investor .pipeline-icon { background: rgba(180,130,255,0.15); color: #b482ff; }
+  .color-trading .pipeline-icon { background: rgba(245,166,35,0.15); color: #f5a623; }
+
+  .main-agent { background: linear-gradient(135deg, #1a1f35 0%, #1f2545 100%); border: 1px solid #3a4070; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
+  .main-agent h2 { color: #fff; font-size: 18px; margin-bottom: 4px; }
+  .main-agent h2 span { color: #7c8aff; }
+  .main-agent .subtitle { color: #8890a0; font-size: 13px; margin-bottom: 12px; }
+  .main-agent .channels { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .channel-tag { font-size: 11px; background: rgba(124,138,255,0.1); color: #7c8aff; padding: 4px 10px; border-radius: 8px; border: 1px solid rgba(124,138,255,0.2); }
+  .main-details { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .main-detail { font-size: 13px; color: #8890a0; }
+  .main-detail strong { color: #c0c8d8; }
+
+  @media (max-width: 768px) {
+    .header { padding: 16px; }
+    .container { padding: 16px; }
+    .stats-bar { padding: 12px 16px; }
+    .agents-flow { flex-direction: column; align-items: stretch; }
+    .agent-card { width: 100%; }
+    .flow-arrow { transform: rotate(90deg); width: 100%; padding: 4px 0; }
+    .main-details { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="openclaw-suite-banner" style="background:#161b22;border:1px solid #21262d;border-radius:8px;color:#8b95a7;padding:10px 14px;margin:16px auto;max-width:1160px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+<span>Part of the OpenClaw dashboard suite on GX10.</span>
+<a href="/index.html" style="color:#7c8aff;text-decoration:none;font-weight:600;">&larr; All dashboards</a>
+</div>
+
+<div class="header">
+  <h1><span>Yuri</span> Agent Ecosystem</h1>
+  <p>Decades Developments — The Project Wheel AI Infrastructure</p>
+</div>
+
+<div class="stats-bar">
+  <div class="stat"><div class="label">Pipelines</div><div class="value">6</div></div>
+  <div class="stat"><div class="label">Sub-Agents</div><div class="value">24</div></div>
+  <div class="stat"><div class="label">Skills</div><div class="value">16</div></div>
+  <div class="stat"><div class="label">Cron Jobs</div><div class="value">12</div></div>
+  <div class="stat"><div class="label">Channels</div><div class="value">2</div></div>
+</div>
+
+  <!-- Agent Flow Diagram -->
+  <div style="padding:24px 32px;border-bottom:1px solid #1e2435;">
+    <svg viewBox="0 0 1160 580" width="100%" style="max-height:580px;" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, system-ui, sans-serif">
+      <defs>
+        <marker id="ah-purple" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#7c8aff"/></marker>
+        <marker id="ah-teal" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#0088cc"/></marker>
+        <marker id="ah-green" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#50c878"/></marker>
+        <marker id="ah-blue" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#6495ed"/></marker>
+        <marker id="ah-orange" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#ffa500"/></marker>
+        <marker id="ah-red" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#dc6464"/></marker>
+        <marker id="ah-violet" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#b482ff"/></marker>
+        <marker id="ah-gold" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#f5a623"/></marker>
+        <marker id="ah-mint" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#3ecf8e"/></marker>
+      </defs>
+
+      <!-- Channels (left) -->
+      <rect x="40" y="18" width="160" height="32" rx="6" fill="#0088cc15" stroke="#0088cc" stroke-width="1.5"/>
+      <text x="120" y="39" text-anchor="middle" fill="#0088cc" font-size="13">Telegram</text>
+      <rect x="40" y="60" width="160" height="32" rx="6" fill="#25d36615" stroke="#25d366" stroke-width="1.5"/>
+      <text x="120" y="81" text-anchor="middle" fill="#25d366" font-size="13">WhatsApp</text>
+
+      <!-- Arrows to Yuri -->
+      <line x1="200" y1="34" x2="430" y2="44" stroke="#0088cc" stroke-width="1.5" marker-end="url(#ah-teal)"/>
+      <line x1="200" y1="76" x2="430" y2="56" stroke="#25d366" stroke-width="1.5" marker-end="url(#ah-mint)"/>
+
+      <!-- YURI main box -->
+      <rect x="430" y="22" width="300" height="56" rx="10" fill="#7c8aff18" stroke="#7c8aff" stroke-width="2"/>
+      <text x="580" y="47" text-anchor="middle" fill="#fff" font-size="17" font-weight="600">Yuri (Main Agent)</text>
+      <text x="580" y="65" text-anchor="middle" fill="#7c8aff" font-size="10">gemini-3-flash-preview</text>
+
+      <!-- Right side -->
+      <rect x="920" y="18" width="160" height="32" rx="6" fill="#f5a62315" stroke="#f5a623" stroke-width="1.5"/>
+      <text x="1000" y="39" text-anchor="middle" fill="#f5a623" font-size="13">Cron Jobs</text>
+      <rect x="920" y="60" width="160" height="32" rx="6" fill="#3ecf8e15" stroke="#3ecf8e" stroke-width="1.5"/>
+      <text x="1000" y="81" text-anchor="middle" fill="#3ecf8e" font-size="13">Supabase</text>
+      <line x1="920" y1="34" x2="730" y2="44" stroke="#f5a623" stroke-width="1.5" marker-end="url(#ah-gold)"/>
+      <line x1="920" y1="76" x2="730" y2="56" stroke="#3ecf8e" stroke-width="1.5" marker-end="url(#ah-mint)"/>
+
+      <!-- Arrows from Yuri to orchestrators -->
+      <line x1="480" y1="78" x2="120" y2="140" stroke="#50c878" stroke-width="1.5" marker-end="url(#ah-green)"/>
+      <line x1="530" y1="78" x2="350" y2="140" stroke="#6495ed" stroke-width="1.5" marker-end="url(#ah-blue)"/>
+      <line x1="580" y1="78" x2="580" y2="140" stroke="#ffa500" stroke-width="1.5" marker-end="url(#ah-orange)"/>
+      <line x1="630" y1="78" x2="810" y2="140" stroke="#dc6464" stroke-width="1.5" marker-end="url(#ah-red)"/>
+      <line x1="680" y1="78" x2="1040" y2="140" stroke="#b482ff" stroke-width="1.5" marker-end="url(#ah-violet)"/>
+
+      <!-- PROCUREMENT -->
+      <rect x="20" y="140" width="200" height="42" rx="8" fill="#50c87818" stroke="#50c878" stroke-width="1.5"/>
+      <text x="120" y="163" text-anchor="middle" fill="#fff" font-size="13" font-weight="600">Procurement</text>
+      <text x="120" y="176" text-anchor="middle" fill="#50c878" font-size="9">Daily 6 AM ET</text>
+      <line x1="120" y1="182" x2="120" y2="205" stroke="#50c87866" stroke-width="1.5" marker-end="url(#ah-green)"/>
+      <rect x="30" y="205" width="180" height="34" rx="6" fill="#50c87810" stroke="#50c87844" stroke-width="1"/>
+      <text x="120" y="226" text-anchor="middle" fill="#ccc" font-size="12">Crawler</text>
+      <line x1="120" y1="239" x2="120" y2="255" stroke="#50c87844" stroke-width="1" marker-end="url(#ah-green)"/>
+      <rect x="30" y="255" width="180" height="34" rx="6" fill="#50c87810" stroke="#50c87844" stroke-width="1"/>
+      <text x="120" y="276" text-anchor="middle" fill="#ccc" font-size="12">Enricher</text>
+      <line x1="120" y1="289" x2="120" y2="305" stroke="#50c87844" stroke-width="1" marker-end="url(#ah-green)"/>
+      <rect x="30" y="305" width="180" height="34" rx="6" fill="#50c87810" stroke="#50c87844" stroke-width="1"/>
+      <text x="120" y="326" text-anchor="middle" fill="#ccc" font-size="12">Newsletter Writer</text>
+      <line x1="120" y1="339" x2="120" y2="355" stroke="#50c87844" stroke-width="1" marker-end="url(#ah-green)"/>
+      <rect x="30" y="355" width="180" height="34" rx="6" fill="#50c87810" stroke="#50c87844" stroke-width="1"/>
+      <text x="120" y="376" text-anchor="middle" fill="#ccc" font-size="12">Social Poster</text>
+
+      <!-- CONTENT -->
+      <rect x="250" y="140" width="200" height="42" rx="8" fill="#6495ed18" stroke="#6495ed" stroke-width="1.5"/>
+      <text x="350" y="163" text-anchor="middle" fill="#fff" font-size="13" font-weight="600">Content</text>
+      <text x="350" y="176" text-anchor="middle" fill="#6495ed" font-size="9">Manual</text>
+      <line x1="350" y1="182" x2="350" y2="205" stroke="#6495ed66" stroke-width="1.5" marker-end="url(#ah-blue)"/>
+      <rect x="260" y="205" width="180" height="34" rx="6" fill="#6495ed10" stroke="#6495ed44" stroke-width="1"/>
+      <text x="350" y="226" text-anchor="middle" fill="#ccc" font-size="12">Topic Researcher</text>
+      <line x1="350" y1="239" x2="350" y2="255" stroke="#6495ed44" stroke-width="1" marker-end="url(#ah-blue)"/>
+      <rect x="260" y="255" width="180" height="34" rx="6" fill="#6495ed10" stroke="#6495ed44" stroke-width="1"/>
+      <text x="350" y="276" text-anchor="middle" fill="#ccc" font-size="12">Content Writer</text>
+      <line x1="350" y1="289" x2="350" y2="305" stroke="#6495ed44" stroke-width="1" marker-end="url(#ah-blue)"/>
+      <rect x="260" y="305" width="180" height="34" rx="6" fill="#6495ed10" stroke="#6495ed44" stroke-width="1"/>
+      <text x="350" y="326" text-anchor="middle" fill="#ccc" font-size="12">Platform Formatter</text>
+
+      <!-- EMAIL -->
+      <rect x="480" y="140" width="200" height="42" rx="8" fill="#ffa50018" stroke="#ffa500" stroke-width="1.5"/>
+      <text x="580" y="163" text-anchor="middle" fill="#fff" font-size="13" font-weight="600">Email Intelligence</text>
+      <text x="580" y="176" text-anchor="middle" fill="#ffa500" font-size="9">Manual</text>
+      <line x1="580" y1="182" x2="580" y2="205" stroke="#ffa50066" stroke-width="1.5" marker-end="url(#ah-orange)"/>
+      <rect x="490" y="205" width="180" height="34" rx="6" fill="#ffa50010" stroke="#ffa50044" stroke-width="1"/>
+      <text x="580" y="226" text-anchor="middle" fill="#ccc" font-size="12">Email Triager</text>
+      <line x1="580" y1="239" x2="580" y2="255" stroke="#ffa50044" stroke-width="1" marker-end="url(#ah-orange)"/>
+      <rect x="490" y="255" width="180" height="34" rx="6" fill="#ffa50010" stroke="#ffa50044" stroke-width="1"/>
+      <text x="580" y="276" text-anchor="middle" fill="#ccc" font-size="12">Task Extractor</text>
+      <line x1="580" y1="289" x2="580" y2="305" stroke="#ffa50044" stroke-width="1" marker-end="url(#ah-orange)"/>
+      <rect x="490" y="305" width="180" height="34" rx="6" fill="#ffa50010" stroke="#ffa50044" stroke-width="1"/>
+      <text x="580" y="326" text-anchor="middle" fill="#ccc" font-size="12">Response Drafter</text>
+
+      <!-- EXPENSE -->
+      <rect x="710" y="140" width="200" height="42" rx="8" fill="#dc646418" stroke="#dc6464" stroke-width="1.5"/>
+      <text x="810" y="163" text-anchor="middle" fill="#fff" font-size="13" font-weight="600">Expense</text>
+      <text x="810" y="176" text-anchor="middle" fill="#dc6464" font-size="9">Daily 11 PM ET</text>
+      <line x1="810" y1="182" x2="810" y2="205" stroke="#dc646466" stroke-width="1.5" marker-end="url(#ah-red)"/>
+      <rect x="720" y="205" width="180" height="34" rx="6" fill="#dc646410" stroke="#dc646444" stroke-width="1"/>
+      <text x="810" y="226" text-anchor="middle" fill="#ccc" font-size="12">Receipt Processor</text>
+      <line x1="810" y1="239" x2="810" y2="255" stroke="#dc646444" stroke-width="1" marker-end="url(#ah-red)"/>
+      <rect x="720" y="255" width="180" height="34" rx="6" fill="#dc646410" stroke="#dc646444" stroke-width="1"/>
+      <text x="810" y="276" text-anchor="middle" fill="#ccc" font-size="12">Expense Categorizer</text>
+      <line x1="810" y1="289" x2="810" y2="305" stroke="#dc646444" stroke-width="1" marker-end="url(#ah-red)"/>
+      <rect x="720" y="305" width="180" height="34" rx="6" fill="#dc646410" stroke="#dc646444" stroke-width="1"/>
+      <text x="810" y="326" text-anchor="middle" fill="#ccc" font-size="12">Report Generator</text>
+
+      <!-- INVESTOR -->
+      <rect x="940" y="140" width="200" height="42" rx="8" fill="#b482ff18" stroke="#b482ff" stroke-width="1.5"/>
+      <text x="1040" y="163" text-anchor="middle" fill="#fff" font-size="13" font-weight="600">Investor</text>
+      <text x="1040" y="176" text-anchor="middle" fill="#b482ff" font-size="9">Manual</text>
+      <line x1="1040" y1="182" x2="1040" y2="205" stroke="#b482ff66" stroke-width="1.5" marker-end="url(#ah-violet)"/>
+      <rect x="950" y="205" width="180" height="34" rx="6" fill="#b482ff10" stroke="#b482ff44" stroke-width="1"/>
+      <text x="1040" y="226" text-anchor="middle" fill="#ccc" font-size="12">Data Compiler</text>
+      <line x1="1040" y1="239" x2="1040" y2="255" stroke="#b482ff44" stroke-width="1" marker-end="url(#ah-violet)"/>
+      <rect x="950" y="255" width="180" height="34" rx="6" fill="#b482ff10" stroke="#b482ff44" stroke-width="1"/>
+      <text x="1040" y="276" text-anchor="middle" fill="#ccc" font-size="12">Deck Updater</text>
+      <line x1="1040" y1="289" x2="1040" y2="305" stroke="#b482ff44" stroke-width="1" marker-end="url(#ah-violet)"/>
+      <rect x="950" y="305" width="180" height="34" rx="6" fill="#b482ff10" stroke="#b482ff44" stroke-width="1"/>
+      <text x="1040" y="326" text-anchor="middle" fill="#ccc" font-size="12">Demo Builder</text>
+
+      <!-- STOCK MONITOR / TRADING -->
+      <rect x="20" y="400" width="200" height="42" rx="8" fill="#f5a62318" stroke="#f5a623" stroke-width="1.5"/>
+      <text x="120" y="423" text-anchor="middle" fill="#fff" font-size="13" font-weight="600">Trading Intelligence</text>
+      <text x="120" y="436" text-anchor="middle" fill="#f5a623" font-size="9">5min/15min scans + Daily</text>
+      <line x1="480" y1="78" x2="120" y2="400" stroke="#f5a623" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah-gold)"/>
+      <line x1="120" y1="442" x2="120" y2="460" stroke="#f5a62366" stroke-width="1.5"/>
+      <g transform="translate(0,460)">
+        <rect x="10" y="0" width="100" height="28" rx="5" fill="#f5a62310" stroke="#f5a62344" stroke-width="1"/>
+        <text x="60" y="18" text-anchor="middle" fill="#ccc" font-size="10">Market Monitor</text>
+        <rect x="115" y="0" width="100" height="28" rx="5" fill="#f5a62310" stroke="#f5a62344" stroke-width="1"/>
+        <text x="165" y="18" text-anchor="middle" fill="#ccc" font-size="10">Trend Analyzer</text>
+        <rect x="10" y="34" width="100" height="28" rx="5" fill="#f5a62310" stroke="#f5a62344" stroke-width="1"/>
+        <text x="60" y="52" text-anchor="middle" fill="#ccc" font-size="10">Social Monitor</text>
+        <rect x="115" y="34" width="100" height="28" rx="5" fill="#f5a62310" stroke="#f5a62344" stroke-width="1"/>
+        <text x="165" y="52" text-anchor="middle" fill="#ccc" font-size="10">News Analyzer</text>
+        <rect x="60" y="68" width="110" height="28" rx="5" fill="#f5a62320" stroke="#f5a623" stroke-width="1.5"/>
+        <text x="115" y="86" text-anchor="middle" fill="#f5a623" font-size="10" font-weight="600">Auto Trader</text>
+      </g>
+
+      <!-- Legend -->
+      <text x="300" y="490" fill="#555" font-size="11">Orchestrators spawn sub-agents sequentially. Sub-agents return structured data.</text>
+      <text x="300" y="510" fill="#444" font-size="10">Auto Trader executes trades under $10 autonomously. All other external actions require Tony's approval.</text>
+    </svg>
+  </div>
+
+<div class="container">
+
+  <!-- Main Agent -->
+  <div class="main-agent">
+    <h2><span>Yuri</span> — Main Agent</h2>
+    <div class="subtitle">AI assistant and brand ambassador for Decades Developments. Orchestrates all pipelines, handles direct conversations, and coordinates sub-agents.</div>
+    <div class="main-details">
+      <div class="main-detail"><strong>Primary Model:</strong> Gemini 3 Flash Preview</div>
+      <div class="main-detail"><strong>Fallbacks:</strong> Gemini 3 Pro, Gemini 2.5 Flash, GPT-4.1, GPT-5 Mini</div>
+      <div class="main-detail"><strong>Max Concurrent:</strong> 4 agents, 8 sub-agents</div>
+      <div class="main-detail"><strong>Timezone:</strong> Eastern (ET)</div>
+    </div>
+    <div class="channels">
+      <span class="channel-tag">Telegram</span>
+      <span class="channel-tag">WhatsApp</span>
+      <span class="channel-tag">Discord</span>
+      <span class="channel-tag">Slack</span>
+      <span class="channel-tag">Google Chat</span>
+      <span class="channel-tag">Nostr</span>
+    </div>
+  </div>
+
+  <!-- Procurement Pipeline -->
+  <div class="pipeline color-procurement open" onclick="this.classList.toggle('open')">
+    <div class="pipeline-header">
+      <div class="pipeline-title">
+        <div class="pipeline-icon">&#128270;</div>
+        <div>
+          <div class="pipeline-name">Procurement Pipeline</div>
+          <div class="pipeline-desc">Crawl tender sources, enrich data, generate newsletter &amp; social drafts</div>
+        </div>
+      </div>
+      <div class="pipeline-meta">
+        <span class="pipeline-schedule">Daily 6 AM ET</span>
+        <span class="pipeline-model">route procurement-pipeline</span>
+        <span class="toggle-arrow">&#9660;</span>
+      </div>
+    </div>
+    <div class="pipeline-body">
+      <div class="workflow-label">Workflow (sequential)</div>
+      <div class="agents-flow">
+        <div class="agent-card">
+          <div class="agent-name">Crawler</div>
+          <div class="agent-role">Scrape all active procurement sources, insert new tenders into Supabase</div>
+          <div class="agent-model">gemini-2.5-flash-lite</div>
+          <div class="agent-tools"><span class="tool-tag">Firecrawl</span><span class="tool-tag">Supabase</span></div>
+        </div>
+        <div class="flow-arrow">&#10132;</div>
+        <div class="agent-card">
+          <div class="agent-name">Enricher</div>
+          <div class="agent-role">Geocode locations, generate embeddings, categorize &amp; deduplicate tenders</div>
+          <div class="agent-model">gemini-2.5-flash</div>
+          <div class="agent-tools"><span class="tool-tag">Geocoder</span><span class="tool-tag">OpenAI</span><span class="tool-tag">Supabase</span></div>
+        </div>
+        <div class="flow-arrow">&#10132;</div>
+        <div class="agent-card">
+          <div class="agent-name">Newsletter Writer</div>
+          <div class="agent-role">Generate weekly HTML email digest with regional &amp; category breakdown</div>
+          <div class="agent-model">gemini-3-flash-preview</div>
+          <div class="agent-tools"><span class="tool-tag">Supabase</span><span class="tool-tag">Canvas</span></div>
+        </div>
+        <div class="flow-arrow">&#10132;</div>
+        <div class="agent-card">
+          <div class="agent-name">Social Poster</div>
+          <div class="agent-role">Draft Facebook (by region) and LinkedIn posts with tender highlights</div>
+          <div class="agent-model">gemini-3-flash-preview</div>
+          <div class="agent-tools"><span class="tool-tag">Supabase</span></div>
+        </div>
+      </div>
+      <div class="skills-section">
+        <div class="section-label">Skills Used</div>
+        <div class="skills-grid">
+          <span class="skill-badge">Firecrawl</span>
+          <span class="skill-badge">Supabase</span>
+          <span class="skill-badge">OpenAI Embeddings</span>
+          <span class="skill-badge">Geocoder</span>
+          <span class="skill-badge">Canvas Host</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Content Pipeline -->
+  <div class="pipeline color-content" onclick="this.classList.toggle('open')">
+    <div class="pipeline-header">
+      <div class="pipeline-title">
+        <div class="pipeline-icon">&#9997;</div>
+        <div>
+          <div class="pipeline-name">Content Pipeline</div>
+          <div class="pipeline-desc">Research trending topics, write thought leadership, format for social platforms</div>
+        </div>
+      </div>
+      <div class="pipeline-meta">
+        <span class="pipeline-schedule">Manual trigger</span>
+        <span class="pipeline-model">route content-pipeline</span>
+        <span class="toggle-arrow">&#9660;</span>
+      </div>
+    </div>
+    <div class="pipeline-body">
+      <div class="workflow-label">Workflow (sequential)</div>
+      <div class="agents-flow">
+        <div class="agent-card">
+          <div class="agent-name">Topic Researcher</div>
+          <div class="agent-role">Find trending topics in Canadian construction &amp; procurement; query Supabase for stat angles</div>
+          <div class="agent-model">gemini-2.5-flash</div>
+          <div class="agent-tools"><span class="tool-tag">Supabase</span><span class="tool-tag">Web Search</span></div>
+        </div>
+        <div class="flow-arrow">&#10132;</div>
+        <div class="agent-card">
+          <div class="agent-name">Content Writer</div>
+          <div class="agent-role">Write LinkedIn articles, blog outlines, YouTube scripts following brand voice</div>
+          <div class="agent-model">gemini-3-flash-preview</div>
+          <div class="agent-tools"><span class="tool-tag">SOUL.md</span></div>
+        </div>
+        <div class="flow-arrow">&#10132;</div>
+        <div class="agent-card">
+          <div class="agent-name">Platform Formatter</div>
+          <div class="agent-role">Adapt content for LinkedIn, Facebook, YouTube, email with platform best practices</div>
+          <div class="agent-model">gemini-3-flash-preview</div>
+          <div class="agent-tools"><span class="tool-tag">Canvas</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Email Intelligence -->
+  <div class="pipeline color-email" onclick="this.classList.toggle('open')">
+    <div class="pipeline-header">
+      <div class="pipeline-title">
+        <div class="pipeline-icon">&#128231;</div>
+        <div>
+          <div class="pipeline-name">Email Intelligence</div>
+          <div class="pipeline-desc">Triage incoming emails, extract tasks, draft responses</div>
+        </div>
+      </div>
+      <div class="pipeline-meta">
+        <span class="pipeline-schedule">Manual trigger</span>
+        <span class="pipeline-model">route email-intelligence</span>
+        <span class="toggle-arrow">&#9660;</span>
+      </div>
+    </div>
+    <div class="pipeline-body">
+      <div class="workflow-label">Workflow (sequential)</div>
+      <div class="agents-flow">
+        <div class="agent-card">
+          <div class="agent-name">Email Triager</div>
+          <div class="agent-role">Fetch unread emails, categorize by urgency (high/medium/low) and type</div>
+          <div class="agent-model">gemini-2.5-flash</div>
+          <div class="agent-tools"><span class="tool-tag">AgentMail</span><span class="tool-tag">Gmail</span></div>
+        </div>
+        <div class="flow-arrow">&#10132;</div>
+        <div class="agent-card">
+          <div class="agent-name">Task Extractor</div>
+          <div class="agent-role">Parse action-required emails, extract tasks, add to Supabase project_tasks</div>
+          <div class="agent-model">gemini-2.5-flash</div>
+          <div class="agent-tools"><span class="tool-tag">Supabase</span><span class="tool-tag">Memory Sync</span></div>
+        </div>
+        <div class="flow-arrow">&#10132;</div>
+        <div class="agent-card">
+          <div class="agent-name">Response Drafter</div>
+          <div class="agent-role">Draft email responses for Tony's review, signed as Tony Gale, P.Tech, PMP</div>
+          <div class="agent-model">gemini-3-flash-preview</div>
+          <div class="agent-tools"><span class="tool-tag">Gmail</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Expense Pipeline -->
+  <div class="pipeline color-expense" onclick="this.classList.toggle('open')">
+    <div class="pipeline-header">
+      <div class="pipeline-title">
+        <div class="pipeline-icon">&#128176;</div>
+        <div>
+          <div class="pipeline-name">Expense Pipeline</div>
+          <div class="pipeline-desc">Process receipts, categorize by CRA standards, update financial dashboard</div>
+        </div>
+      </div>
+      <div class="pipeline-meta">
+        <span class="pipeline-schedule">Daily 11 PM ET</span>
+        <span class="pipeline-model">route expense-pipeline</span>
+        <span class="toggle-arrow">&#9660;</span>
+      </div>
+    </div>
+    <div class="pipeline-body">
+      <div class="workflow-label">Workflow (sequential)</div>
+      <div class="agents-flow">
+        <div class="agent-card">
+          <div class="agent-name">Receipt Processor</div>
+          <div class="agent-role">OCR receipt images from Google Drive, extract vendor, date, amount, tax, items</div>
+          <div class="agent-model">gemini-2.5-flash</div>
+          <div class="agent-tools"><span class="tool-tag">Google Drive</span><span class="tool-tag">Receipts</span></div>
+        </div>
+        <div class="flow-arrow">&#10132;</div>
+        <div class="agent-card">
+          <div class="agent-name">Expense Categorizer</div>
+          <div class="agent-role">Assign CRA categories, flag tax-deductible items, update spreadsheet</div>
+          <div class="agent-model">gemini-2.5-flash</div>
+          <div class="agent-tools"><span class="tool-tag">Google Drive</span></div>
+        </div>
+        <div class="flow-arrow">&#10132;</div>
+        <div class="agent-card">
+          <div class="agent-name">Report Generator</div>
+          <div class="agent-role">Calculate spending summary, update dashboard HTML with monthly/YTD totals</div>
+          <div class="agent-model">gemini-3-flash-preview</div>
+          <div class="agent-tools"><span class="tool-tag">Dashboard</span><span class="tool-tag">Canvas</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Investor Pipeline -->
+  <div class="pipeline color-investor" onclick="this.classList.toggle('open')">
+    <div class="pipeline-header">
+      <div class="pipeline-title">
+        <div class="pipeline-icon">&#128200;</div>
+        <div>
+          <div class="pipeline-name">Investor Pipeline</div>
+          <div class="pipeline-desc">Compile business metrics, update pitch deck, prepare demo scripts</div>
+        </div>
+      </div>
+      <div class="pipeline-meta">
+        <span class="pipeline-schedule">Manual trigger</span>
+        <span class="pipeline-model">route investor-pipeline</span>
+        <span class="toggle-arrow">&#9660;</span>
+      </div>
+    </div>
+    <div class="pipeline-body">
+      <div class="workflow-label">Workflow (sequential)</div>
+      <div class="agents-flow">
+        <div class="agent-card">
+          <div class="agent-name">Data Compiler</div>
+          <div class="agent-role">Query Supabase for tender stats, count skills/pipelines, gather business metrics</div>
+          <div class="agent-model">gemini-2.5-flash</div>
+          <div class="agent-tools"><span class="tool-tag">Supabase</span></div>
+        </div>
+        <div class="flow-arrow">&#10132;</div>
+        <div class="agent-card">
+          <div class="agent-name">Deck Updater</div>
+          <div class="agent-role">Update pitch deck sections with current metrics (Problem, Solution, Traction, Ask)</div>
+          <div class="agent-model">gemini-3-flash-preview</div>
+          <div class="agent-tools"><span class="tool-tag">Composition</span></div>
+        </div>
+        <div class="flow-arrow">&#10132;</div>
+        <div class="agent-card">
+          <div class="agent-name">Demo Builder</div>
+          <div class="agent-role">Create 5-segment live demo script for investor presentations</div>
+          <div class="agent-model">gemini-3-flash-preview</div>
+          <div class="agent-tools"><span class="tool-tag">Composition</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stock Monitor / Trading Intelligence -->
+  <div class="pipeline color-trading open" onclick="this.classList.toggle('open')">
+    <div class="pipeline-header">
+      <div class="pipeline-title">
+        <div class="pipeline-icon">&#128200;</div>
+        <div>
+          <div class="pipeline-name">Trading Intelligence</div>
+          <div class="pipeline-desc">Market monitoring, trend analysis, news/social scanning, autonomous day-trading</div>
+        </div>
+      </div>
+      <div class="pipeline-meta">
+        <span class="pipeline-schedule">5min sell / 15min buy / 9AM+4:30PM</span>
+        <span class="pipeline-model">route stock-monitor</span>
+        <span class="toggle-arrow">&#9660;</span>
+      </div>
+    </div>
+    <div class="pipeline-body">
+      <div class="workflow-label">Sub-Agents (5)</div>
+      <div class="agents-flow">
+        <div class="agent-card">
+          <div class="agent-name">Market Monitor</div>
+          <div class="agent-role">Fetch portfolio, quotes, store snapshots via Questrade API</div>
+          <div class="agent-model">gemini-2.5-flash</div>
+          <div class="agent-tools"><span class="tool-tag">Questrade</span><span class="tool-tag">Supabase</span></div>
+        </div>
+        <div class="flow-arrow">&#10132;</div>
+        <div class="agent-card">
+          <div class="agent-name">Trend Analyzer</div>
+          <div class="agent-role">SMA/EMA crossovers, MACD, Bollinger Bands, RSI-14, volume analysis</div>
+          <div class="agent-model">gemini-2.5-flash</div>
+          <div class="agent-tools"><span class="tool-tag">Supabase</span></div>
+        </div>
+        <div class="flow-arrow">&#10132;</div>
+        <div class="agent-card">
+          <div class="agent-name">Social Monitor</div>
+          <div class="agent-role">Scan Truth Social (Trump posts) and political news for market-moving events</div>
+          <div class="agent-model">gemini-2.5-flash-lite</div>
+          <div class="agent-tools"><span class="tool-tag">Firecrawl</span><span class="tool-tag">Supabase</span></div>
+        </div>
+      </div>
+      <div class="agents-flow" style="margin-top:12px">
+        <div class="agent-card">
+          <div class="agent-name">News Analyzer</div>
+          <div class="agent-role">Financial RSS feeds (CNBC, MarketWatch, Yahoo, Bloomberg) — categorize by impact</div>
+          <div class="agent-model">gemini-2.5-flash</div>
+          <div class="agent-tools"><span class="tool-tag">RSS</span><span class="tool-tag">Supabase</span></div>
+        </div>
+        <div class="flow-arrow">&#10132;</div>
+        <div class="agent-card" style="border-color:#f5a623;background:#1f1a10">
+          <div class="agent-name" style="color:#f5a623">Auto Trader</div>
+          <div class="agent-role">Autonomous day-trading: 9 buy flags, 9 sell flags, 6 short flags, 6 cover flags. MACD, Bollinger, VWAP, RSI. $9/trade, max 5 positions.</div>
+          <div class="agent-model">gemini-2.5-flash</div>
+          <div class="agent-tools"><span class="tool-tag">Questrade</span><span class="tool-tag">Supabase</span><span class="tool-tag">Fractional Shares</span></div>
+        </div>
+      </div>
+      <div class="skills-section">
+        <div class="section-label">Cron Schedule</div>
+        <div class="skills-grid">
+          <span class="skill-badge">Sell Check: */5 min (market hours)</span>
+          <span class="skill-badge">Market Scan: */15 min (market hours)</span>
+          <span class="skill-badge">News Scan: */15 min (24/7)</span>
+          <span class="skill-badge">Pre-Market: 9 AM ET</span>
+          <span class="skill-badge">Post-Market: 4:30 PM ET</span>
+          <span class="skill-badge">Dashboard: 12 PM ET</span>
+        </div>
+      </div>
+      <div class="skills-section">
+        <div class="section-label">Risk Controls</div>
+        <div class="skills-grid">
+          <span class="skill-badge">$9 max/trade</span>
+          <span class="skill-badge">5 positions max</span>
+          <span class="skill-badge">+2% take profit</span>
+          <span class="skill-badge">-2% stop loss</span>
+          <span class="skill-badge">No overnight holds</span>
+          <span class="skill-badge">-$5 daily loss pause</span>
+          <span class="skill-badge">$0 commission</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Safety Rules -->
+  <div class="safety-rules">
+    <div class="rule-title">Agent Safety Rules (All Pipelines)</div>
+    <ul>
+      <li>Never post to social media without Tony's explicit approval</li>
+      <li>Never send external emails without approval — drafts only</li>
+      <li>Never delete or modify source data</li>
+      <li>Never fabricate metrics or statistics</li>
+      <li>Auto Trader can execute trades under $10 autonomously when enabled</li>
+      <li>All other external actions require human-in-the-loop confirmation</li>
+    </ul>
+  </div>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kraken — Live Trading Status</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface-2: #1c222b;
+  --border: #21262d;
+  --text: #e6edf3;
+  --text-dim: #8b95a7;
+  --text-muted: #556677;
+  --accent: #7c8aff;
+  --accent-2: #c77dff;
+  --ok: #00c853;
+  --warn: #ffc107;
+  --fail: #ff1744;
+  --pnl-pos: #69f0ae;
+  --pnl-neg: #ef5350;
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg); color: var(--text); padding: 20px; line-height: 1.5;
+}
+.container { max-width: 1200px; margin: 0 auto; }
+.dash-header {
+  text-align: center; padding: 30px 0 24px;
+  border-bottom: 1px solid var(--border); margin-bottom: 32px;
+}
+.dash-header h1 { font-size: 28px; font-weight: 700; }
+.dash-header .subtitle { color: var(--text-dim); font-size: 14px; margin-top: 6px; }
+.dash-header .updated { color: var(--text-muted); font-size: 12px; margin-top: 4px; }
+
+.stat-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 16px; margin-bottom: 32px;
+}
+.stat {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px; text-align: center;
+}
+.stat .value { font-size: 24px; font-weight: 700; }
+.stat .label {
+  font-size: 11px; color: var(--text-dim); margin-top: 6px;
+  text-transform: uppercase; letter-spacing: 0.6px;
+}
+.stat.pos .value { color: var(--pnl-pos); }
+.stat.neg .value { color: var(--pnl-neg); }
+.stat.ok  .value { color: var(--ok); }
+.stat.fail .value { color: var(--fail); }
+.stat.warn .value { color: var(--warn); }
+
+h2 {
+  font-size: 16px; margin: 8px 0 16px; padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 24px; margin-bottom: 24px;
+}
+.gate-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.gate { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; }
+.gate .k { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.6px; }
+.gate .v { font-size: 14px; margin-top: 4px; color: var(--text); font-family: ui-monospace, Menlo, monospace; word-break: break-all; }
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.3px; }
+.badge-ok   { background: rgba(0,200,83,.15);   color: var(--ok);   }
+.badge-warn { background: rgba(255,193,7,.15);  color: var(--warn); }
+.badge-fail { background: rgba(255,23,68,.15);  color: var(--fail); }
+.badge-muted{ background: rgba(85,102,119,.18); color: var(--text-dim); }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--text-dim); font-weight: 600; padding: 8px 12px; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.5px; font-size: 11px; }
+td { padding: 10px 12px; border-bottom: 1px solid #11161c; font-family: ui-monospace, Menlo, monospace; }
+td.sym { font-weight: 700; font-family: inherit; }
+.pnl-pos { color: var(--pnl-pos); font-weight: 600; }
+.pnl-neg { color: var(--pnl-neg); font-weight: 600; }
+
+.banner {
+  padding: 14px 18px; border-radius: var(--radius); margin-bottom: 24px;
+  border: 1px solid; font-size: 14px;
+}
+.banner-ok   { background: rgba(0,200,83,.08);   border-color: var(--ok);   color: var(--pnl-pos); }
+.banner-fail { background: rgba(255,23,68,.08);  border-color: var(--fail); color: var(--fail); }
+.banner-warn { background: rgba(255,193,7,.08);  border-color: var(--warn); color: var(--warn); }
+
+.empty { color: var(--text-muted); text-align: center; padding: 30px; font-size: 13px; font-style: italic; }
+@media (max-width: 768px) { .stat-row { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="dash-header">
+    <h1>Kraken</h1>
+    <div class="subtitle">Live spot-trading status &mdash; balance, gates, positions, today's trades</div>
+    <div class="updated">Last updated: <span id="updated-at">&mdash;</span></div>
+  </header>
+
+  <div id="banner-slot"></div>
+
+  <div id="stats-row" class="stat-row"></div>
+
+  <div class="card">
+    <h2>Live-trading gates</h2>
+    <div id="gates" class="gate-row"></div>
+  </div>
+
+  <div class="card">
+    <h2>Open live positions <span id="open-count" style="color:var(--text-dim);font-weight:400;font-size:13px;">(0)</span></h2>
+    <div id="open-trades"></div>
+  </div>
+
+  <div class="card">
+    <h2>Today's closed live trades <span id="closed-count" style="color:var(--text-dim);font-weight:400;font-size:13px;">(0)</span></h2>
+    <div id="closed-trades"></div>
+  </div>
+</div>
+
+<script id="dashboard-data" type="application/json">{{DATA}}</script>
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('dashboard-data').textContent);
+
+  const fmt$ = (n, d) => {
+    if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
+    const v = Number(n);
+    return (v >= 0 ? '+' : '') + '$' + Math.abs(v).toFixed(d ?? 2) * Math.sign(v || 1) / 1;
+  };
+  // Simpler signed formatter
+  const money = (n, d) => {
+    if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
+    const v = Number(n);
+    const sign = v >= 0 ? '+' : '-';
+    return `${sign}$${Math.abs(v).toFixed(d ?? 2)}`;
+  };
+  const moneyPlain = (n, d) => {
+    if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
+    return '$' + Number(n).toFixed(d ?? 2);
+  };
+  const pnlClass = (n) => (Number(n) >= 0 ? 'pnl-pos' : 'pnl-neg');
+  const fmtTime = (iso) => iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+  const fmtDate = (iso) => iso ? new Date(iso).toLocaleString() : '—';
+
+  // Header timestamp
+  document.getElementById('updated-at').textContent = fmtDate(data.generated_at);
+
+  // Top banner — one summary line about overall state
+  const banner = document.getElementById('banner-slot');
+  const g = data.gates || {};
+  const bothOn = g.kraken_allow_trading === true && g.live_trading_enabled === true;
+  if (data.kraken_balance_error) {
+    banner.innerHTML = `<div class="banner banner-fail"><strong>Kraken API unreachable.</strong> ${data.kraken_balance_error}</div>`;
+  } else if (!bothOn) {
+    banner.innerHTML = `<div class="banner banner-warn"><strong>Paper mode.</strong> At least one live-trading gate is off — arena bots will route to paper trades, manual concierge trades are blocked.</div>`;
+  } else if (!(g.live_trading_bots || []).length) {
+    banner.innerHTML = `<div class="banner banner-warn"><strong>Gates open, no bots authorized.</strong> <code>LIVE_TRADING_BOTS</code> is empty — no arena bot will route live.</div>`;
+  } else {
+    banner.innerHTML = `<div class="banner banner-ok"><strong>Live trading active.</strong> ${(g.live_trading_bots || []).length} bot(s) authorized; Kraken gate open.</div>`;
+  }
+
+  // Summary stats
+  const s = data.summary || {};
+  const statCards = [
+    { label: 'USD Balance', value: moneyPlain(s.usd_balance) },
+    { label: 'Open Positions', value: s.open_positions ?? 0 },
+    { label: "Today's P&L", value: money(s.today_pnl), cls: Number(s.today_pnl) >= 0 ? 'pos' : 'neg' },
+    { label: 'Live Gate', value: bothOn ? 'OPEN' : 'CLOSED', cls: bothOn ? 'ok' : 'fail' },
+    { label: 'Authorized Bots', value: (g.live_trading_bots || []).length },
+    { label: 'Daily Loss / Limit', value: `${money(s.today_pnl, 0)} / ${moneyPlain(s.daily_loss_limit, 0)}`, cls: Number(s.today_pnl) < Number(s.daily_loss_limit || 0) ? 'warn' : '' },
+  ];
+  document.getElementById('stats-row').innerHTML = statCards.map(c =>
+    `<div class="stat ${c.cls || ''}"><div class="value">${c.value}</div><div class="label">${c.label}</div></div>`
+  ).join('');
+
+  // Gate card
+  const gatesEl = document.getElementById('gates');
+  const kv = (k, v, cls) => `<div class="gate"><div class="k">${k}</div><div class="v">${cls ? `<span class="badge ${cls}">${v}</span>` : v}</div></div>`;
+  const boolBadge = (b) => b ? `<span class="badge badge-ok">TRUE</span>` : `<span class="badge badge-fail">FALSE</span>`;
+  const bots = g.live_trading_bots || [];
+  gatesEl.innerHTML = [
+    `<div class="gate"><div class="k">KRAKEN_ALLOW_TRADING</div><div class="v">${boolBadge(g.kraken_allow_trading)}</div></div>`,
+    `<div class="gate"><div class="k">LIVE_TRADING_ENABLED</div><div class="v">${boolBadge(g.live_trading_enabled)}</div></div>`,
+    `<div class="gate"><div class="k">LIVE_TRADING_BOTS</div><div class="v">${bots.length ? bots.join(', ') : '<span class="badge badge-muted">(none)</span>'}</div></div>`,
+    `<div class="gate"><div class="k">MANUAL_MAX_EXPOSURE_USD</div><div class="v">${moneyPlain(g.manual_max_exposure_usd, 0)}</div></div>`,
+    `<div class="gate"><div class="k">MANUAL_DAILY_LOSS_LIMIT</div><div class="v">${moneyPlain(g.manual_daily_loss_limit, 0)}</div></div>`,
+    `<div class="gate"><div class="k">Pending Telegram actions</div><div class="v">${s.pending_actions ?? 0}</div></div>`,
+  ].join('');
+
+  // Open trades table
+  const openTrades = data.open_trades || [];
+  document.getElementById('open-count').textContent = `(${openTrades.length})`;
+  const openEl = document.getElementById('open-trades');
+  if (!openTrades.length) {
+    openEl.innerHTML = '<div class="empty">No open live positions.</div>';
+  } else {
+    openEl.innerHTML = `<table>
+      <thead><tr><th>Symbol</th><th>Bot</th><th>Side</th><th>Qty</th><th>Entry</th><th>Opened</th><th>Reason</th></tr></thead>
+      <tbody>${openTrades.map(t => `<tr>
+        <td class="sym">${t.symbol}</td>
+        <td>${t.bot_name || t.bot_id || ''}</td>
+        <td>${t.side}</td>
+        <td>${Number(t.qty).toFixed(6)}</td>
+        <td>${moneyPlain(t.entry_price)}</td>
+        <td>${fmtDate(t.opened_at)}</td>
+        <td>${t.reason ? t.reason.slice(0, 60) : ''}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  }
+
+  // Closed trades today
+  const closedTrades = data.closed_trades_today || [];
+  document.getElementById('closed-count').textContent = `(${closedTrades.length})`;
+  const closedEl = document.getElementById('closed-trades');
+  if (!closedTrades.length) {
+    closedEl.innerHTML = '<div class="empty">No live trades closed today.</div>';
+  } else {
+    closedEl.innerHTML = `<table>
+      <thead><tr><th>Closed</th><th>Symbol</th><th>Bot</th><th>Side</th><th>Qty</th><th>Entry</th><th>Exit</th><th>P&amp;L</th><th>Exit reason</th></tr></thead>
+      <tbody>${closedTrades.map(t => `<tr>
+        <td>${fmtTime(t.closed_at)}</td>
+        <td class="sym">${t.symbol}</td>
+        <td>${t.bot_name || t.bot_id || ''}</td>
+        <td>${t.side}</td>
+        <td>${Number(t.qty).toFixed(6)}</td>
+        <td>${moneyPlain(t.entry_price)}</td>
+        <td>${moneyPlain(t.exit_price)}</td>
+        <td class="${pnlClass(t.pnl)}">${money(t.pnl)}</td>
+        <td>${t.exit_reason || ''}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  }
+})();
+</script>
+</body>
+</html>

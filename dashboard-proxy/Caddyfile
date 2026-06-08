@@ -1,0 +1,10 @@
+# Dashboard auth proxy.
+# Tailscale Funnel :8443 (public) -> this Caddy (127.0.0.1:8091) -> dashboards.service (127.0.0.1:8090).
+# Basic auth replicates the old VPS setup: tony / decades2026 (bcrypt hash copied from VPS Caddyfile).
+
+:8091 {
+	basic_auth {
+		tony $2a$14$fuuWZKpa7lw3OoRwRvB5nOAszSo1RD61NoABgQ6HlJH8lB3JRTLam
+	}
+	reverse_proxy 127.0.0.1:8090
+}

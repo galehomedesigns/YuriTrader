@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw &mdash; Dashboards</title>
+<style>
+:root {
+  --bg:#0d1117; --surface:#161b22; --surface-2:#1c222b; --border:#21262d;
+  --text:#e6edf3; --text-dim:#8b95a7; --text-muted:#556677;
+  --accent:#7c8aff; --accent-2:#c77dff;
+  --ok:#00c853; --warn:#ffc107; --fail:#ff1744;
+  --radius:12px; --radius-sm:8px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:var(--bg); color:var(--text); padding:20px; line-height:1.5; }
+.container { max-width:1200px; margin:0 auto; }
+
+.dash-header { text-align:center; padding:30px 0 24px; border-bottom:1px solid var(--border); margin-bottom:32px; }
+.dash-header h1 { font-size:28px; font-weight:700; }
+.dash-header .subtitle { color:var(--text-dim); font-size:14px; margin-top:6px; }
+.dash-header .updated { color:var(--text-muted); font-size:12px; margin-top:4px; }
+
+h2 { font-size:18px; margin:32px 0 16px; padding-bottom:10px; border-bottom:1px solid var(--border); }
+h2 .count { color:var(--text-dim); font-size:13px; font-weight:400; margin-left:8px; }
+
+.cards-grid {
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(340px, 1fr));
+  gap:16px;
+}
+.card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius); padding:20px;
+  border-left:3px solid var(--accent);
+  transition: transform .1s ease, border-color .1s ease;
+  display:flex; flex-direction:column; gap:10px; text-decoration:none; color:inherit;
+}
+.card:hover { transform: translateY(-1px); border-left-color: var(--accent-2); }
+.card.category-live { border-left-color: var(--accent); }
+.card.category-reference { border-left-color: var(--text-dim); }
+.card.category-archived { border-left-color: var(--warn); }
+
+.card-title { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+.card-title h3 { font-size:15px; font-weight:700; color:var(--text); }
+.card .path { font-family:ui-monospace,Menlo,monospace; font-size:11px; color:var(--accent); }
+.card .purpose { color:var(--text); font-size:13px; }
+.card .meta { display:flex; justify-content:space-between; gap:8px; padding-top:10px; border-top:1px solid var(--border); color:var(--text-dim); font-size:11px; }
+.card .meta .owner { font-family:ui-monospace,Menlo,monospace; }
+
+.badge { display:inline-block; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; letter-spacing:0.3px; }
+.badge-fresh { background:rgba(0,200,83,.15); color:var(--ok); }
+.badge-stale { background:rgba(255,193,7,.15); color:var(--warn); }
+.badge-old { background:rgba(255,23,68,.15); color:var(--fail); }
+.badge-static { background:rgba(85,102,119,.18); color:var(--text-dim); }
+.badge-archived { background:rgba(217,119,6,.15); color:#fbbf24; }
+
+.help {
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:16px 20px; margin-top:32px; color:var(--text-dim); font-size:13px;
+}
+.help code { background:var(--surface-2); padding:1px 5px; border-radius:3px; font-size:12px; color:var(--text); }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="dash-header">
+    <h1>OpenClaw Dashboards</h1>
+    <div class="subtitle">GX10 agent stack &mdash; all dashboards served from <code>~/openclaw/canvas/</code></div>
+    <div class="updated">Last refreshed: <span id="updated-at">&mdash;</span></div>
+  </header>
+
+  <h2>Live <span id="live-count" class="count">(0)</span></h2>
+  <div id="live-grid" class="cards-grid"></div>
+
+  <h2>Reference <span id="ref-count" class="count">(0)</span></h2>
+  <div id="reference-grid" class="cards-grid"></div>
+
+  <h2>Archived <span id="arch-count" class="count">(0)</span></h2>
+  <div id="archived-grid" class="cards-grid"></div>
+
+  <div class="help">
+    <strong>Adding a dashboard:</strong> follow the contract in
+    <code>~/openclaw/docs/DASHBOARDS.md</code>. Templates go in
+    <code>skills/&lt;skill&gt;/dashboards/</code>, output lands in
+    <code>~/openclaw/canvas/</code>, and this index picks it up once you
+    register the filename in <code>skills/medic/dashboards/index_update.py</code>.
+    Base URL (basic auth <code>tony</code> / <code>decades2026</code>):
+    <a href="https://gx10-087b.tail3abae6.ts.net:8443/" style="color:var(--accent)">gx10-087b.tail3abae6.ts.net:8443</a>.
+  </div>
+</div>
+
+<script id="dashboard-data" type="application/json">{{DATA}}</script>
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('dashboard-data').textContent);
+  const fmtTime = (iso) => iso ? new Date(iso).toLocaleString() : '—';
+  const fmtAgo = (iso) => {
+    if (!iso) return 'never';
+    const ms = Date.now() - new Date(iso).getTime();
+    if (ms < 0) return 'just now';
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return s + 's ago';
+    if (s < 3600) return Math.floor(s / 60) + 'm ago';
+    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+    return Math.floor(s / 86400) + 'd ago';
+  };
+  const esc = (s) => (s ?? '').toString().replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  const ageBadge = (d) => {
+    if (d.category === 'archived') return '<span class="badge badge-archived">archived</span>';
+    if (!d.last_updated) return '<span class="badge badge-static">static</span>';
+    const ms = Date.now() - new Date(d.last_updated).getTime();
+    if (ms < 2 * 3600 * 1000) return '<span class="badge badge-fresh">fresh</span>';
+    if (ms < 48 * 3600 * 1000) return '<span class="badge badge-stale">stale</span>';
+    return '<span class="badge badge-old">old</span>';
+  };
+
+  document.getElementById('updated-at').textContent = fmtTime(data.generated_at);
+
+  const cardHtml = (d) => `
+    <a class="card category-${d.category}" href="${esc(d.filename)}">
+      <div class="card-title"><h3>${esc(d.title)}</h3>${ageBadge(d)}</div>
+      <div class="path">/${esc(d.filename)}</div>
+      <div class="purpose">${esc(d.purpose)}</div>
+      <div class="meta">
+        <span class="owner">${esc(d.owner_skill || '—')}</span>
+        <span>${d.last_updated ? fmtAgo(d.last_updated) : 'static content'}</span>
+      </div>
+    </a>`;
+
+  const byCategory = (cat) => (data.dashboards || []).filter(d => d.category === cat);
+  const live = byCategory('live');
+  const ref = byCategory('reference');
+  const arch = byCategory('archived');
+
+  document.getElementById('live-grid').innerHTML = live.map(cardHtml).join('') ||
+    '<div style="color:var(--text-muted);font-style:italic;padding:20px 0">No live dashboards.</div>';
+  document.getElementById('live-count').textContent = `(${live.length})`;
+
+  document.getElementById('reference-grid').innerHTML = ref.map(cardHtml).join('') ||
+    '<div style="color:var(--text-muted);font-style:italic;padding:20px 0">No reference dashboards.</div>';
+  document.getElementById('ref-count').textContent = `(${ref.length})`;
+
+  document.getElementById('archived-grid').innerHTML = arch.map(cardHtml).join('') ||
+    '<div style="color:var(--text-muted);font-style:italic;padding:20px 0">No archived dashboards.</div>';
+  document.getElementById('arch-count').textContent = `(${arch.length})`;
+})();
+</script>
+</body>
+</html>

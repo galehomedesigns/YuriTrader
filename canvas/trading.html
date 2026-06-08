@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trading Intelligence</title>
+<style>
+:root {
+  --bg:#0d1117; --surface:#161b22; --surface-2:#1c222b; --border:#21262d;
+  --text:#e6edf3; --text-dim:#8b95a7; --text-muted:#556677;
+  --accent:#7c8aff; --accent-2:#c77dff;
+  --ok:#00c853; --warn:#ffc107; --fail:#ff1744;
+  --pnl-pos:#69f0ae; --pnl-neg:#ef5350;
+  --radius:12px; --radius-sm:8px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:var(--bg); color:var(--text); padding:20px; line-height:1.5; }
+.container { max-width:1200px; margin:0 auto; }
+.dash-header { text-align:center; padding:30px 0 24px; border-bottom:1px solid var(--border); margin-bottom:32px; }
+.dash-header h1 { font-size:28px; font-weight:700; }
+.dash-header .subtitle { color:var(--text-dim); font-size:14px; margin-top:6px; }
+.dash-header .updated { color:var(--text-muted); font-size:12px; margin-top:4px; }
+
+.stat-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:16px; margin-bottom:32px; }
+.stat { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; text-align:center; }
+.stat .value { font-size:24px; font-weight:700; }
+.stat .label { font-size:11px; color:var(--text-dim); margin-top:6px; text-transform:uppercase; letter-spacing:0.6px; }
+.stat.pos .value { color:var(--pnl-pos); }
+.stat.neg .value { color:var(--pnl-neg); }
+.stat.ok  .value { color:var(--ok); }
+.stat.fail .value { color:var(--fail); }
+.stat.warn .value { color:var(--warn); }
+
+h2 { font-size:16px; margin:8px 0 16px; padding-bottom:10px; border-bottom:1px solid var(--border); }
+
+.cards-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(420px, 1fr)); gap:20px; margin-bottom:24px; }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; }
+.card-title { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:10px; }
+.card-title h2 { border:none; padding:0; margin:0; }
+.card-count { color:var(--text-dim); font-size:12px; font-weight:400; }
+
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { text-align:left; color:var(--text-dim); font-weight:600; padding:8px 10px; border-bottom:1px solid var(--border); text-transform:uppercase; letter-spacing:0.5px; font-size:11px; }
+td { padding:8px 10px; border-bottom:1px solid #11161c; font-family:ui-monospace,Menlo,monospace; }
+td.sym { font-weight:700; font-family:inherit; }
+.pnl-pos { color:var(--pnl-pos); font-weight:600; }
+.pnl-neg { color:var(--pnl-neg); font-weight:600; }
+
+.badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; letter-spacing:0.3px; }
+.badge-ok { background:rgba(0,200,83,.15); color:var(--ok); }
+.badge-warn { background:rgba(255,193,7,.15); color:var(--warn); }
+.badge-fail { background:rgba(255,23,68,.15); color:var(--fail); }
+.badge-muted { background:rgba(85,102,119,.18); color:var(--text-dim); }
+.badge-bull { background:rgba(0,200,83,.15); color:var(--ok); }
+.badge-bear { background:rgba(255,23,68,.15); color:var(--fail); }
+.badge-neutral { background:rgba(255,193,7,.15); color:var(--warn); }
+
+.feed-item { padding:10px 0; border-bottom:1px solid #11161c; font-size:13px; }
+.feed-item:last-child { border-bottom:none; }
+.feed-item a { color:var(--accent); text-decoration:none; }
+.feed-item a:hover { text-decoration:underline; }
+.feed-item .meta { color:var(--text-muted); font-size:11px; margin-top:3px; }
+
+.empty { color:var(--text-muted); text-align:center; padding:30px 0; font-size:13px; font-style:italic; }
+.watchlist-chips { display:flex; flex-wrap:wrap; gap:8px; }
+.chip { background:var(--surface-2); border:1px solid var(--border); border-radius:6px; padding:4px 10px; font-size:12px; font-family:ui-monospace,Menlo,monospace; }
+
+@media (max-width:768px) { .stat-row { grid-template-columns:repeat(2, 1fr); } .cards-grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="dash-header">
+    <h1>Trading Intelligence</h1>
+    <div class="subtitle">Live market snapshots, alerts, auto-trade status, news &amp; sentiment</div>
+    <div class="updated">Last updated: <span id="updated-at">&mdash;</span></div>
+  </header>
+
+  <div id="stats-row" class="stat-row"></div>
+
+  <div class="cards-grid">
+    <div class="card">
+      <div class="card-title"><h2>Market Positions</h2><span id="positions-count" class="card-count">(0)</span></div>
+      <div id="positions-body"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><h2>Price Alerts</h2><span id="alerts-count" class="card-count">(0)</span></div>
+      <div id="alerts-body"></div>
+    </div>
+  </div>
+
+  <div class="cards-grid">
+    <div class="card">
+      <div class="card-title"><h2>Signal Changes</h2><span id="signal-count" class="card-count">(0)</span></div>
+      <div id="signals-body"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><h2>Watchlist</h2><span id="watchlist-count" class="card-count">(0)</span></div>
+      <div id="watchlist-body"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><h2>Auto-Trade Positions</h2><span id="auto-open-count" class="card-count">(0)</span></div>
+    <div id="auto-open-body"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><h2>Recent Auto-Trades</h2><span id="auto-closed-count" class="card-count">(0)</span></div>
+    <div id="auto-closed-body"></div>
+  </div>
+
+  <div class="cards-grid">
+    <div class="card">
+      <div class="card-title"><h2>Financial News</h2><span id="news-count" class="card-count">(0)</span></div>
+      <div id="news-body"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><h2>Social &amp; Political Signals</h2><span id="social-count" class="card-count">(0)</span></div>
+      <div id="social-body"></div>
+    </div>
+  </div>
+</div>
+
+<script id="dashboard-data" type="application/json">{"generated_at": "2026-06-06T02:30:02.034767+00:00", "summary": {"watchlist_count": 9, "signal_count": 0, "active_alerts": 0, "auto_open": 0, "auto_today_pnl": 0, "auto_paused": false}, "positions": [{"symbol": "AAPL", "price": 309.27, "day_change_pct": -1.1, "volume": 38912481, "signal": null}, {"symbol": "ENB.TO", "price": 78.98, "day_change_pct": -0.1, "volume": 1423559, "signal": null}, {"symbol": "MSFT", "price": 416.89, "day_change_pct": -2.7, "volume": 20358350, "signal": null}, {"symbol": "NVDA", "price": 205.34, "day_change_pct": -4.3, "volume": 145843105, "signal": null}, {"symbol": "QQQ", "price": 708.5, "day_change_pct": -3.0, "volume": 65116611, "signal": null}, {"symbol": "SHOP.TO", "price": 151.49, "day_change_pct": -4.7, "volume": 905490, "signal": null}, {"symbol": "SPY", "price": 738.42, "day_change_pct": -1.8, "volume": 54469596, "signal": null}, {"symbol": "TD.TO", "price": 157.86, "day_change_pct": 0.3, "volume": 1451910, "signal": null}, {"symbol": "TSLA", "price": 390.69, "day_change_pct": -7.1, "volume": 45463289, "signal": null}], "alerts": [], "signal_changes": [], "watchlist": ["AAPL", "MSFT", "NVDA", "TSLA", "ENB.TO", "TD.TO", "SHOP.TO", "SPY", "QQQ"], "auto_open": [], "auto_closed": [], "news": [{"title": "Stock market today: Dow jumps 875 points to record high, S&P 500 rebounds after Broadcom stumble", "source": "yahoo_finance", "impact_level": null, "published_at": "2026-06-03T23:00:54+00:00", "url": "https://finance.yahoo.com/markets/live/stock-market-today-dow-jumps-875-points-to-record-high-sp-500-rebounds-after-broadcom-stumble-230054952.html"}, {"title": "Is XLK the Best Tech ETF You Can Buy?", "source": "yahoo_finance", "impact_level": null, "published_at": "2026-06-04T20:10:53+00:00", "url": "https://finance.yahoo.com/markets/stocks/articles/xlk-best-tech-etf-buy-201053679.html"}, {"title": "Stocks Rebound on Strength in Banks and Managed Healthcare", "source": "yahoo_finance", "impact_level": null, "published_at": "2026-06-04T20:32:37+00:00", "url": "https://finance.yahoo.com/markets/stocks/articles/stocks-rebound-strength-banks-managed-203237533.html"}, {"title": "Broadcom stock sinks 12% as AI chip forecast disappoints", "source": "yahoo_finance", "impact_level": null, "published_at": "2026-06-03T16:56:02+00:00", "url": "https://finance.yahoo.com/markets/article/broadcom-stock-sinks-12-as-ai-chip-forecast-disappoints-165602082.html"}, {"title": "Wall Street Analyst: Broadcom\u2019s Flat AI Guidance Justified the Selloff, but Nvidia Remains Best-in-Class Chip Play", "source": "yahoo_finance", "impact_level": null, "published_at": "2026-06-04T20:18:56+00:00", "url": "https://finance.yahoo.com/markets/stocks/articles/wall-street-analyst-broadcom-flat-201856751.html"}, {"title": "Rocket Lab Stock Is Up 330% Over the Past Year. The SpaceX IPO Threatens to Rock the Boat.", "source": "yahoo_finance", "impact_level": null, "published_at": "2026-06-04T20:28:52+00:00", "url": "https://finance.yahoo.com/markets/stocks/articles/rocket-lab-stock-330-over-202852570.html"}, {"title": "Snowflake Stock Jumps Over 40% on Strong Earnings and Amazon Deal. Its AI Strategy Is at an Inflection Point.", "source": "yahoo_finance", "impact_level": null, "published_at": "2026-06-04T20:29:20+00:00", "url": "https://finance.yahoo.com/markets/stocks/articles/snowflake-stock-jumps-over-40-202920886.html"}, {"title": "Bank of America Just Upgraded UnitedHealth Stock. Here's Why.", "source": "yahoo_finance", "impact_level": null, "published_at": "2026-06-04T20:28:00+00:00", "url": "https://finance.yahoo.com/markets/stocks/articles/bank-america-just-upgraded-unitedhealth-202800799.html"}, {"title": "Dow Gets a Healthy Boost", "source": "yahoo_finance", "impact_level": null, "published_at": "2026-06-04T20:17:00+00:00", "url": "https://www.wsj.com/finance/stocks/dow-gets-a-healthy-boost-9e850f39?siteid=yhoof2&yptr=yahoo"}, {"title": "Is Welltower Stock Underperforming the S&P 500?", "source": "yahoo_finance", "impact_level": null, "published_at": "2026-06-04T20:26:18+00:00", "url": "https://finance.yahoo.com/markets/stocks/articles/welltower-stock-underperforming-p-500-202618834.html"}, {"title": "Intel, AMD, Micron shares trim losses after Broadcom results spark semiconductor sector sell-off", "source": "yahoo_finance", "impact_level": null, "published_at": "2026-06-04T13:01:28+00:00", "url": "https://finance.yahoo.com/markets/stocks/article/intel-amd-micron-shares-trim-losses-after-broadcom-results-spark-semiconductor-sector-sell-off-130128361.html"}, {"title": "Great Agentic AI Software Stocks", "source": "yahoo_finance", "impact_level": null, "published_at": "2026-06-04T20:22:50+00:00", "url": "https://finance.yahoo.com/markets/stocks/articles/great-agentic-ai-software-stocks-202250594.html"}, {"title": "Lululemon cuts annual forecasts amid slowing demand in US", "source": "yahoo_finance", "impact_level": null, "published_at": "2026-06-04T20:12:10+00:00", "url": "https://finance.yahoo.com/markets/stocks/articles/lululemon-cuts-annual-forecasts-amid-201210492.html"}, {"title": "Why Five Below Stock Fell Today", "source": "yahoo_finance", "impact_level": null, "published_at": "2026-06-04T20:12:00+00:00", "url": "https://finance.yahoo.com/markets/stocks/articles/why-five-below-stock-fell-201200776.html"}, {"title": "AppLovin Rival Liftoff Stock Jumps After IPO", "source": "yahoo_finance", "impact_level": null, "published_at": "2026-06-04T20:12:45+00:00", "url": "https://www.investors.com/news/technology/liftoff-ipo-stock-applovin-news/?src=A00220&yptr=yahoo"}], "social": [{"platform": "truth_social", "author": "@realDonaldTrump", "content": "Trump Feverishly Tries To Reassure Markets After Stocks Plummet: \u2018IT\u2019S RAINING JOBS!\u2019 - Yahoo Finance UK", "severity": "HIGH", "fetched_at": "2026-06-06T01:15:12.183716+00:00"}, {"platform": "truth_social", "author": "@realDonaldTrump", "content": "Trump \u2018oil painting\u2019 portrait goes viral and sparks Pride Month jokes - Euronews", "severity": "MEDIUM", "fetched_at": "2026-06-05T19:45:05.800873+00:00"}, {"platform": "truth_social", "author": "@realDonaldTrump", "content": "Jobs report sparks inflation fears; Trump responds - The Hill", "severity": "MEDIUM", "fetched_at": "2026-06-05T16:30:35.225029+00:00"}, {"platform": "truth_social", "author": "@realDonaldTrump", "content": "Trump \u2018oil painting\u2019 portrait goes viral and sparks Pride Month jokes - Euronews.com", "severity": "MEDIUM", "fetched_at": "2026-06-05T11:00:06.096097+00:00"}, {"platform": "truth_social", "author": "@realDonaldTrump", "content": "Trump shares bizarre \u2018oil painting\u2019 of himself on Truth Social - Indy100", "severity": "MEDIUM", "fetched_at": "2026-06-04T17:45:05.961865+00:00"}, {"platform": "truth_social", "author": "@realDonaldTrump", "content": "Sky News Australia. . Israeli Prime Minister Netanyahu gave his response to CNBC about his intense phone call with US President Donald Trump over Lebanon. - facebook.com", "severity": "MEDIUM", "fetched_at": "2026-06-04T05:45:06.592509+00:00"}, {"platform": "truth_social", "author": "@realDonaldTrump", "content": "\"You're fucking crazy\": Trump fumes at Netanyahu in call on Lebanon - Axios", "severity": "MEDIUM", "fetched_at": "2026-06-04T00:15:07.248436+00:00"}, {"platform": "truth_social", "author": "@realDonaldTrump", "content": "Trump endorses Guzman Fralick for Nevada AG - FOX5 Vegas", "severity": "MEDIUM", "fetched_at": "2026-06-04T00:15:06.739262+00:00"}, {"platform": "truth_social", "author": "@realDonaldTrump", "content": "3 Trump-Promoted US Stocks to Watch in June - Yahoo Finance", "severity": "MEDIUM", "fetched_at": "2026-06-03T21:30:08.042899+00:00"}, {"platform": "truth_social", "author": "@realDonaldTrump", "content": "Controversial U.S. ambassador to Canada adds to Trump\u2019s many diplomatic woes - MS NOW", "severity": "MEDIUM", "fetched_at": "2026-06-03T17:15:07.901316+00:00"}, {"platform": "truth_social", "author": "@realDonaldTrump", "content": "Trump is quietly rebuilding his tariff engine - CNN", "severity": "MEDIUM", "fetched_at": "2026-06-03T16:00:14.741435+00:00"}, {"platform": "truth_social", "author": "@realDonaldTrump", "content": "Oil climbs as U.S.-Iran trade strikes while Trump says negotiations with Tehran underway - CNBC", "severity": "MEDIUM", "fetched_at": "2026-06-03T01:15:08.605161+00:00"}, {"platform": "truth_social", "author": "@realDonaldTrump", "content": "US ambassador to Canada shares Trump \u201851st State\u2019 post - The Hill", "severity": "MEDIUM", "fetched_at": "2026-06-02T20:30:04.077958+00:00"}, {"platform": "truth_social", "author": "@realDonaldTrump", "content": "Trump Says It's Time 'One Way or Another' for Iran to Make a Deal and Insists Talks Have Been Ongoing - Time Magazine", "severity": "MEDIUM", "fetched_at": "2026-06-02T19:30:03.987905+00:00"}, {"platform": "truth_social", "author": "@realDonaldTrump", "content": "US ambassador to Canada shares Trump \u201951st State\u2019 post - The Hill", "severity": "MEDIUM", "fetched_at": "2026-06-02T19:01:06.691239+00:00"}]}</script>
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('dashboard-data').textContent);
+
+  const fmtPct = (n) => (n === null || n === undefined || Number.isNaN(Number(n))) ? '—' : `${Number(n) >= 0 ? '+' : ''}${Number(n).toFixed(2)}%`;
+  const fmt$ = (n, d) => (n === null || n === undefined || Number.isNaN(Number(n))) ? '—' : '$' + Number(n).toFixed(d ?? 2);
+  const fmtMoney = (n, d) => {
+    if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
+    const v = Number(n); return (v >= 0 ? '+' : '-') + '$' + Math.abs(v).toFixed(d ?? 2);
+  };
+  const fmtInt = (n) => (n === null || n === undefined) ? '—' : Number(n).toLocaleString();
+  const pctClass = (n) => Number(n) > 0 ? 'pnl-pos' : Number(n) < 0 ? 'pnl-neg' : '';
+  const fmtTime = (iso) => iso ? new Date(iso).toLocaleString() : '—';
+  const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString() : '—';
+  const esc = (s) => (s ?? '').toString().replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  const signalBadge = (sig) => {
+    if (!sig) return '';
+    const cls = sig === 'BULLISH' ? 'badge-bull' : sig === 'BEARISH' ? 'badge-bear' : 'badge-neutral';
+    return `<span class="badge ${cls}">${sig}</span>`;
+  };
+  const impactBadge = (level) => {
+    if (!level) return '';
+    const cls = level === 'HIGH' ? 'badge-fail' : level === 'MEDIUM' ? 'badge-warn' : 'badge-muted';
+    return `<span class="badge ${cls}">${level}</span>`;
+  };
+
+  document.getElementById('updated-at').textContent = fmtTime(data.generated_at);
+
+  // Summary stats
+  const s = data.summary || {};
+  const statCards = [
+    { label: 'Watchlist', value: s.watchlist_count ?? 0 },
+    { label: 'Live Signals', value: s.signal_count ?? 0 },
+    { label: 'Active Alerts', value: s.active_alerts ?? 0 },
+    { label: 'Open Auto-Trades', value: s.auto_open ?? 0 },
+    { label: "Today's Auto-P&L", value: fmtMoney(s.auto_today_pnl), cls: Number(s.auto_today_pnl) >= 0 ? 'pos' : 'neg' },
+    { label: 'Auto-Trading', value: s.auto_paused ? 'PAUSED' : 'ACTIVE', cls: s.auto_paused ? 'fail' : 'ok' },
+  ];
+  document.getElementById('stats-row').innerHTML = statCards.map(c =>
+    `<div class="stat ${c.cls || ''}"><div class="value">${c.value}</div><div class="label">${c.label}</div></div>`
+  ).join('');
+
+  // Market positions
+  const positions = data.positions || [];
+  document.getElementById('positions-count').textContent = `(${positions.length})`;
+  const positionsBody = document.getElementById('positions-body');
+  if (!positions.length) {
+    positionsBody.innerHTML = '<div class="empty">No market snapshots yet.</div>';
+  } else {
+    positionsBody.innerHTML = `<table><thead><tr><th>Symbol</th><th>Price</th><th>Chg %</th><th>Volume</th><th>Signal</th></tr></thead>
+      <tbody>${positions.map(p => `<tr>
+        <td class="sym">${esc(p.symbol)}</td>
+        <td>${fmt$(p.price)}</td>
+        <td class="${pctClass(p.day_change_pct)}">${fmtPct(p.day_change_pct)}</td>
+        <td>${fmtInt(p.volume)}</td>
+        <td>${signalBadge(p.signal)}</td>
+      </tr>`).join('')}</tbody></table>`;
+  }
+
+  // Price alerts
+  const alerts = data.alerts || [];
+  document.getElementById('alerts-count').textContent = `(${alerts.length})`;
+  const alertsBody = document.getElementById('alerts-body');
+  if (!alerts.length) {
+    alertsBody.innerHTML = '<div class="empty">No active alerts.</div>';
+  } else {
+    alertsBody.innerHTML = `<table><thead><tr><th>Symbol</th><th>Type</th><th>Threshold</th><th>Status</th></tr></thead>
+      <tbody>${alerts.map(a => `<tr>
+        <td class="sym">${esc(a.symbol)}</td>
+        <td>${esc(a.alert_type)}</td>
+        <td>${fmt$(a.threshold)}</td>
+        <td>${a.triggered ? '<span class="badge badge-fail">TRIGGERED</span>' : '<span class="badge badge-ok">Active</span>'}</td>
+      </tr>`).join('')}</tbody></table>`;
+  }
+
+  // Signal changes
+  const signalChanges = data.signal_changes || [];
+  document.getElementById('signal-count').textContent = `(${signalChanges.length})`;
+  const signalsBody = document.getElementById('signals-body');
+  if (!signalChanges.length) {
+    signalsBody.innerHTML = '<div class="empty">No signal changes.</div>';
+  } else {
+    signalsBody.innerHTML = signalChanges.map(s => `
+      <div class="feed-item">
+        <span class="sym" style="font-weight:700">${esc(s.symbol)}</span>:
+        ${signalBadge(s.previous_signal)} &rarr; ${signalBadge(s.signal)}
+        <div class="meta">${fmtTime(s.computed_at)}</div>
+      </div>`).join('');
+  }
+
+  // Watchlist
+  const wl = data.watchlist || [];
+  document.getElementById('watchlist-count').textContent = `(${wl.length})`;
+  const wlBody = document.getElementById('watchlist-body');
+  if (!wl.length) {
+    wlBody.innerHTML = '<div class="empty">Watchlist is empty.</div>';
+  } else {
+    wlBody.innerHTML = `<div class="watchlist-chips">${wl.map(x => `<span class="chip">${esc(x)}</span>`).join('')}</div>`;
+  }
+
+  // Auto-trade open positions
+  const autoOpen = data.auto_open || [];
+  document.getElementById('auto-open-count').textContent = `(${autoOpen.length})`;
+  const autoOpenBody = document.getElementById('auto-open-body');
+  if (!autoOpen.length) {
+    autoOpenBody.innerHTML = '<div class="empty">No open auto-trade positions.</div>';
+  } else {
+    autoOpenBody.innerHTML = `<table><thead><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>Current</th><th>Return</th><th>Opened</th><th>Flags</th></tr></thead>
+      <tbody>${autoOpen.map(p => `<tr>
+        <td class="sym">${esc(p.symbol)}</td>
+        <td>${esc(p.side)}</td>
+        <td>${fmt$(p.entry_price)}</td>
+        <td>${fmt$(p.current_price)}</td>
+        <td class="${pctClass(p.unrealized_pct)}">${fmtPct(p.unrealized_pct)}</td>
+        <td>${fmtDate(p.opened_at)}</td>
+        <td style="font-size:11px;color:var(--text-dim)">${esc((p.buy_flags_met || []).slice(0, 3).join(', '))}</td>
+      </tr>`).join('')}</tbody></table>`;
+  }
+
+  // Auto-trade closed
+  const autoClosed = data.auto_closed || [];
+  document.getElementById('auto-closed-count').textContent = `(${autoClosed.length})`;
+  const autoClosedBody = document.getElementById('auto-closed-body');
+  if (!autoClosed.length) {
+    autoClosedBody.innerHTML = '<div class="empty">No recent auto-trades.</div>';
+  } else {
+    autoClosedBody.innerHTML = `<table><thead><tr><th>Closed</th><th>Symbol</th><th>Side</th><th>Entry</th><th>Exit</th><th>P&L</th></tr></thead>
+      <tbody>${autoClosed.map(t => `<tr>
+        <td>${fmtTime(t.closed_at)}</td>
+        <td class="sym">${esc(t.symbol)}</td>
+        <td>${esc(t.side)}</td>
+        <td>${fmt$(t.entry_price)}</td>
+        <td>${fmt$(t.exit_price)}</td>
+        <td class="${Number(t.pnl) >= 0 ? 'pnl-pos' : 'pnl-neg'}">${fmtMoney(t.pnl)}</td>
+      </tr>`).join('')}</tbody></table>`;
+  }
+
+  // Financial news
+  const news = data.news || [];
+  document.getElementById('news-count').textContent = `(${news.length})`;
+  const newsBody = document.getElementById('news-body');
+  if (!news.length) {
+    newsBody.innerHTML = '<div class="empty">No news.</div>';
+  } else {
+    newsBody.innerHTML = news.map(n => `
+      <div class="feed-item">
+        <a href="${esc(n.url || '#')}" target="_blank" rel="noopener">${esc((n.title || '').slice(0, 120))}</a>
+        ${impactBadge(n.impact_level)}
+        <div class="meta">${esc(n.source || '')} &middot; ${fmtTime(n.published_at)}</div>
+      </div>`).join('');
+  }
+
+  // Social signals
+  const social = data.social || [];
+  document.getElementById('social-count').textContent = `(${social.length})`;
+  const socialBody = document.getElementById('social-body');
+  if (!social.length) {
+    socialBody.innerHTML = '<div class="empty">No social signals.</div>';
+  } else {
+    socialBody.innerHTML = social.map(s => `
+      <div class="feed-item">
+        <strong>${esc(s.author || '')}</strong> <span style="color:var(--text-dim);font-size:11px">(${esc(s.platform || '')})</span>
+        ${impactBadge(s.severity)}
+        <div style="margin-top:4px">${esc((s.content || '').slice(0, 180))}</div>
+        <div class="meta">${fmtTime(s.fetched_at)}</div>
+      </div>`).join('');
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Health — Yuri</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0d1117;color:#ccd6dd;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:20px}
+.header{text-align:center;padding:30px 0 20px;border-bottom:1px solid #1a2332;margin-bottom:30px}
+.header h1{font-size:28px;color:#fff;font-weight:700}
+.header .subtitle{color:#8899aa;font-size:14px;margin-top:6px}
+.header .updated{color:#556677;font-size:12px;margin-top:4px}
+.stat-row{display:flex;gap:16px;margin-bottom:24px;max-width:1200px;margin:0 auto 24px}
+.stat{flex:1;background:#161b22;border:1px solid #21262d;border-radius:12px;padding:20px;text-align:center}
+.stat .value{font-size:28px;font-weight:700;color:#fff}
+.stat .label{font-size:13px;color:#8899aa;margin-top:4px}
+.grid{display:grid;grid-template-columns:1fr;gap:24px;max-width:1200px;margin:0 auto}
+.card{background:#161b22;border:1px solid #21262d;border-radius:12px;padding:24px}
+.card h2{font-size:16px;color:#fff;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid #1a2332}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;color:#8899aa;font-weight:600;padding:8px 12px;border-bottom:1px solid #1a2332}
+td{padding:8px 12px;border-bottom:1px solid #0d1117}
+@media(max-width:768px){.stat-row{flex-direction:column}}
+</style>
+</head>
+<body>
+<div class="header">
+<h1>System Health</h1>
+<div class="subtitle">Yuri — OpenClaw Infrastructure Monitor</div>
+<div class="updated">Last updated: June 08, 2026 at 05:00 PM UTC</div>
+</div>
+<div class="stat-row">
+<div class="stat"><div class="value" style="color:#00c853">21</div><div class="label">OK</div></div>
+<div class="stat"><div class="value" style="color:#ffc107">2</div><div class="label">WARN</div></div>
+<div class="stat"><div class="value" style="color:#ff1744">0</div><div class="label">FAIL</div></div>
+<div class="stat"><div class="value">0</div><div class="label">Cron Jobs</div></div>
+</div>
+<div class="grid">
+<div class="card">
+<h2>Cron Job Status</h2>
+<table><tr><th>Job</th><th>Last Run</th><th>Duration</th><th>Status</th><th>Errors</th><th>Details</th></tr>
+<tr><td colspan="6" style="color:#556677">No cron data</td></tr>
+</table>
+</div>
+<div class="card">
+<h2>Recent Issues (24h)</h2>
+<div style="padding:8px 0;border-bottom:1px solid #1a2332"><span style="background:#ffc10722;color:#ffc107;padding:2px 8px;border-radius:4px;font-size:11px">WARN</span> <strong>questrade.auth</strong> <span style="color:#556677;font-size:12px">— 2026-06-08 17:00</span><br><span style="color:#8899aa;font-size:12px">Questrade token expires soon. Will auto-refresh on next API call.</span></div><div style="padding:8px 0;border-bottom:1px solid #1a2332"><span style="background:#ffc10722;color:#ffc107;padding:2px 8px;border-radius:4px;font-size:11px">WARN</span> <strong>freshness.market_snapshots</strong> <span style="color:#556677;font-size:12px">— 2026-06-08 17:00</span><br><span style="color:#8899aa;font-size:12px">Data in 'market_snapshots' is 70.0h old (threshold: 24h). Market hours only</span></div><div style="padding:8px 0;border-bottom:1px solid #1a2332"><span style="background:#ffc10722;color:#ffc107;padding:2px 8px;border-radius:4px;font-size:11px">WARN</span> <strong>questrade.auth</strong> <span style="color:#556677;font-size:12px">— 2026-06-08 09:00</span><br><span style="color:#8899aa;font-size:12px">Questrade token expires soon. Will auto-refresh on next API call.</span></div><div style="padding:8px 0;border-bottom:1px solid #1a2332"><span style="background:#ffc10722;color:#ffc107;padding:2px 8px;border-radius:4px;font-size:11px">WARN</span> <strong>freshness.social_signals</strong> <span style="color:#556677;font-size:12px">— 2026-06-08 09:00</span><br><span style="color:#8899aa;font-size:12px">Data in 'social_signals' is 2.2h old (threshold: 2h). </span></div><div style="padding:8px 0;border-bottom:1px solid #1a2332"><span style="background:#ffc10722;color:#ffc107;padding:2px 8px;border-radius:4px;font-size:11px">WARN</span> <strong>freshness.market_snapshots</strong> <span style="color:#556677;font-size:12px">— 2026-06-08 09:00</span><br><span style="color:#8899aa;font-size:12px">Data in 'market_snapshots' is 62.0h old (threshold: 24h). Market hours only</span></div>
+</div>
+</div>
+</body>
+</html>

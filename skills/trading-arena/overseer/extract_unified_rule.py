@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """One-shot YouTube Strategy Digester.
 
-Reads all 98 strategies from yt_strategies, calls GX10 'quick' model to
-synthesize them into a unified TAY framework digest, saves to STRATEGY_DIGEST.md.
+Reads all 98 strategies from yt_strategies, calls GX10 'quick' (→ quick36,
+qwen3.5 MoE 36B) to synthesize them into a unified TAY framework digest,
+saves to STRATEGY_DIGEST.md.
 
 This is a one-time analysis to inform bot variable tuning. Not a runtime
 dependency.

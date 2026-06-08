@@ -39,7 +39,17 @@ SB_KEY = os.environ["SUPABASE_SERVICE_KEY"]
 TG_TOKEN = os.environ.get("TELEGRAM_TRADER_BOT_TOKEN", "")
 TG_CHAT = os.environ.get("TELEGRAM_CHAT_ID", "6545739863")
 
-CRYPTO_BOTS = ["trap-catcher", "momentum-hunter"]
+# Cover exactly the bots cleared for live money (env-driven so the report
+# can't drift behind LIVE_TRADING_BOTS). _load_env() above has already
+# populated os.environ from .env, so this works under cron and standalone.
+CRYPTO_BOTS = [
+    b.strip()
+    for b in os.environ.get(
+        "LIVE_TRADING_BOTS",
+        "trap-catcher,momentum-hunter,correlation-hunter,squeeze-breaker",
+    ).split(",")
+    if b.strip()
+]
 ARENA_LOGS = [
     "/home/tonygale/openclaw/skills/trading-arena/logs/arena_scan.log",
     "/home/tonygale/openclaw/skills/trading-arena/logs/arena_scan_crypto.log",

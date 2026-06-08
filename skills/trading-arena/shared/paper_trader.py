@@ -13,7 +13,10 @@ from config import (
     TELEGRAM_TOKEN, TELEGRAM_CHAT_ID,
     LIVE_TRADING_ENABLED, LIVE_TRADING_BOTS, LIVE_MAX_POSITION_USD,
     LIVE_MAX_EXPOSURE_USD, LIVE_DAILY_LOSS_LIMIT,
+    LIVE_STOCK_TRADING_ENABLED, LIVE_STOCK_TRADING_BOTS, LIVE_STOCK_MAX_POSITION_USD,
+    LIVE_STOCK_MAX_EXPOSURE_USD, LIVE_STOCK_DAILY_LOSS_LIMIT,
     RE_ENTRY_COOLDOWN_MINUTES, KRAKEN_ROUNDTRIP_FEE_PCT,
+    PROMOTION_GATE_ENABLED, MIN_PROMOTION_TRADES,
 )
 # Live trading executor (lazy-loaded to keep paper-only setups working)
 try:
@@ -21,6 +24,24 @@ try:
     _LIVE_AVAILABLE = True
 except ImportError:
     _LIVE_AVAILABLE = False
+# Autonomous stock executor (Questrade) — independent of the manual concierge.
+try:
+    from shared.questrade_executor import (
+        QuestradeExecutor, QuestradeExecutorError, is_stock_trade_eligible_for_live,
+    )
+    _STOCK_LIVE_AVAILABLE = True
+except ImportError:
+    _STOCK_LIVE_AVAILABLE = False
+
+
+def _venue_for(symbol):
+    """Routing seam: crypto symbols are exactly those in KRAKEN_PAIR_MAP;
+    everything else (AAPL, SHOP.TO, ...) is a stock routed to Questrade.
+    Crypto classification is unchanged from the original inline test, so the
+    crypto live path is behaviorally identical."""
+    if _LIVE_AVAILABLE and symbol in KRAKEN_PAIR_MAP:
+        return "kraken"
+    return "stock"
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -149,28 +170,87 @@ class PaperTrader:
         """Check if bot can open a new position."""
         return self.get_position_count() < MAX_CONCURRENT_POS
 
-    def _live_exposure_usd(self):
-        """Sum of all currently-open LIVE position USD values across all bots."""
-        live_open = _supabase_get(
-            "arena_trades?paper=eq.false&status=eq.open&select=qty,entry_price"
-        ) or []
-        return sum((p.get("qty") or 0) * (p.get("entry_price") or 0) for p in live_open)
+    def _live_exposure_usd(self, venue="kraken"):
+        """Sum of open LIVE position USD across all bots, scoped to one venue.
 
-    def _live_daily_pnl(self):
-        """Sum of all LIVE closed trades' P&L today across all bots."""
+        Venue is classified per-row by symbol so the crypto book and the stock
+        book have INDEPENDENT exposure caps (a stock position can never eat the
+        $65 crypto cap, and vice-versa). Crypto numbers are unchanged today
+        because no live stock rows exist yet."""
+        live_open = _supabase_get(
+            "arena_trades?paper=eq.false&status=eq.open&select=symbol,qty,entry_price"
+        ) or []
+        return sum(
+            (p.get("qty") or 0) * (p.get("entry_price") or 0)
+            for p in live_open if _venue_for(p.get("symbol", "")) == venue
+        )
+
+    def _live_daily_pnl(self, venue="kraken"):
+        """Sum of LIVE closed-trade P&L today across all bots, scoped to one
+        venue (independent daily-loss limits for crypto vs stock)."""
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         closed = _supabase_get(
             f"arena_trades?paper=eq.false&status=eq.closed"
-            f"&closed_at=gte.{today}T00:00:00Z&select=pnl"
+            f"&closed_at=gte.{today}T00:00:00Z&select=symbol,pnl"
         ) or []
-        return sum(t.get("pnl", 0) for t in closed)
+        return sum(
+            t.get("pnl", 0) for t in closed
+            if _venue_for(t.get("symbol", "")) == venue
+        )
+
+    def _promotion_ok(self):
+        """Fee-aware promotion gate. A bot may trade LIVE crypto only after it
+        has proven a real edge in PAPER: >= MIN_PROMOTION_TRADES closed paper
+        trades whose mean net-of-fee expectancy is positive at 95% confidence
+        (CI lower bound > 0). Net% = realised gross% (from entry/exit prices,
+        side-aware — NOT the stored pnl_pct, whose semantics differ paper vs
+        live) minus the active round-trip fee. Fails CLOSED on any error or
+        thin data. Returns (ok, reason)."""
+        if not PROMOTION_GATE_ENABLED:
+            return True, "promotion-gate disabled (explicit env bypass)"
+        import math
+        import statistics
+        rows = _supabase_get(
+            f"arena_trades?bot_id=eq.{self.bot_id}&status=eq.closed&paper=eq.true"
+            "&select=entry_price,exit_price,side&limit=5000"
+        )
+        if rows is None:
+            return False, "promotion gate: paper-history query failed (fail-closed)"
+        fee_pct = KRAKEN_ROUNDTRIP_FEE_PCT * 100.0
+        nets = []
+        for r in rows:
+            try:
+                e = float(r.get("entry_price") or 0)
+                x = float(r.get("exit_price") or 0)
+            except (TypeError, ValueError):
+                continue
+            if e <= 0:
+                continue
+            gross = (x - e) / e * 100 if (r.get("side") or "BUY") == "BUY" else (e - x) / e * 100
+            nets.append(gross - fee_pct)
+        n = len(nets)
+        if n < MIN_PROMOTION_TRADES:
+            return False, f"promotion gate: paper n={n} < {MIN_PROMOTION_TRADES}"
+        mean = statistics.mean(nets)
+        sd = statistics.pstdev(nets) if n > 1 else 0.0
+        ci_lo = mean - 1.96 * (sd / math.sqrt(n))
+        if ci_lo <= 0:
+            return False, (f"promotion gate: paper netE {mean:+.3f}%/trade, "
+                           f"95%CI lo {ci_lo:+.3f}≤0 (no proven edge, n={n})")
+        return True, f"promotion gate PASSED: netE {mean:+.3f}%/trade, 95%CI lo {ci_lo:+.3f}>0, n={n}"
 
     def _try_live_trade(self, symbol, price, side, position_size):
-        """Attempt to execute a live trade on Kraken.
+        """Attempt to execute a live trade on the symbol's venue.
 
-        Returns (success, kraken_data, reason). On any failure, returns
-        (False, None, reason_string) and the caller falls back to paper.
+        Routes crypto symbols to Kraken (unchanged) and stock symbols to the
+        autonomous Questrade path. Returns (success, data, reason). On any
+        failure, returns (False, None, reason_string) and the caller falls
+        back to paper.
         """
+        if _venue_for(symbol) == "stock":
+            return self._try_live_stock_trade(symbol, price, side, position_size)
+
+        # ===== CRYPTO (Kraken) — path unchanged =====
         # Gate 1: live trading available
         if not _LIVE_AVAILABLE:
             return False, None, "kraken_executor module not loaded"
@@ -182,12 +262,18 @@ class PaperTrader:
         if not eligible:
             return False, None, reason
 
+        # Gate 2.5: fee-aware promotion gate — the bot must have a statistically
+        # proven, fee-beating edge in paper before it can touch real money.
+        promoted, prom_reason = self._promotion_ok()
+        if not promoted:
+            return False, None, prom_reason
+
         # Gate 3: portfolio-level safety
-        exposure = self._live_exposure_usd()
+        exposure = self._live_exposure_usd(venue="kraken")
         if exposure + position_size > LIVE_MAX_EXPOSURE_USD:
             return False, None, f"exposure ${exposure:.2f}+${position_size:.2f} > LIVE_MAX_EXPOSURE_USD ${LIVE_MAX_EXPOSURE_USD}"
 
-        daily_pnl = self._live_daily_pnl()
+        daily_pnl = self._live_daily_pnl(venue="kraken")
         if daily_pnl <= LIVE_DAILY_LOSS_LIMIT:
             return False, None, f"daily live P&L ${daily_pnl:.2f} hit limit ${LIVE_DAILY_LOSS_LIMIT}"
 
@@ -201,6 +287,45 @@ class PaperTrader:
             return True, result, "ok"
         except KrakenExecutorError as e:
             return False, None, f"Kraken error: {str(e)[:120]}"
+        except Exception as e:
+            return False, None, f"unexpected error: {type(e).__name__}: {str(e)[:120]}"
+
+    def _try_live_stock_trade(self, symbol, price, side, position_size):
+        """Autonomous Questrade path — gate parity with the crypto path, but
+        an independent stock book (own exposure/loss caps) and an extra hard
+        market-hours gate inside the executor. Real POST only when
+        LIVE_STOCK_ALLOW_ORDERS=true; otherwise dry-run (no Questrade order)."""
+        # Gate 1: stock executor available + autonomous master on
+        if not _STOCK_LIVE_AVAILABLE:
+            return False, None, "questrade_executor module not loaded"
+        if not LIVE_STOCK_TRADING_ENABLED:
+            return False, None, "LIVE_STOCK_TRADING_ENABLED=false"
+
+        # Gate 2: bot eligibility (+ per-trade size cap)
+        eligible, reason = is_stock_trade_eligible_for_live(self.bot_id, symbol, position_size)
+        if not eligible:
+            return False, None, reason
+
+        # Gate 3: portfolio-level safety (stock book only)
+        exposure = self._live_exposure_usd(venue="stock")
+        if exposure + position_size > LIVE_STOCK_MAX_EXPOSURE_USD:
+            return False, None, f"stock exposure ${exposure:.2f}+${position_size:.2f} > LIVE_STOCK_MAX_EXPOSURE_USD ${LIVE_STOCK_MAX_EXPOSURE_USD}"
+
+        daily_pnl = self._live_daily_pnl(venue="stock")
+        if daily_pnl <= LIVE_STOCK_DAILY_LOSS_LIMIT:
+            return False, None, f"daily live stock P&L ${daily_pnl:.2f} hit limit ${LIVE_STOCK_DAILY_LOSS_LIMIT}"
+
+        # All gates passed — call Questrade (executor enforces market-hours +
+        # LIVE_STOCK_ALLOW_ORDERS validate switch).
+        try:
+            executor = QuestradeExecutor()
+            result = executor.execute_arena_trade(
+                symbol=symbol, side=side,
+                position_size_usd=position_size, current_price=price
+            )
+            return True, result, "ok"
+        except QuestradeExecutorError as e:
+            return False, None, f"Questrade error: {str(e)[:120]}"
         except Exception as e:
             return False, None, f"unexpected error: {type(e).__name__}: {str(e)[:120]}"
 
@@ -222,6 +347,9 @@ class PaperTrader:
         if (LIVE_TRADING_ENABLED and self.bot_id in LIVE_TRADING_BOTS
                 and symbol in (KRAKEN_PAIR_MAP if _LIVE_AVAILABLE else {})):
             position_size = min(position_size, LIVE_MAX_POSITION_USD)
+        elif (LIVE_STOCK_TRADING_ENABLED and self.bot_id in LIVE_STOCK_TRADING_BOTS
+                and _venue_for(symbol) == "stock"):
+            position_size = min(position_size, LIVE_STOCK_MAX_POSITION_USD)
         if position_size <= 0 or price <= 0:
             return None
 
@@ -269,8 +397,12 @@ class PaperTrader:
 
         # === PAPER TRADE PATH ===
         # If eligibility was checked and FAILED (not just "not eligible"), surface why
-        was_attempted_live = (LIVE_TRADING_ENABLED and self.bot_id in LIVE_TRADING_BOTS
-                              and symbol in (KRAKEN_PAIR_MAP if _LIVE_AVAILABLE else {}))
+        was_attempted_live = (
+            (LIVE_TRADING_ENABLED and self.bot_id in LIVE_TRADING_BOTS
+             and symbol in (KRAKEN_PAIR_MAP if _LIVE_AVAILABLE else {}))
+            or (LIVE_STOCK_TRADING_ENABLED and self.bot_id in LIVE_STOCK_TRADING_BOTS
+                and _venue_for(symbol) == "stock")
+        )
         if was_attempted_live and live_reason and live_reason != "ok":
             print(f"  [{self.bot_name}] Live blocked: {live_reason} — falling back to paper", file=sys.stderr)
             _send_telegram(
@@ -315,7 +447,27 @@ class PaperTrader:
         # If this is a LIVE position, place the closing order on Kraken first
         live_close_order_id = None
         live_close_failed = False
-        if is_live and _LIVE_AVAILABLE:
+        if is_live and _venue_for(symbol) == "stock" and _STOCK_LIVE_AVAILABLE:
+            # ===== STOCK live close (Questrade) =====
+            close_side = "Sell" if side == "BUY" else "Buy"
+            try:
+                executor = QuestradeExecutor()
+                allow = os.environ.get("LIVE_STOCK_ALLOW_ORDERS", "false").lower() == "true"
+                result = executor.place_fractional_market(
+                    symbol=symbol, side=close_side,
+                    qty=qty, validate=not allow
+                )
+                live_close_order_id = result.get("order_id")
+                print(f"  [{self.bot_name}] LIVE STOCK CLOSE order placed: {live_close_order_id}",
+                      file=sys.stderr)
+            except Exception as e:
+                live_close_failed = True
+                print(f"  [{self.bot_name}] LIVE STOCK CLOSE FAILED: {e}", file=sys.stderr)
+                _send_telegram(
+                    f"⚠ <b>{self.bot_name}</b> LIVE STOCK CLOSE FAILED for {symbol}\n"
+                    f"Error: {str(e)[:200]}\nMANUAL INTERVENTION REQUIRED"
+                )
+        elif is_live and _LIVE_AVAILABLE:
             close_side = "sell" if side == "BUY" else "buy"
             try:
                 executor = KrakenExecutor()

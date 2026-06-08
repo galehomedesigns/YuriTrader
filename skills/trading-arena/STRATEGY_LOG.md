@@ -47,7 +47,7 @@ to live trading.
 │  9:00 AM   — pre-market game plan               │
 │  4:30 PM   — daily autopsy + TAY analytics      │
 │  Friday 6PM — weekly super-prompt               │
-│  Uses GX10 'quick' (qwen3.5:35b) model          │
+│  Uses GX10 'quick' → quick36 (qwen3.5 MoE 36B)  │
 └─────────────────────────────────────────────────┘
 ```
 

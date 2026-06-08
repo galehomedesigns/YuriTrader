@@ -62,15 +62,56 @@ LIVE_TRADING_BOTS = [b.strip() for b in os.environ.get("LIVE_TRADING_BOTS", "").
 LIVE_MAX_POSITION_USD = float(os.environ.get("LIVE_MAX_POSITION_USD", "5.0"))
 LIVE_MAX_EXPOSURE_USD = float(os.environ.get("LIVE_MAX_EXPOSURE_USD", "10.0"))
 LIVE_DAILY_LOSS_LIMIT = float(os.environ.get("LIVE_DAILY_LOSS_LIMIT", "-3.0"))
-# Estimated round-trip Kraken taker fee (entry + exit) as a fraction of
-# notional. Kraken taker ≈ 0.40%/side ⇒ ~0.80% round trip. The executor does
-# not call QueryOrders to fetch the exact fill fee, so recorded live P&L was
-# price-only and the LIVE_DAILY_LOSS_LIMIT kill switch read an understated
-# number (tripped late). paper_trader subtracts this estimate from live pnl at
-# close; trap_catcher uses it as a profit hurdle so it stops scratching wins
-# that fees turn negative. Conservative; override via .env if the fee tier
-# changes, or replace with exact QueryOrders capture later.
-KRAKEN_ROUNDTRIP_FEE_PCT = float(os.environ.get("KRAKEN_ROUNDTRIP_FEE_PCT", "0.008"))
+# Kraken fee model. Per-side rates in PERCENT. Defaults below are the
+# EMPIRICALLY MEASURED rates for THIS account (not Kraken's generic doc
+# tier): taker 0.80%/side (market, measured 2026-05-18, .env-confirmed) and
+# maker 0.40%/side (post-only limit, measured 2026-05-18 via a real resting
+# XRPUSD round-trip — both legs filled at exactly 0.4000%/side). Both still
+# drop with 30-day volume. KRAKEN_ORDER_MODE selects which the executor uses
+# and therefore which round-trip the accounting/kill-switch assume.
+KRAKEN_TAKER_FEE_PCT = float(os.environ.get("KRAKEN_TAKER_FEE_PCT", "0.80"))   # %/side, market (measured 2026-05-18)
+KRAKEN_MAKER_FEE_PCT = float(os.environ.get("KRAKEN_MAKER_FEE_PCT", "0.40"))   # %/side, post-only limit (measured 2026-05-18)
+KRAKEN_ORDER_MODE = os.environ.get("KRAKEN_ORDER_MODE", "market").strip().lower()  # market | post_only
+# Round-trip fee as a FRACTION of notional (= 2 sides at the active mode's
+# rate). paper_trader subtracts this from live pnl at close; trap_catcher uses
+# it as a profit hurdle; the LIVE_DAILY_LOSS_LIMIT kill switch reads the netted
+# pnl. With measured defaults this resolves to 0.016 (taker, market mode) or
+# 0.008 (maker, post_only mode). Backtest 2026-05-17 proved no bot beats even
+# the lower maker round-trip — switching to post-only is necessary, not
+# sufficient; it does not by itself create an edge.
+# An explicit KRAKEN_ROUNDTRIP_FEE_PCT in .env still overrides everything.
+_kraken_side_pct = KRAKEN_MAKER_FEE_PCT if KRAKEN_ORDER_MODE == "post_only" else KRAKEN_TAKER_FEE_PCT
+KRAKEN_ROUNDTRIP_FEE_PCT = float(
+    os.environ.get("KRAKEN_ROUNDTRIP_FEE_PCT", str(round(_kraken_side_pct * 2 / 100, 6)))
+)
+
+# === FEE-AWARE PROMOTION GATE ===
+# A bot may only place LIVE crypto orders after it has proven a real,
+# fee-beating edge in PAPER: >= MIN_PROMOTION_TRADES closed paper trades whose
+# mean net-of-fee expectancy is positive at 95% confidence (CI lower bound > 0).
+# This is the structural safeguard that would have prevented the 2026-05 live
+# bleed — no bot in the arena has ever passed it (backtest 2026-05-17). Enabled
+# by default; bypass must be explicit and is surfaced in the trade reason.
+PROMOTION_GATE_ENABLED = os.environ.get("PROMOTION_GATE_ENABLED", "true").lower() == "true"
+MIN_PROMOTION_TRADES = int(os.environ.get("MIN_PROMOTION_TRADES", "100"))
+
+# === AUTONOMOUS STOCK TRADING (real money on Questrade) ===
+# Fully independent of the manual concierge (QUESTRADE_ALLOW_TRADING /
+# MANUAL_STOCK_TRADING_ENABLED). Autonomous real orders require ALL of:
+#   1. LIVE_STOCK_TRADING_ENABLED=true  (autonomous master / eligibility)
+#   2. bot_id in LIVE_STOCK_TRADING_BOTS (per-bot allowlist)
+#   3. LIVE_STOCK_ALLOW_ORDERS=true     (validate-mode switch — false ⇒ dry-run)
+#   4. US equity market open (hard time gate, enforced in questrade_executor)
+# (1)+(2) let the path execute; (3) decides real-POST vs dry-run; (4) is a hard
+# off-hours block on real orders. This mirrors the crypto three-gate model
+# (LIVE_TRADING_ENABLED / LIVE_TRADING_BOTS / KRAKEN_ALLOW_TRADING) and is
+# fully independent of the manual concierge gates.
+LIVE_STOCK_TRADING_ENABLED = os.environ.get("LIVE_STOCK_TRADING_ENABLED", "false").lower() == "true"
+LIVE_STOCK_ALLOW_ORDERS = os.environ.get("LIVE_STOCK_ALLOW_ORDERS", "false").lower() == "true"
+LIVE_STOCK_TRADING_BOTS = [b.strip() for b in os.environ.get("LIVE_STOCK_TRADING_BOTS", "").split(",") if b.strip()]
+LIVE_STOCK_MAX_POSITION_USD = float(os.environ.get("LIVE_STOCK_MAX_POSITION_USD", "50.0"))
+LIVE_STOCK_MAX_EXPOSURE_USD = float(os.environ.get("LIVE_STOCK_MAX_EXPOSURE_USD", "200.0"))
+LIVE_STOCK_DAILY_LOSS_LIMIT = float(os.environ.get("LIVE_STOCK_DAILY_LOSS_LIMIT", "-25.0"))
 
 # === HUMAN-IN-THE-LOOP CONCIERGE (Telegram) ===
 MANUAL_TRADING_ENABLED = os.environ.get("MANUAL_TRADING_ENABLED", "false").lower() == "true"

@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BC Procurement Intelligence — Decades Developments</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242836;
+    --border: #2d3148;
+    --text: #e4e6f0;
+    --text-dim: #8b8fa3;
+    --accent: #6366f1;
+    --accent2: #818cf8;
+    --green: #22c55e;
+    --yellow: #eab308;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --orange: #f97316;
+    --cyan: #06b6d4;
+    --pink: #ec4899;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  .header {
+    background: linear-gradient(135deg, #1e1b4b, #312e81);
+    padding: 24px 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header h1 { font-size: 24px; font-weight: 700; }
+  .header .subtitle { color: var(--text-dim); font-size: 14px; margin-top: 4px; }
+  .header .meta { display: flex; gap: 20px; margin-top: 12px; font-size: 13px; color: var(--text-dim); }
+  .header .meta span { display: flex; align-items: center; gap: 6px; }
+  .header .meta .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; }
+
+  .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .kpi .label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+  .kpi .value { font-size: 36px; font-weight: 700; margin-top: 4px; }
+  .kpi .change { font-size: 12px; margin-top: 4px; }
+
+  .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  @media (max-width: 900px) { .charts-row { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .card h3 { font-size: 14px; color: var(--text-dim); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .bar-chart .bar-item { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .bar-chart .bar-label { width: 140px; font-size: 13px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-chart .bar-track { flex: 1; height: 28px; background: var(--surface2); border-radius: 6px; overflow: hidden; position: relative; }
+  .bar-chart .bar-fill { height: 100%; border-radius: 6px; display: flex; align-items: center; padding-left: 10px; font-size: 12px; font-weight: 600; min-width: 30px; transition: width 0.6s ease; }
+  .bar-chart .bar-count { font-size: 13px; width: 40px; text-align: right; color: var(--text-dim); }
+
+  .donut-container { display: flex; justify-content: center; align-items: center; gap: 24px; flex-wrap: wrap; }
+  .donut-legend { font-size: 13px; }
+  .donut-legend .item { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .donut-legend .swatch { width: 12px; height: 12px; border-radius: 3px; }
+
+  .table-wrapper { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    text-align: left;
+    padding: 10px 12px;
+    background: var(--surface2);
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+  }
+  tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  tbody tr:hover { background: var(--surface2); }
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .tag-construction { background: rgba(239,68,68,0.15); color: var(--red); }
+  .tag-services { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .tag-consulting { background: rgba(168,85,247,0.15); color: #a855f7; }
+  .tag-goods { background: rgba(249,115,22,0.15); color: var(--orange); }
+  .tag-it { background: rgba(6,182,212,0.15); color: var(--cyan); }
+  .tag-engineering { background: rgba(236,72,153,0.15); color: var(--pink); }
+  .tag-general { background: rgba(139,143,163,0.15); color: var(--text-dim); }
+  .tag-open { background: rgba(34,197,94,0.15); color: var(--green); }
+  .tag-closed { background: rgba(239,68,68,0.15); color: var(--red); }
+
+  a { color: var(--accent2); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .filters { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .filters select, .filters input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+  }
+  .filters input { min-width: 250px; }
+
+  .loading { text-align: center; padding: 60px; color: var(--text-dim); font-size: 16px; }
+
+  .region-map { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .region-card {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 14px;
+    text-align: center;
+  }
+  .region-card .name { font-size: 12px; color: var(--text-dim); }
+  .region-card .count { font-size: 24px; font-weight: 700; margin-top: 4px; }
+
+  .scroll-table { max-height: 500px; overflow-y: auto; }
+</style>
+<style>
+.banner-archived { background:#3a2a1a; border:1px solid #d97706; border-radius:8px;
+  color:#fbbf24; padding:12px 16px; margin:20px auto; max-width:1160px; font-family:-apple-system,sans-serif; }
+.banner-archived a { color:#fbbf24; }
+</style>
+</head>
+<body>
+<div class="banner-archived">
+<strong>Archived 2026-04-23 — resumable.</strong>
+The Supabase <code>tenders</code> table and procurement code remain in place.
+Data shown below was last refreshed 2026-03-24. To revive: re-enable the
+<code>smart_crawl.sh</code> line in <code>crontab -e</code> and see
+<code>~/openclaw/skills/procurement/SKILL.md</code>.
+</div>
+<div class="header">
+  <h1>BC Procurement Intelligence</h1>
+  <div class="subtitle">Decades Developments — Tender Database</div>
+  <div class="meta">
+    <span><span class="dot"></span> Live from Supabase</span>
+    <span id="last-update"></span>
+    <span id="source-count"></span>
+  </div>
+</div>
+
+<div class="container">
+  <div id="loading" class="loading">Loading procurement data...</div>
+  <div id="content" style="display:none;">
+
+    <div class="kpi-row" id="kpis"></div>
+
+    <div class="charts-row">
+      <div class="card">
+        <h3>Tenders by Source</h3>
+        <div class="bar-chart" id="chart-source"></div>
+      </div>
+      <div class="card">
+        <h3>Tenders by Category</h3>
+        <div class="donut-container">
+          <canvas id="donut-category" width="200" height="200"></canvas>
+          <div class="donut-legend" id="legend-category"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="charts-row">
+      <div class="card">
+        <h3>By Region</h3>
+        <div class="region-map" id="region-map"></div>
+      </div>
+      <div class="card">
+        <h3>Closing Soon (Next 14 Days)</h3>
+        <div class="bar-chart" id="chart-timeline"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 24px;">
+      <h3>All Open Tenders</h3>
+      <div class="filters">
+        <input type="text" id="search" placeholder="Search tenders..." oninput="filterTable()">
+        <select id="filter-source" onchange="filterTable()"><option value="">All Sources</option></select>
+        <select id="filter-category" onchange="filterTable()"><option value="">All Categories</option></select>
+      </div>
+      <div class="scroll-table table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Organization</th>
+              <th>Category</th>
+              <th>Source</th>
+              <th>Closing Date</th>
+              <th>Days Left</th>
+            </tr>
+          </thead>
+          <tbody id="tender-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Data Sources</h3>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Source</th>
+              <th>Type</th>
+              <th>Platform</th>
+              <th>Region</th>
+              <th>Last Crawled</th>
+              <th>Tenders</th>
+            </tr>
+          </thead>
+          <tbody id="source-table"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://qrszwxlfsvvtyonkpfjm.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFyc3p3eGxmc3Z2dHlvbmtwZmptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3MDM3MDcsImV4cCI6MjA4OTI3OTcwN30.hRyaGJAPg8MhhGkrT9qdZ-qtuhLQjph4phvkksO0TZI';
+
+const COLORS = ['#6366f1','#3b82f6','#06b6d4','#22c55e','#eab308','#f97316','#ef4444','#ec4899','#a855f7','#8b5cf6'];
+const CAT_COLORS = {
+  'Construction': '#ef4444', 'Services': '#3b82f6', 'Consulting': '#a855f7',
+  'Goods & Supply': '#f97316', 'IT & Technology': '#06b6d4', 'Engineering': '#ec4899', 'General': '#6b7280'
+};
+
+let allTenders = [];
+let allSources = [];
+
+async function fetchData() {
+  const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` };
+
+  const [sourcesResp, tendersResp] = await Promise.all([
+    fetch(`${SUPABASE_URL}/rest/v1/procurement_sources?select=*&order=id`, { headers }),
+    fetch(`${SUPABASE_URL}/rest/v1/tenders?select=id,title,tender_type,organization,status,source_id,closing_date,category,location,url&order=closing_date`, { headers })
+  ]);
+
+  allSources = await sourcesResp.json();
+  allTenders = await tendersResp.json();
+
+  const sourceMap = {};
+  allSources.forEach(s => sourceMap[s.id] = s);
+  allTenders.forEach(t => t._source = sourceMap[t.source_id] || {});
+
+  render();
+}
+
+function render() {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('content').style.display = 'block';
+
+  const now = new Date();
+  const open = allTenders.filter(t => t.status === 'open');
+  const closing7 = open.filter(t => {
+    const d = new Date(t.closing_date);
+    return d > now && (d - now) < 7 * 86400000;
+  });
+
+  // KPIs
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi"><div class="label">Total Tenders</div><div class="value">${allTenders.length}</div></div>
+    <div class="kpi"><div class="label">Open Tenders</div><div class="value" style="color:var(--green)">${open.length}</div></div>
+    <div class="kpi"><div class="label">Closing This Week</div><div class="value" style="color:var(--yellow)">${closing7.length}</div></div>
+    <div class="kpi"><div class="label">Sources Active</div><div class="value" style="color:var(--accent2)">${allSources.length}</div></div>
+    <div class="kpi"><div class="label">Unique Orgs</div><div class="value">${new Set(allTenders.map(t=>t.organization).filter(Boolean)).size}</div></div>
+  `;
+
+  document.getElementById('last-update').textContent = `Updated: ${now.toLocaleString()}`;
+  document.getElementById('source-count').textContent = `${allSources.length} sources, ${allTenders.length} tenders`;
+
+  renderBarChart();
+  renderDonut();
+  renderRegions();
+  renderTimeline();
+  renderTable();
+  renderSourceTable();
+  populateFilters();
+}
+
+function renderBarChart() {
+  const bySource = {};
+  allTenders.forEach(t => {
+    const name = t._source.name || 'Unknown';
+    bySource[name] = (bySource[name] || 0) + 1;
+  });
+  const sorted = Object.entries(bySource).sort((a,b) => b[1]-a[1]);
+  const max = sorted[0]?.[1] || 1;
+
+  document.getElementById('chart-source').innerHTML = sorted.map(([name, count], i) => `
+    <div class="bar-item">
+      <div class="bar-label" title="${name}">${name}</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${(count/max*100)}%;background:${COLORS[i%COLORS.length]}">${count}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderDonut() {
+  const byCat = {};
+  allTenders.forEach(t => {
+    const cat = t.category || 'General';
+    byCat[cat] = (byCat[cat] || 0) + 1;
+  });
+  const sorted = Object.entries(byCat).sort((a,b) => b[1]-a[1]);
+  const total = allTenders.length;
+
+  const canvas = document.getElementById('donut-category');
+  const ctx = canvas.getContext('2d');
+  const cx = 100, cy = 100, r = 80, ir = 50;
+
+  let startAngle = -Math.PI / 2;
+  sorted.forEach(([cat, count]) => {
+    const slice = (count / total) * 2 * Math.PI;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, startAngle, startAngle + slice);
+    ctx.arc(cx, cy, ir, startAngle + slice, startAngle, true);
+    ctx.closePath();
+    ctx.fillStyle = CAT_COLORS[cat] || '#6b7280';
+    ctx.fill();
+    startAngle += slice;
+  });
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, ir - 2, 0, 2 * Math.PI);
+  ctx.fillStyle = '#1a1d27';
+  ctx.fill();
+  ctx.fillStyle = '#e4e6f0';
+  ctx.font = 'bold 28px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(total, cx, cy - 8);
+  ctx.font = '11px sans-serif';
+  ctx.fillStyle = '#8b8fa3';
+  ctx.fillText('tenders', cx, cy + 12);
+
+  document.getElementById('legend-category').innerHTML = sorted.map(([cat, count]) => `
+    <div class="item">
+      <div class="swatch" style="background:${CAT_COLORS[cat]||'#6b7280'}"></div>
+      ${cat}: ${count} (${Math.round(count/total*100)}%)
+    </div>
+  `).join('');
+}
+
+function renderRegions() {
+  const byRegion = {};
+  allTenders.forEach(t => {
+    const region = t._source.region || 'Unknown';
+    byRegion[region] = (byRegion[region] || 0) + 1;
+  });
+  const sorted = Object.entries(byRegion).sort((a,b) => b[1]-a[1]);
+
+  document.getElementById('region-map').innerHTML = sorted.map(([region, count], i) => `
+    <div class="region-card">
+      <div class="count" style="color:${COLORS[i%COLORS.length]}">${count}</div>
+      <div class="name">${region}</div>
+    </div>
+  `).join('');
+}
+
+function renderTimeline() {
+  const now = new Date();
+  const in14 = new Date(now.getTime() + 14 * 86400000);
+  const byDay = {};
+
+  allTenders.filter(t => {
+    const d = new Date(t.closing_date);
+    return d > now && d <= in14;
+  }).forEach(t => {
+    const day = new Date(t.closing_date).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
+    byDay[day] = (byDay[day] || 0) + 1;
+  });
+
+  const sorted = Object.entries(byDay);
+  const max = Math.max(...sorted.map(e => e[1]), 1);
+
+  document.getElementById('chart-timeline').innerHTML = sorted.length ? sorted.map(([day, count], i) => `
+    <div class="bar-item">
+      <div class="bar-label">${day}</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${(count/max*100)}%;background:${count>5?'#ef4444':count>2?'#eab308':'#22c55e'}">${count}</div>
+      </div>
+    </div>
+  `).join('') : '<div style="color:var(--text-dim);text-align:center;padding:20px">No tenders closing in next 14 days</div>';
+}
+
+function renderTable() {
+  const now = new Date();
+  const tbody = document.getElementById('tender-table');
+  const rows = allTenders
+    .filter(t => t.status === 'open')
+    .sort((a,b) => new Date(a.closing_date) - new Date(b.closing_date))
+    .map(t => {
+      const closing = t.closing_date ? new Date(t.closing_date) : null;
+      const daysLeft = closing ? Math.ceil((closing - now) / 86400000) : '—';
+      const catClass = (t.category || 'general').toLowerCase().replace(/[& ]+/g, '-');
+      const urgency = daysLeft <= 3 ? 'color:var(--red);font-weight:700' : daysLeft <= 7 ? 'color:var(--yellow)' : '';
+
+      return `<tr data-source="${t._source.name||''}" data-category="${t.category||''}" data-title="${(t.title||'').toLowerCase()}">
+        <td>${t.url ? `<a href="${t.url}" target="_blank">${t.title||'—'}</a>` : (t.title||'—')}</td>
+        <td>${t.organization||'—'}</td>
+        <td><span class="tag tag-${catClass}">${t.category||'General'}</span></td>
+        <td>${t._source.name||'—'}</td>
+        <td>${closing ? closing.toLocaleDateString('en-CA', {month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
+        <td style="${urgency}">${daysLeft}</td>
+      </tr>`;
+    });
+  tbody.innerHTML = rows.join('');
+}
+
+function renderSourceTable() {
+  const bySource = {};
+  allTenders.forEach(t => { bySource[t.source_id] = (bySource[t.source_id] || 0) + 1; });
+
+  document.getElementById('source-table').innerHTML = allSources.map(s => `
+    <tr>
+      <td><a href="${s.url}" target="_blank">${s.name}</a></td>
+      <td>${s.source_type}</td>
+      <td>${s.platform||'—'}</td>
+      <td>${s.region||'—'}</td>
+      <td>${s.last_crawled_at ? new Date(s.last_crawled_at).toLocaleString() : 'Never'}</td>
+      <td>${bySource[s.id]||0}</td>
+    </tr>
+  `).join('');
+}
+
+function populateFilters() {
+  const sources = [...new Set(allTenders.map(t => t._source.name).filter(Boolean))].sort();
+  const cats = [...new Set(allTenders.map(t => t.category).filter(Boolean))].sort();
+
+  const srcSelect = document.getElementById('filter-source');
+  sources.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; srcSelect.appendChild(o); });
+
+  const catSelect = document.getElementById('filter-category');
+  cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; catSelect.appendChild(o); });
+}
+
+function filterTable() {
+  const search = document.getElementById('search').value.toLowerCase();
+  const source = document.getElementById('filter-source').value;
+  const category = document.getElementById('filter-category').value;
+
+  document.querySelectorAll('#tender-table tr').forEach(row => {
+    const matchSearch = !search || row.dataset.title.includes(search);
+    const matchSource = !source || row.dataset.source === source;
+    const matchCat = !category || row.dataset.category === category;
+    row.style.display = (matchSearch && matchSource && matchCat) ? '' : 'none';
+  });
+}
+
+fetchData().catch(err => {
+  document.getElementById('loading').textContent = 'Error loading data: ' + err.message;
+});
+</script>
+</body>
+</html>

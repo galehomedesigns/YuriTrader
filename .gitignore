@@ -29,6 +29,9 @@ workspace/
 *.sqlite
 *.sqlite3
 
+# === Binaries (vendored, not source) ===
+bin/caddy
+
 # === Build artifacts ===
 __pycache__/
 **/__pycache__/

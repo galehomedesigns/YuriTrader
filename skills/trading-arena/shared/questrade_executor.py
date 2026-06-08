@@ -25,6 +25,9 @@ import time
 import urllib.parse
 import urllib.request
 import urllib.error
+from datetime import datetime
+from decimal import Decimal, ROUND_DOWN
+from zoneinfo import ZoneInfo
 
 AUTH_URL = "https://login.questrade.com/oauth2/token"
 TOKEN_FILE = os.environ.get(
@@ -446,3 +449,184 @@ class QuestradeExecutor:
         # Validate-only unless both gates are open
         validate = not gate1
         return self.place_market_order(symbol, side, qty, validate=validate)
+
+    # ===== Autonomous arena entry point =====
+
+    @staticmethod
+    def is_market_open():
+        """True during NYSE/NASDAQ regular hours (9:30 AM–4:00 PM ET, Mon-Fri).
+
+        Stocks (unlike crypto) only trade during the regular session, so this
+        is a HARD gate on real autonomous orders. Mirrors the convention in
+        concierge/stock_buy_watcher.py:in_market_hours().
+        """
+        now_et = datetime.now(ZoneInfo("America/New_York"))
+        if now_et.weekday() >= 5:
+            return False
+        hhmm = now_et.hour * 100 + now_et.minute
+        return 930 <= hhmm < 1600
+
+    # Questrade fractional precision: account history shows fills to 4 dp
+    # (e.g. 0.0319, 4.5662) and AAPL minTick pivot 0 = 0.0001.
+    FRACTIONAL_DECIMALS = 4
+
+    @staticmethod
+    def _floor_qty(value, decimals):
+        """Floor a quantity to `decimals` places. Floor (never round up) so
+        qty*price can never exceed the dollar budget / buying power."""
+        q = Decimal(1).scaleb(-decimals)            # e.g. 0.0001
+        return float(Decimal(str(value)).quantize(q, rounding=ROUND_DOWN))
+
+    def place_fractional_market(self, symbol, side, qty, validate=True,
+                                price=None, currency=None):
+        """Place a FRACTIONAL market order (decimal `qty` shares).
+
+        Fractional orders on Questrade are Market-only. When validate=True we
+        hit the official non-placing POST /v1/accounts/{id}/orders/impact
+        endpoint (real server-side preview — no order created); when False we
+        POST the live order to /v1/accounts/{id}/orders. Distinct from
+        place_market_order() (whole-share, manual concierge) which is left
+        untouched.
+        """
+        side_norm = side.capitalize()
+        if side_norm not in ("Buy", "Sell"):
+            raise QuestradeExecutorError(f"side must be Buy or Sell (got {side})")
+        qty = self._floor_qty(qty, self.FRACTIONAL_DECIMALS)
+        if qty <= 0:
+            raise QuestradeExecutorError(f"fractional qty must be > 0 (got {qty})")
+
+        if price is None or currency is None:
+            quote = self.get_quote(symbol)
+            price = price or (quote["ask"] if side_norm == "Buy" else quote["bid"]) \
+                or quote["last"]
+            currency = currency or quote["currency"]
+
+        sid = self.resolve_symbol_id(symbol)
+        acct = self.get_account_id()
+        order = {
+            "accountNumber": acct,
+            "symbolId": sid,
+            "quantity": qty,                 # decimal — fractional
+            "orderType": "Market",           # fractional REQUIRES Market
+            "timeInForce": "Day",
+            "action": side_norm,
+            "primaryRoute": "AUTO",
+            "secondaryRoute": "AUTO",
+        }
+        total = qty * (price or 0)
+
+        if validate:
+            # Non-placing server-side preview.
+            impact = self._post(f"/v1/accounts/{acct}/orders/impact", order)
+            return {
+                "dry_run": True, "symbol": symbol, "side": side_norm,
+                "qty": qty, "price": price, "total": total, "currency": currency,
+                "order_id": None, "impact": impact,
+            }
+
+        raw = self._post(f"/v1/accounts/{acct}/orders", order)
+        orders = raw.get("orders", [])
+        resp = orders[0] if orders else raw
+        return {
+            "dry_run": False, "symbol": symbol, "side": side_norm,
+            "qty": qty, "price": price, "total": total, "currency": currency,
+            "order_id": resp.get("id"),
+            "state": resp.get("state"),
+            "filled_qty": float(resp.get("totalQuantity") or 0),
+            "fill_price": float(resp.get("avgExecPrice") or price or 0),
+            "raw": resp,
+        }
+
+    def execute_arena_trade(self, symbol, side, position_size_usd,
+                            current_price=None):
+        """High-level autonomous entry point used by paper_trader.py.
+
+        USD-sized like KrakenExecutor.execute_arena_trade. Questrade supports
+        FRACTIONAL market orders (verified against this account's order
+        history), so a small per-trade budget buys a fractional slice of ANY
+        stock regardless of share price — no whole-share floor. The autonomous
+        validate switch is LIVE_STOCK_ALLOW_ORDERS, deliberately SEPARATE from
+        the manual QUESTRADE_ALLOW_TRADING gate so the concierge is never
+        affected and a full dry-run rehearsal (via /orders/impact) is possible.
+
+        Returns a dict shaped for paper_trader (carries `volume`, `order_id`,
+        `dry_run`); raises QuestradeExecutorError on any pre-trade failure.
+        """
+        # Price the order (ask for buys, bid for sells; fall back to last,
+        # then to the caller-provided current_price).
+        quote = self.get_quote(symbol)
+        side_norm = side.capitalize()
+        price = quote["ask"] if side_norm == "Buy" else quote["bid"]
+        if price <= 0:
+            price = quote["last"]
+        if price <= 0 and current_price:
+            price = float(current_price)
+        if price <= 0:
+            raise QuestradeExecutorError(f"no valid price for {symbol}")
+
+        currency = quote["currency"]
+
+        # Dollar-sized fractional quantity (exactly like crypto: size in $,
+        # convert to a fractional position). Only rejects if the size is so
+        # tiny it rounds below the 0.0001-share minimum.
+        qty = self._floor_qty(position_size_usd / price, self.FRACTIONAL_DECIMALS)
+        if qty <= 0:
+            raise QuestradeExecutorError(
+                f"position ${position_size_usd:.2f} too small for {symbol} "
+                f"@ ${price:.2f} (floors below {10**-self.FRACTIONAL_DECIMALS} share)"
+            )
+        total = qty * price
+
+        # Autonomous validate switch (gate 3) — independent of the manual
+        # QUESTRADE_ALLOW_TRADING gate.
+        allow_orders = os.environ.get("LIVE_STOCK_ALLOW_ORDERS", "false").lower() == "true"
+        validate = not allow_orders
+
+        # Hard market-hours gate: never place a REAL order off-session.
+        # Dry-run (/orders/impact) is allowed any time so the path can be
+        # rehearsed.
+        if not validate and not self.is_market_open():
+            raise QuestradeExecutorError("US market closed (regular session 9:30–16:00 ET)")
+
+        # Pre-trade buying-power check (parity with Kraken's USD balance check).
+        balance = self.get_balance().get(currency, {})
+        buying_power = balance.get("buying_power") or balance.get("cash", 0)
+        if buying_power and total > buying_power:
+            raise QuestradeExecutorError(
+                f"insufficient {currency} buying power: have ${buying_power:.2f}, "
+                f"need ${total:.2f} ({qty} {symbol} @ ${price:.2f})"
+            )
+
+        result = self.place_fractional_market(
+            symbol, side_norm, qty, validate=validate,
+            price=price, currency=currency,
+        )
+        result["volume"] = qty                       # paper_trader reads this
+        result["qty"] = qty
+        result["position_size_usd"] = position_size_usd
+        result["currency"] = currency
+        return result
+
+
+def is_stock_trade_eligible_for_live(bot_id, symbol, position_size_usd):
+    """Env/bot gates checked BEFORE any Questrade call (mirrors
+    kraken_executor.is_trade_eligible_for_live).
+
+    Returns (eligible: bool, reason: str). If False, paper_trader falls back
+    to a paper trade and logs the reason. Note: this only governs whether the
+    autonomous path runs at all — LIVE_STOCK_ALLOW_ORDERS (checked later in
+    execute_arena_trade) decides real-POST vs dry-run, so a dry-run rehearsal
+    is: ENABLED=true + bot allowlisted + ALLOW_ORDERS=false.
+    """
+    if os.environ.get("LIVE_STOCK_TRADING_ENABLED", "false").lower() != "true":
+        return False, "LIVE_STOCK_TRADING_ENABLED=false"
+
+    live_bots = [b.strip() for b in os.environ.get("LIVE_STOCK_TRADING_BOTS", "").split(",") if b.strip()]
+    if bot_id not in live_bots:
+        return False, f"bot {bot_id} not in LIVE_STOCK_TRADING_BOTS"
+
+    max_pos = float(os.environ.get("LIVE_STOCK_MAX_POSITION_USD", "50.0"))
+    if position_size_usd > max_pos:
+        return False, f"position ${position_size_usd:.2f} exceeds LIVE_STOCK_MAX_POSITION_USD ${max_pos}"
+
+    return True, "eligible"
