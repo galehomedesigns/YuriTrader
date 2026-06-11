@@ -525,6 +525,50 @@ def handle_skip_callback(_):
 
 # ========== Routing ==========
 
+_OPENING_STATE = os.environ.get(
+    "OPENING_LIVE_STATE",
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                 "logs", "opening_live_state.json"))
+
+
+def _opening_state():
+    try:
+        return json.load(open(_OPENING_STATE))
+    except (OSError, ValueError):
+        return {}
+
+
+def _opening_awaiting_budget():
+    """True only when the live orchestrator is in its 9:25 'awaiting_budget'
+    window TODAY (ET) — so a stray number isn't captured as a trade amount."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    s = _opening_state()
+    today = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
+    return s.get("phase") == "awaiting_budget" and s.get("date") == today
+
+
+def _parse_budget(t):
+    import re
+    m = re.fullmatch(r"\$?\s*(\d+(?:\.\d{1,2})?)", t.strip())
+    return float(m.group(1)) if m else None
+
+
+def cmd_opening_budget(amount):
+    """Capture the user's 9:25 budget reply -> write into the live state file."""
+    def _h(_):
+        s = _opening_state()
+        s["budget"] = amount
+        try:
+            json.dump(s, open(_OPENING_STATE, "w"))
+        except OSError:
+            pass
+        send_message(f"✅ <b>Opening Power</b>: budget <b>${amount:.2f}</b> set for "
+                     f"today. It'll deploy evenly across the first-bar matches at "
+                     f"9:32 ET. (Reply <code>0</code> to cancel.)")
+    return _h
+
+
 def cmd_opening(_):
     """Opening Power — return the freshest pre-market top-10 (cached by the
     run_opening_scan cron). Non-blocking: reads the cache, never re-scans here."""
@@ -545,6 +589,10 @@ def cmd_opening(_):
 
 def route_message(text):
     t = text.strip().lower()
+    # Opening Power budget capture: a bare number ONLY during the 9:25 window.
+    _amt = _parse_budget(t)
+    if _amt is not None and _opening_awaiting_budget():
+        return cmd_opening_budget(_amt)
     if t.startswith("/opening") or "candlestick" in t or "opening power" in t:
         return cmd_opening
     if t.startswith("/start") or t in ("hi", "hello"):
