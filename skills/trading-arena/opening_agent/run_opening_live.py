@@ -67,19 +67,27 @@ def _write_state(s):
 def phase_confirm(send=True):
     ranked = ranker.rank(universe.scan(), top_n=CANDIDATE_N)
     cands = [r["symbol"] for r in ranked]
-    _write_state({"date": _today(), "phase": "awaiting_budget",
+    armed = live_executor._armed()
+    # Only open the budget-capture window when the agent can actually trade.
+    _write_state({"date": _today(),
+                  "phase": "awaiting_budget" if armed else "notify_only",
                   "candidates": cands, "budget": None})
-    lines = ["🔔 <b>Opening Power — pre-market</b> (live)",
+    if not armed:
+        # Not armed/funded: the pre-market notification is handled by
+        # run_opening_scan — don't prompt for a budget we can't use.
+        print("[confirm] not armed — notify-only, no budget prompt. candidates:", cands)
+        return
+    lines = ["🔔 <b>Opening Power — pre-market</b> (LIVE, armed)",
              f"<i>{_today()} — market opens in ~5 min</i>", "",
              "Top candidates from the scan:",
-             "  " + ", ".join(cands[:CANDIDATE_N]) if cands else "  (none qualifying)",
+             "  " + (", ".join(cands[:CANDIDATE_N]) if cands else "(none qualifying)"),
              "",
              "<b>Reply with the $ amount to trade today</b> (e.g. <code>80</code>).",
-             "It'll be split evenly across whichever ones pass the 9:30 first-bar "
-             "rule. No reply = no trading today. Long-only on this account."]
+             "Split evenly across whichever pass the 9:30 first-bar rule. "
+             "No reply = no trading today. Long-only on this account."]
     if send:
         send_message("\n".join(lines))
-    print("[confirm] candidates:", cands)
+    print("[confirm] armed — budget requested. candidates:", cands)
 
 
 # ── phase: execute (9:32) ────────────────────────────────────────────────────
@@ -115,29 +123,54 @@ def _available_buying_power():
         return None
 
 
+def _fmt_matches_only(matches, armed, budget):
+    lines = ["🎯 <b>Opening Power — first-bar MATCHES</b> (9:32 ET)",
+             "<i>Passed the rule: TIGHT state + power bar + matching location.</i>", ""]
+    for m in matches:
+        lines.append(f"  • <b>{m['symbol']}</b> — {m['side'].upper()}  "
+                     f"entry {m['entry']:.2f} / stop {m['stop']:.2f}")
+    if not armed:
+        lines.append("\n<i>Notification only — agent not armed/funded; no orders placed.</i>")
+    elif not budget:
+        lines.append("\n<i>No budget reply received — no orders placed.</i>")
+    return "\n".join(lines)
+
+
 def phase_execute(send=True):
     st = _read_state()
-    if st.get("date") != _today() or st.get("phase") != "awaiting_budget":
-        print("[execute] no fresh confirm state — skipping."); return
-    budget = st.get("budget")
-    if not budget or float(budget) <= 0:
-        if send:
-            send_message("⏸️ <b>Opening Power</b>: no trade amount received — "
-                         "standing down for today.")
-        print("[execute] no budget confirmed — standing down."); return
+    # Candidates from the 9:25 confirm; if that didn't run, scan fresh now.
+    if st.get("date") == _today() and st.get("candidates"):
+        candidates = st["candidates"]
+    else:
+        candidates = [r["symbol"] for r in ranker.rank(universe.scan(), top_n=CANDIDATE_N)]
+        st = {"date": _today(), "candidates": candidates}
 
+    matches = _find_matches(candidates)
+
+    # ALWAYS notify what matched the criteria — independent of trading/arming.
+    if not matches:
+        if send:
+            send_message("⚪ <b>Opening Power</b> — no first-bar MATCH among today's "
+                         "candidates. Nothing qualifies.")
+        _write_state({**st, "phase": "notified", "matches": [], "placed": []})
+        print("[execute] no matches."); return
+
+    armed = live_executor._armed()
+    budget = st.get("budget")
+
+    # Notify-only when not armed or no budget — message already conveys the matches.
+    if not armed or not budget or float(budget) <= 0:
+        if send:
+            send_message(_fmt_matches_only(matches, armed, budget))
+        _write_state({**st, "phase": "notified", "matches": matches, "placed": []})
+        print(f"[execute] matches={len(matches)} — NOTIFY ONLY (armed={armed}, budget={budget})")
+        return
+
+    # Armed + budget → place live bracket orders.
     bp = _available_buying_power()
     if bp is not None and float(budget) > bp:
         budget = bp
-        print(f"[execute] budget capped to available buying power ${bp:.2f}")
-
-    matches = _find_matches(st.get("candidates", []))
-    if not matches:
-        if send:
-            send_message("⚪ <b>Opening Power</b>: no first-bar MATCH among the "
-                         "candidates — no trades today.")
-        _write_state({**st, "phase": "done", "matches": [], "placed": []}); return
-
+        print(f"[execute] budget capped to buying power ${bp:.2f}")
     allocs = live_executor.plan_allocations(matches, budget)
     ex = live_executor.LiveExecutor()
     placed = [ex.place_bracket(a) for a in allocs if a.get("shares", 0) >= 1]
@@ -145,8 +178,6 @@ def phase_execute(send=True):
         ex.disconnect()
     except Exception:
         pass
-
-    armed = os.environ.get("OPENING_ALLOW_TRADING", "false").lower() == "true"
     _write_state({**st, "phase": "executed", "matches": matches, "placed": placed})
     if send:
         send_message(_fmt_execute(placed, budget, armed))
@@ -170,6 +201,9 @@ def _fmt_execute(placed, budget, armed):
 
 # ── phase: cutoff (9:50) ─────────────────────────────────────────────────────
 def phase_cutoff(send=True):
+    if not live_executor._armed():
+        print("[cutoff] not armed — nothing was traded, nothing to flatten.")
+        return
     ex = live_executor.LiveExecutor()
     try:
         res = ex.flatten_all()
