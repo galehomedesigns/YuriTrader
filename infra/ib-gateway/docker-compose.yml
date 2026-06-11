@@ -60,7 +60,9 @@ services:
       - "127.0.0.1:5900:5900"
 
     healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 4002 || nc -z localhost 4001"]
+      # nc isn't installed in the gnzsnz/ib-gateway image (the old check failed
+      # exit 127 -> false "unhealthy"). Use bash's built-in /dev/tcp instead.
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/4002' || bash -c '</dev/tcp/localhost/4001'"]
       interval: 30s
       timeout: 5s
       retries: 3
