@@ -102,9 +102,11 @@ Honest status, from the logs — *no order (paper or live) was transmitted today
   (`logs/stock_buy_watcher.log`)
 - **Outside market hours** both the buy-watcher and position-watcher logged
   `Outside US market hours — skipping`.
-- **IB Gateway container is not currently running** (`docker ps` shows no
-  `ib-gateway`), and **both gates are off** — so even a firing signal would have
-  produced only a dry-run, and there was no live API session up.
+- **IB Gateway is UP and logged in** (ports 4001/4002 listening; API connects;
+  paper account `DUP633613` reachable). NOTE: `docker ps` returns *permission
+  denied* for the `tonygale` shell (not in the `docker` group) — do NOT read that
+  as "gateway down"; verify with `ss -ltn | grep 400` or an `ib_async` connect.
+  **Both gates remain off** — so even a firing signal produces only a dry-run.
 
 **Bottom line for today:** the pipeline executed end-to-end *up to the signal stage*
 and correctly produced no trades (no qualifying signal + gates closed). It did **not**
@@ -169,7 +171,7 @@ Per `IBKR_SETUP.md` Step 8 — do **not** do this until paper has run cleanly:
 | Code / executor / selector / concierge | ✅ Built |
 | IB Gateway container defined | ✅ Built |
 | Paper account configured (`DUP633613`) | ✅ Configured |
-| Gateway currently running | ❌ Down right now |
+| Gateway currently running | ✅ UP + logged in (ports 4001/4002, paper DUP633613) |
 | Paper order actually verified end-to-end | ⏳ Not confirmed in this record — run §7 |
 | Live creds / funding | ❌ Not set (intentional) |
 | Safety gates | 🔒 Both OFF (safe resting state) |
