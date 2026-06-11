@@ -162,6 +162,7 @@ HELP_TEXT = """<b>📈 Yuri Stock Trader — Commands</b>
 
 <b>Analysis:</b>
 • /best — What's the best stock trade right now?
+• /opening — Opening Power top-10 (pre-market candlestick scan)
 • /positions — Open manual stock positions
 • /balance — Questrade balance + exposure
 • /history — Today's closed manual stock trades
@@ -524,8 +525,28 @@ def handle_skip_callback(_):
 
 # ========== Routing ==========
 
+def cmd_opening(_):
+    """Opening Power — return the freshest pre-market top-10 (cached by the
+    run_opening_scan cron). Non-blocking: reads the cache, never re-scans here."""
+    cache = os.environ.get(
+        "OPENING_SCAN_CACHE",
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                     "logs", "opening_scan_latest.json"))
+    try:
+        with open(cache) as f:
+            rec = json.load(f)
+    except (OSError, ValueError):
+        send_message("📊 <b>Opening Power</b>\nNo pre-market scan yet today. "
+                     "Scans run hourly 7:00–9:30 ET; this returns the latest.")
+        return
+    from opening_agent.run_opening_scan import format_message
+    send_message(format_message(rec.get("ranked", []), rec.get("et", "?")))
+
+
 def route_message(text):
     t = text.strip().lower()
+    if t.startswith("/opening") or "candlestick" in t or "opening power" in t:
+        return cmd_opening
     if t.startswith("/start") or t in ("hi", "hello"):
         return cmd_help
     if t in ("/help", "/?", "?", "help"):
