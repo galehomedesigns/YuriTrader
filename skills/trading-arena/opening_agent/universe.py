@@ -227,10 +227,28 @@ def _ibkr_2min_bars(ib, symbol, duration="2 D"):
         bars = ib.reqHistoricalData(c, endDateTime="", durationStr=duration,
                                     barSizeSetting="2 mins", whatToShow="TRADES",
                                     useRTH=False, formatDate=1)
-        return [{"open": b.open, "high": b.high, "low": b.low,
-                 "close": b.close, "volume": float(b.volume or 0)} for b in bars]
+        return [{"open": b.open, "high": b.high, "low": b.low, "close": b.close,
+                 "volume": float(b.volume or 0), "date": b.date} for b in bars]
     except Exception:                          # noqa: BLE001
         return []
+
+
+def _day_change_pct(bars):
+    """Gap / pre-market move = latest price vs the prior session's close, computed
+    from the 2-min bars we already have (no extra data call). Returns % or 0.0."""
+    if not bars:
+        return 0.0
+    last = bars[-1]
+    today = getattr(last.get("date"), "date", lambda: None)()
+    prior_close = None
+    for b in reversed(bars[:-1]):
+        d = getattr(b.get("date"), "date", lambda: None)()
+        if d and today and d < today:
+            prior_close = b["close"]
+            break
+    if not prior_close:
+        prior_close = bars[0]["close"]
+    return round((last["close"] - prior_close) / prior_close * 100, 2) if prior_close else 0.0
 
 
 def scan_ibkr(limit_movers=50, cfg=None):
@@ -261,8 +279,11 @@ def scan_ibkr(limit_movers=50, cfg=None):
                 if s not in seen:
                     seen.add(s); movers.append(Mover(s, 0.0, 0.0, 0.0, direction))
         movers = movers[:limit_movers]
-        candidates = [evaluate(m, bars=_ibkr_2min_bars(ib, m.symbol), cfg=cfg)
-                      for m in movers]
+        candidates = []
+        for m in movers:
+            bars = _ibkr_2min_bars(ib, m.symbol)
+            m.pct_change = _day_change_pct(bars)       # real gap from the bars
+            candidates.append(evaluate(m, bars=bars, cfg=cfg))
     finally:
         try:
             ib.disconnect()
