@@ -217,8 +217,69 @@ def evaluate(mover, bars=None, cfg=None):
     )
 
 
-def scan(limit_movers=200, cfg=None, source=None):
-    """Full funnel: movers → deep-evaluate → list[Candidate]. Logs coverage."""
+def _ibkr_2min_bars(ib, symbol, duration="2 D"):
+    """≥200 2-min bars via IBKR reqHistoricalData (~1s/symbol, delayed data ok).
+    Returns bar dicts oldest→newest, or [] on failure."""
+    from ib_async import Stock
+    try:
+        c = Stock(symbol.upper(), "SMART", "USD")
+        ib.qualifyContracts(c)
+        bars = ib.reqHistoricalData(c, endDateTime="", durationStr=duration,
+                                    barSizeSetting="2 mins", whatToShow="TRADES",
+                                    useRTH=False, formatDate=1)
+        return [{"open": b.open, "high": b.high, "low": b.low,
+                 "close": b.close, "volume": float(b.volume or 0)} for b in bars]
+    except Exception:                          # noqa: BLE001
+        return []
+
+
+def scan_ibkr(limit_movers=50, cfg=None):
+    """Single-connection funnel: IBKR scanner for movers + IBKR historical for
+    each mover's 2-min bars. ~20x faster than the Questrade path and one socket."""
+    from ib_async import IB, ScannerSubscription, util
+    util.patchAsyncio()
+    host = os.environ.get("IBKR_HOST", "127.0.0.1")
+    port = int(os.environ.get("IBKR_PORT", "4002"))
+    cid = int(os.environ.get("OPENING_SCANNER_CLIENT_ID", "23"))
+    loc = os.environ.get("OPENING_SCAN_LOCATION", "STK.US.MAJOR")
+    stype = os.environ.get("OPENING_STOCK_TYPE_FILTER", "CORP")
+    both = os.environ.get("OPENING_ALLOW_SHORTS", "false").lower() == "true"
+    ib = IB()
+    try:
+        ib.connect(host, port, clientId=cid, timeout=20)
+        ib.reqMarketDataType(3)                # delayed data (free) fallback
+        movers, seen = [], set()
+        for code, direction in ([("TOP_PERC_GAIN", 1)]
+                                + ([("TOP_PERC_LOSE", -1)] if both else [])):
+            sub = ScannerSubscription(
+                instrument="STK", locationCode=loc, scanCode=code,
+                stockTypeFilter=stype,
+                abovePrice=float(os.environ.get("OPENING_MIN_PRICE", "5")),
+                aboveVolume=int(os.environ.get("OPENING_MIN_VOLUME", "100000")))
+            for row in ib.reqScannerData(sub, [], []):
+                s = row.contractDetails.contract.symbol
+                if s not in seen:
+                    seen.add(s); movers.append(Mover(s, 0.0, 0.0, 0.0, direction))
+        movers = movers[:limit_movers]
+        candidates = [evaluate(m, bars=_ibkr_2min_bars(ib, m.symbol), cfg=cfg)
+                      for m in movers]
+    finally:
+        try:
+            ib.disconnect()
+        except Exception:
+            pass
+    usable = [c for c in candidates if c.state != "UNKNOWN"]
+    print(f"  [opening.scan/ibkr] movers={len(movers)} usable={len(usable)} "
+          f"(coverage: {len(usable)}/{len(movers)})", file=sys.stderr)
+    return candidates
+
+
+def scan(limit_movers=50, cfg=None, source=None):
+    """Full funnel: movers → deep-evaluate → list[Candidate]. Logs coverage.
+    Default path is IBKR-native (one connection, fast); set
+    OPENING_BARS_SOURCE=questrade for the old per-symbol Questrade path."""
+    if source is None and os.environ.get("OPENING_BARS_SOURCE", "ibkr") == "ibkr":
+        return scan_ibkr(limit_movers=limit_movers, cfg=cfg)
     source = source or get_mover_source()
     movers = source.movers(limit=limit_movers)
     candidates = [evaluate(m, cfg=cfg) for m in movers]
