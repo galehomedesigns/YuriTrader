@@ -111,9 +111,14 @@ class IBKRMovers:
         try:
             ib.connect(host, port, clientId=cid, timeout=20)
             codes = ["TOP_PERC_GAIN"] + (["TOP_PERC_LOSE"] if self.both else [])
+            # stockTypeFilter="CORP" = common stocks only -> excludes ALL ETFs
+            # (incl. leveraged SOXL/TQQQ/TSLL), matching the strategy's intent of
+            # individual-stock institutional footprints. Set "ALL" to re-include.
+            stock_type = os.environ.get("OPENING_STOCK_TYPE_FILTER", "CORP")
             for code in codes:
                 sub = ScannerSubscription(
                     instrument="STK", locationCode=loc, scanCode=code,
+                    stockTypeFilter=stock_type,
                     abovePrice=float(os.environ.get("OPENING_MIN_PRICE", "5")),
                     aboveVolume=int(os.environ.get("OPENING_MIN_VOLUME", "100000")),
                 )
