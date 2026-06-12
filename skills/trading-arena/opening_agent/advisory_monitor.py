@@ -85,17 +85,18 @@ def cutoff(eng):
 
 # ── Live monitor ─────────────────────────────────────────────────────────────
 def _candidates():
+    """Reuse the freshest pre-market scan (cached by run_opening_scan ~9:25) so we
+    don't run a second IBKR scan. Falls back to [] -> main() rescans."""
     import json
+    cache = os.environ.get(
+        "OPENING_SCAN_CACHE",
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                     "logs", "opening_scan_latest.json"))
     try:
-        st = json.load(open(os.environ.get(
-            "OPENING_LIVE_STATE",
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                         "logs", "opening_live_state.json"))))
-        if st.get("date") == datetime.now(ET).date().isoformat():
-            return st.get("candidates", [])
-    except (OSError, ValueError):
-        pass
-    return []
+        rec = json.load(open(cache))
+        return [r["symbol"] for r in rec.get("ranked", [])]
+    except (OSError, ValueError, KeyError):
+        return []
 
 
 def main():
