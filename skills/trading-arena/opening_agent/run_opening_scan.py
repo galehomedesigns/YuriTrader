@@ -124,8 +124,16 @@ def run(force=False, send=True):
         os.makedirs(os.path.dirname(CACHE), exist_ok=True)
         with open(CACHE, "w") as f:
             json.dump(record, f, default=str)
+        # Daily watchlist CSV — refreshed each run, TWS-importable (File ->
+        # Import -> Watchlist). One row per candidate, best->worst.
+        wl = os.path.join(os.path.dirname(CACHE), "opening_watchlist.csv")
+        with open(wl, "w") as f:
+            f.write("Symbol,Direction,Score,State,Gap%,Updated\n")
+            for r in ranked:
+                f.write(f"{r['symbol']},{r['direction']},{r['score']},"
+                        f"{r['state']},{r.get('pct_change', 0)},{et_now}\n")
     except OSError as e:
-        print(f"[opening] cache write failed: {e}", file=sys.stderr)
+        print(f"[opening] cache/watchlist write failed: {e}", file=sys.stderr)
 
     msg = format_message(ranked, et_now)
     print(msg)

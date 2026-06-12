@@ -1,0 +1,101 @@
+//@version=5
+// ============================================================================
+// Opening Power — 2-min Opening-Range Candlestick Strategy (visual + alerts)
+// Mirrors TRADING_AGENT.md: 20/200 SMA tight state, location, elephant/tail
+// power bars, entry beyond bar 1's extreme, one-bar stop, 20-min window.
+//
+// HOW TO USE: paste into TradingView Pine Editor, "Add to chart", set the chart
+// to a 2-minute timeframe on a US stock. Green/red triangles = BUY/SELL signals
+// when the full criteria are met. Set alerts on "Opening Power BUY/SELL".
+// Long-only by default (toggle Shorts on if your account permits).
+// ============================================================================
+indicator("Opening Power — Opening Range", overlay=true, max_labels_count=200)
+
+// ── Inputs (match the agent's config) ──────────────────────────────────────
+fastLen   = input.int(20,  "Fast SMA",  group="MAs")
+slowLen   = input.int(200, "Power SMA", group="MAs")
+tightPct  = input.float(0.25, "Tight threshold (% of price)", step=0.05, group="State") / 100.0
+eleMult   = input.float(2.0,  "Elephant body ≥ x avgBody(20)", step=0.1, group="Power bars")
+eleFrac   = input.float(0.70, "Elephant body ≥ x range",       step=0.05, group="Power bars")
+tailRatio = input.float(2.0,  "Tail ≥ x body",                 step=0.1, group="Power bars")
+tailZone  = input.float(0.25, "Opposite tail ≤ x range",       step=0.05, group="Power bars")
+offset    = input.float(0.01, "Trade offset ($)",              step=0.01, group="Triggers")
+sess      = input.session("0930-0950", "Opening window (exchange time)", group="Session")
+allowShort= input.bool(false, "Allow shorts", group="Session")
+
+// ── Moving averages + tight/wide state ─────────────────────────────────────
+smaFast = ta.sma(close, fastLen)
+smaSlow = ta.sma(close, slowLen)
+sep     = math.abs(smaFast - smaSlow)
+tight   = close > 0 and (sep / close) <= tightPct
+bandHi  = math.max(smaFast, smaSlow)
+bandLo  = math.min(smaFast, smaSlow)
+
+// ── Bar geometry / power bars (§7.1) ───────────────────────────────────────
+body    = math.abs(close - open)
+rng     = high - low
+upTail  = high - math.max(open, close)
+loTail  = math.min(open, close) - low
+isGreen = close > open
+isRed   = close < open
+avgBody = ta.sma(body, 20)
+
+bullEle = isGreen and avgBody > 0 and body >= eleMult * avgBody and body >= eleFrac * rng
+bearEle = isRed   and avgBody > 0 and body >= eleMult * avgBody and body >= eleFrac * rng
+botTail = rng > 0 and loTail >= tailRatio * body and upTail <= tailZone * rng
+topTail = rng > 0 and upTail >= tailRatio * body and loTail <= tailZone * rng
+barSig  = bullEle or botTail ? 1 : (bearEle or topTail ? -1 : 0)
+
+// ── Session / first-bar of the opening window ──────────────────────────────
+inSess     = not na(time(timeframe.period, sess))
+isFirstBar = inSess and not inSess[1]
+
+// ── State machine (per session) ────────────────────────────────────────────
+var float bar1Hi   = na
+var float bar1Lo   = na
+var int   armed    = 0          // +1 long, -1 short, 0 none
+var bool  inTrade  = false
+var float stopLvl  = na
+
+if isFirstBar
+    bar1Hi  := high
+    bar1Lo  := low
+    locAbove = open > bandHi
+    locBelow = open < bandLo
+    armed   := tight and locAbove and barSig == 1 ? 1 :
+               (tight and locBelow and barSig == -1 and allowShort ? -1 : 0)
+    inTrade := false
+    stopLvl := na
+
+// Entry triggers intra-bar, beyond bar 1's extreme, inside the window (G5)
+longEntry  = armed == 1 and not inTrade and inSess and high >= bar1Hi + offset
+shortEntry = armed == -1 and not inTrade and inSess and low  <= bar1Lo - offset
+if longEntry
+    inTrade := true
+    stopLvl := bar1Lo - offset      // one-bar stop (G7)
+if shortEntry
+    inTrade := true
+    stopLvl := bar1Hi + offset
+
+// Stop hit / window end clears the trade
+stopHit = inTrade and (armed == 1 ? low <= stopLvl : high >= stopLvl)
+if stopHit or (not inSess and inSess[1])
+    inTrade := false
+
+// ── Plots ──────────────────────────────────────────────────────────────────
+plot(smaFast, "SMA20",  color=color.orange, linewidth=1)
+plot(smaSlow, "SMA200", color=color.blue,   linewidth=2)
+bgcolor(tight and inSess ? color.new(color.green, 88) : na, title="TIGHT + window")
+plot(inTrade ? stopLvl : na, "Stop", color=color.red, style=plot.style_linebr, linewidth=2)
+
+plotshape(longEntry,  "BUY",  shape.triangleup,   location.belowbar, color.new(color.green,0), size=size.small, text="BUY")
+plotshape(shortEntry, "SELL", shape.triangledown, location.abovebar, color.new(color.red,0),   size=size.small, text="SELL")
+plotshape(stopHit,    "STOP", shape.xcross,       location.absolute, color.new(color.red,0),   size=size.tiny)
+
+// Mark the qualified first bar (the setup)
+plotshape(isFirstBar and armed != 0, "Setup", shape.diamond, location.abovebar, color.new(color.yellow,0), size=size.tiny, text="setup")
+
+// ── Alerts (set TradingView alerts on these) ───────────────────────────────
+alertcondition(longEntry,  "Opening Power BUY",  "Opening Power: BUY {{ticker}} @ {{close}} (set stop under bar1 low)")
+alertcondition(shortEntry, "Opening Power SELL", "Opening Power: SELL {{ticker}} @ {{close}} (set stop over bar1 high)")
+alertcondition(stopHit,    "Opening Power STOP", "Opening Power: STOP hit on {{ticker}} @ {{close}} — exit")
