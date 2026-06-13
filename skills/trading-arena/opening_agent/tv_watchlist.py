@@ -159,9 +159,11 @@ def replace_watchlist(symbols, list_id):
     return json.loads(body)
 
 
-def sync(tickers, dry_run=False, header=True):
+def sync(tickers, dry_run=False, header=True, label="Opening Power"):
     """Resolve `tickers` and replace the default watchlist with them.
 
+    `label` names the leading ###section header (e.g. "Opening Power" for the
+    pre-market top-10, "MATCHES" for the 9:32 first-bar signals).
     Returns a dict {ok, list_id, name, sent:[...], resolved:{ticker:tvsym}}.
     """
     seen, ordered = set(), []
@@ -175,7 +177,7 @@ def sync(tickers, dry_run=False, header=True):
     payload = list(dict.fromkeys(resolved[t] for t in ordered))  # dedupe, keep order
     if header:
         et = datetime.now(ZoneInfo("America/New_York")).strftime("%m-%d %H:%M")
-        payload = [f"###Opening Power {et}"] + payload
+        payload = [f"###{label} {et}"] + payload
 
     if dry_run:
         print(f"[tv-wl] DRY-RUN — would set {len(payload)} entries: {payload}")

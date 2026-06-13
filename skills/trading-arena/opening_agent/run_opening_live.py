@@ -35,7 +35,7 @@ def _load_env():
 
 _load_env()
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from opening_agent import universe, ranker, live_executor
+from opening_agent import universe, ranker, live_executor, tv_watchlist
 from opening_agent import classifier as C
 from opening_agent.run_opening_scan import send_message
 
@@ -154,6 +154,15 @@ def phase_execute(send=True):
                          "candidates. Nothing qualifies.")
         _write_state({**st, "phase": "notified", "matches": [], "placed": []})
         print("[execute] no matches."); return
+
+    # Narrow the TradingView watchlist down to just the first-bar matches at the
+    # open (replaces the pre-market top-10 that run_opening_scan put there).
+    # Non-fatal; auto-skips if TRADINGVIEW_SESSIONID is unset or disabled.
+    if send and os.environ.get("OPENING_TV_WATCHLIST", "1") not in ("0", "false", ""):
+        try:
+            tv_watchlist.sync([m["symbol"] for m in matches], label="MATCHES")
+        except Exception as e:  # noqa: BLE001
+            print(f"[execute] TV watchlist sync skipped: {e}", file=sys.stderr)
 
     armed = live_executor._armed()
     budget = st.get("budget")
