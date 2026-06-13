@@ -18,6 +18,8 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 echo "=== TV focus: $(date) ===" >> "$LOG_FILE"
+# Ensure the headless Chromium CDP endpoint (:9222) is up before switching.
+"$SCRIPT_DIR/tv_chrome_daemon.sh" >> "$LOG_FILE" 2>&1 || echo "  (chrome daemon ensure failed)" >> "$LOG_FILE"
 /home/tonygale/openclaw/.venv/bin/python "$SCRIPT_DIR/overseer/tv_focus.py" >> "$LOG_FILE" 2>&1
 echo "" >> "$LOG_FILE"
 

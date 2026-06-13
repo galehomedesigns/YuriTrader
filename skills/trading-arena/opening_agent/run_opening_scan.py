@@ -38,7 +38,7 @@ def _load_env():
 
 _load_env()
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from opening_agent import universe, ranker
+from opening_agent import universe, ranker, tv_watchlist
 
 STOCK_BOT_TOKEN = os.environ.get("TELEGRAM_STOCK_BOT_TOKEN", "")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "6545739863")
@@ -140,6 +140,15 @@ def run(force=False, send=True):
     if send:
         ok = send_message(msg)
         print(f"[opening] sent={ok} | cached -> {CACHE}")
+        # Mirror the ranked list into the user's (single, free-tier) TradingView
+        # watchlist so it syncs to their devices. Replace-entirely per the
+        # 2026-06-13 decision. Non-fatal: never let a watchlist hiccup break the
+        # scan/send. Auto-skips if TRADINGVIEW_SESSIONID is unset or disabled.
+        if ranked and os.environ.get("OPENING_TV_WATCHLIST", "1") not in ("0", "false", ""):
+            try:
+                tv_watchlist.sync([r["symbol"] for r in ranked])
+            except Exception as e:  # noqa: BLE001
+                print(f"[opening] TV watchlist sync skipped: {e}", file=sys.stderr)
 
 
 def main():

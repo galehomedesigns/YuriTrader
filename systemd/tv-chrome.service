@@ -1,0 +1,38 @@
+[Unit]
+Description=TradingView headless Chromium — CDP endpoint on :9222 for tv_focus
+Documentation=https://github.com/galehomedesigns/openclaw-xrt9
+After=network-online.target
+Wants=network-online.target
+
+# Keeps a logged-in headless Chromium alive on 127.0.0.1:9222 so the focus
+# switcher (tv_focus.py -> tv_switch_symbol.js) can drive the chart via CDP.
+# Profile (login cookie) is seeded once via setup_tv_login.sh. Do NOT run the
+# interactive VNC login while this is active — they share the user-data-dir.
+
+[Service]
+Type=simple
+# Run as the openclaw user so the browser profile (login cookie, Local State)
+# is owned by tonygale and matches the rest of the service stack — NOT root.
+User=tonygale
+Group=tonygale
+WorkingDirectory=/home/tonygale/openclaw/skills/trading-arena
+# Clear any stale singleton lock left by an unclean shutdown (ignore if absent).
+ExecStartPre=-/bin/rm -f /home/tonygale/openclaw/state/browser/openclaw/user-data/SingletonLock
+ExecStart=/home/tonygale/.cache/ms-playwright/chromium-1208/chrome-linux/chrome \
+    --headless=new \
+    --no-sandbox \
+    --disable-gpu \
+    --no-first-run \
+    --no-default-browser-check \
+    --remote-debugging-address=127.0.0.1 \
+    --remote-debugging-port=9222 \
+    --user-data-dir=/home/tonygale/openclaw/state/browser/openclaw/user-data \
+    https://www.tradingview.com/chart/
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tv-chrome
+
+[Install]
+WantedBy=default.target
