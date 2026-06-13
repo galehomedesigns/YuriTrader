@@ -114,25 +114,39 @@ def main():
     # Arm: classify bar 1 (the latest completed bar at launch) for each candidate.
     book = {}     # sym -> {"eng":..., "last_ts":...}
     fired = []
+    skipped = []  # (sym, reason) for candidates that didn't match
     for sym in cands:
-        bars = U._ibkr_2min_bars(ib, sym)
+        try:
+            bars = U._ibkr_2min_bars(ib, sym)
+        except Exception as e:
+            skipped.append((sym, f"IBKR data error: {e}"))
+            continue
         if len(bars) < 200:
+            skipped.append((sym, f"insufficient bars ({len(bars)}/200)"))
             continue
         closes = [b["close"] for b in bars]
         smf, sms = _ind.sma(closes, 20), _ind.sma(closes, 200)
         bar1, prior = bars[-1], bars[:-1]
+        # Classify for transparency even if not MATCH_LONG
+        v = C.classify_opening(sym, bar1, prior, smf, sms)
         eng, advices = arm(sym, bar1, prior, smf, sms)
         if eng is not None:
             book[sym] = {"eng": eng, "last_ts": bars[-1].get("date")}
             fired += advices
+        else:
+            skipped.append((sym, v.decision))
 
     if not book:
+        skip_lines = "\n".join(f"  • {s} — {r}" for s, r in skipped) if skipped else ""
         send_message("⚪ <b>Opening Power</b> — no stock passed the 9:30 first-bar "
-                     "rule. Nothing to trade today.")
+                     "rule. Nothing to trade today."
+                     + (f"\n\n<b>Candidates checked ({len(skipped)}):</b>\n{skip_lines}" if skip_lines else ""))
         ib.disconnect(); return
 
+    skip_lines = "\n".join(f"  • {s} — {r}" for s, r in skipped) if skipped else ""
     send_message("🎯 <b>Opening Power — these passed the 2-min test (LONG):</b>\n"
                  + "\n".join(fired)
+                 + (f"\n\n<b>Did not pass ({len(skipped)}):</b>\n{skip_lines}" if skip_lines else "")
                  + "\n\n<i>Manual mode: I'll tell you when to enter, move stops, add, "
                  "and close. Place the orders yourself.</i>")
 
