@@ -1,6 +1,6 @@
 [Unit]
 Description=TradingView Webhook Receiver (localhost:8089; exposed via Tailscale Funnel)
-Documentation=https://github.com/galehomedesigns/openclaw-xrt9
+Documentation=https://github.com/galehomedesigns/YuriTrader
 After=network-online.target
 Wants=network-online.target
 

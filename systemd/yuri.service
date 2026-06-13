@@ -1,6 +1,6 @@
 [Unit]
 Description=Yuri — @MyProjectWorldbot Telegram daemon (receipts photo intake + reports)
-Documentation=https://github.com/galehomedesigns/openclaw-xrt9
+Documentation=https://github.com/galehomedesigns/YuriTrader
 After=network-online.target
 Wants=network-online.target
 

@@ -1,6 +1,6 @@
 [Unit]
 Description=TradingView headless Chromium — CDP endpoint on :9222 for tv_focus
-Documentation=https://github.com/galehomedesigns/openclaw-xrt9
+Documentation=https://github.com/galehomedesigns/YuriTrader
 After=network-online.target
 Wants=network-online.target
 

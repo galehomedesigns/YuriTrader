@@ -1,6 +1,6 @@
 [Unit]
 Description=Stock Concierge — YuriTradingViewBot Telegram daemon for Questrade
-Documentation=https://github.com/galehomedesigns/openclaw-xrt9
+Documentation=https://github.com/galehomedesigns/YuriTrader
 After=network-online.target ollama-guard.service
 Wants=network-online.target
 

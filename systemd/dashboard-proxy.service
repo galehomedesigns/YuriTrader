@@ -1,6 +1,6 @@
 [Unit]
 Description=Dashboard auth proxy — Caddy basic-auth in front of dashboards.service
-Documentation=https://github.com/galehomedesigns/openclaw-xrt9
+Documentation=https://github.com/galehomedesigns/YuriTrader
 After=network-online.target dashboards.service
 Wants=network-online.target
 

@@ -1,6 +1,6 @@
 [Unit]
 Description=Trading Arena — 10 paper bots in a continuous loop
-Documentation=https://github.com/galehomedesigns/openclaw-xrt9
+Documentation=https://github.com/galehomedesigns/YuriTrader
 After=network-online.target ollama-guard.service
 Wants=network-online.target
 
