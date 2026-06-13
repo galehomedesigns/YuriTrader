@@ -32,6 +32,7 @@ def _load_env():
 _load_env()
 from opening_agent import classifier as C
 from opening_agent import universe as U
+from opening_agent import tv_watchlist
 from opening_agent.engine import OpeningEngine
 from opening_agent.run_opening_scan import send_message
 import shared.indicators as _ind
@@ -149,6 +150,15 @@ def main():
                  + (f"\n\n<b>Did not pass ({len(skipped)}):</b>\n{skip_lines}" if skip_lines else "")
                  + "\n\n<i>Manual mode: I'll tell you when to enter, move stops, add, "
                  "and close. Place the orders yourself.</i>")
+
+    # Narrow the TradingView watchlist to the names that passed the first-bar
+    # rule, so the chart list matches what we're coaching. Non-fatal; auto-skips
+    # if TRADINGVIEW_SESSIONID is unset or OPENING_TV_WATCHLIST is disabled.
+    if os.environ.get("OPENING_TV_WATCHLIST", "1") not in ("0", "false", ""):
+        try:
+            tv_watchlist.sync(list(book.keys()), label="MATCHES")
+        except Exception as e:                                   # noqa: BLE001
+            print(f"[advisory] TV watchlist sync skipped: {e}", file=sys.stderr)
 
     # Loop each new 2-min bar until the cutoff.
     open_time = datetime.now(ET).replace(hour=9, minute=30, second=0, microsecond=0)
