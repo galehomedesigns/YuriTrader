@@ -9,7 +9,9 @@ trade in TWS / IBKR Mobile. (Same R2-R7 logic as engine.py, rendered as advice.)
 
 Launched ~9:32 ET (after bar 1 completes); runs to the 20-min cutoff, then exits.
 """
+import json
 import os
+import subprocess
 import sys
 import time
 from datetime import datetime, timedelta
@@ -84,6 +86,42 @@ def cutoff(eng):
     return [advice(t) for t in eng.on_cutoff()]
 
 
+def _stage_orders(book):
+    """Build entry buy-stop orders (+ attached protective stop), sized by an even
+    split of OPENING_TRADE_BUDGET_USD across the matches, write them to a file,
+    and spawn the CDP queue runner that stages each for manual confirmation on
+    the laptop. Stages only - the human clicks Send Order on every one."""
+    budget = float(os.environ.get("OPENING_TRADE_BUDGET_USD", "0") or 0)
+    if budget <= 0:
+        print("[advisory] OPENING_TRADE_BUDGET_USD not set - not staging", file=sys.stderr); return
+    syms = list(book.keys())
+    per = budget / len(syms)
+    orders = []
+    for s in syms:
+        entry, stop = book[s].get("entry"), book[s].get("stop")
+        if not entry or entry <= 0:
+            continue
+        qty = int(per // entry)                      # whole shares affordable per slot
+        if qty < 1:
+            print(f"[advisory] {s}: ${per:.2f}/slot < 1 share @ {entry:.2f} - skipped", file=sys.stderr)
+            continue
+        orders.append({"symbol": s, "side": "buy", "type": "stop",
+                       "price": round(entry, 2), "qty": qty, "stop": round(stop, 2)})
+    if not orders:
+        print("[advisory] no affordable orders to stage", file=sys.stderr); return
+    here = os.path.dirname(os.path.abspath(__file__))
+    of = os.path.join(os.path.dirname(here), "logs", "opening_orders.json")
+    with open(of, "w") as f:
+        json.dump(orders, f)
+    port = os.environ.get("OPENING_TV_CDP_PORT", "9225")
+    qjs = os.path.join(here, "tv_order_queue.js")
+    send_message(f"⚡ <b>Staging {len(orders)} order(s) to TradingView</b> — review each "
+                 "confirmation on your laptop and click <b>Send Order</b> (or Cancel to skip).")
+    # Non-blocking: the queue runner handles confirmations while we keep coaching.
+    subprocess.Popen(["node", qjs, "--port", str(port), "--orders-file", of])
+    print(f"[advisory] spawned queue runner: {len(orders)} orders on CDP port {port}")
+
+
 # ── Live monitor ─────────────────────────────────────────────────────────────
 def _candidates():
     """Reuse the freshest pre-market scan (cached by run_opening_scan ~9:25) so we
@@ -132,7 +170,8 @@ def main():
         v = C.classify_opening(sym, bar1, prior, smf, sms)
         eng, advices = arm(sym, bar1, prior, smf, sms)
         if eng is not None:
-            book[sym] = {"eng": eng, "last_ts": bars[-1].get("date")}
+            book[sym] = {"eng": eng, "last_ts": bars[-1].get("date"),
+                         "entry": C.entry_level_long(bar1), "stop": C.stop_level_long(bar1)}
             fired += advices
         else:
             skipped.append((sym, v.decision))
@@ -159,6 +198,16 @@ def main():
             tv_watchlist.sync(list(book.keys()), label="MATCHES")
         except Exception as e:                                   # noqa: BLE001
             print(f"[advisory] TV watchlist sync skipped: {e}", file=sys.stderr)
+
+    # Auto-stage entry orders (+ attached protective stop) into the TradingView
+    # order panel for rapid MANUAL confirmation on the laptop. Stages only - YOU
+    # click Send Order on each. Off by default; enable OPENING_TV_AUTO_STAGE=true
+    # (and have the laptop trading Chrome + tunnel up). Non-fatal.
+    if os.environ.get("OPENING_TV_AUTO_STAGE", "").lower() == "true":
+        try:
+            _stage_orders(book)
+        except Exception as e:                                   # noqa: BLE001
+            print(f"[advisory] order staging skipped: {e}", file=sys.stderr)
 
     # Loop each new 2-min bar until the cutoff.
     open_time = datetime.now(ET).replace(hour=9, minute=30, second=0, microsecond=0)
