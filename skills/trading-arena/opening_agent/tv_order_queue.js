@@ -53,9 +53,12 @@ const STAGE_FN = `async (o) => {
     const pe = Array.from(document.querySelectorAll('input')).filter(e=>vis(e)&&e.type==='text').find(e=>/^price/i.test(labelFor(e)));
     if (!pe) return {ok:false, log:['no Price field in Modify dialog']};
     setInput(pe, o.price); await sleep(300);
-    const cf = document.querySelector('[data-name=place-and-modify-button]');
+    // The Confirm button is grayed while TradingView validates the new price;
+    // wait for it to ENABLE so we only prompt the user when it's clickable.
+    let cf = null, enabled = false;
+    for (let k=0; k<15 && !enabled; k++) { cf = document.querySelector('[data-name=place-and-modify-button]'); enabled = !!(cf && vis(cf) && !cf.disabled && !/disabled/i.test(cf.className||'')); if(!enabled) await sleep(400); }
     if (!cf || !vis(cf)) return {ok:false, log:['Modify Confirm button not visible']};
-    return {ok:true, staged:true, summary:'Modify '+o.symbol+' stop -> '+o.price+' (click Confirm)', log:['opened Modify for '+o.symbol+' stop, set price '+o.price]};
+    return {ok:true, staged:true, summary:'Modify '+o.symbol+' stop -> '+o.price+(enabled?' (Confirm ready — click it)':' (wait for Confirm to enable, then click)'), log:['opened Modify for '+o.symbol+' stop, set price '+o.price+', confirm-enabled='+enabled]};
   }
 
   // 1) switch symbol + verify
