@@ -36,6 +36,28 @@ const STAGE_FN = `async (o) => {
   function labelFor(inp){ let lab=inp.getAttribute('aria-label')||inp.placeholder||''; let n=inp,h=0; while(n&&h<4&&!lab){n=n.parentElement;h++;if(!n)break;const t=Array.from(n.childNodes).filter(c=>c.nodeType===3).map(c=>c.textContent.trim()).filter(Boolean).join(' ');const le=n.querySelector('label,[class*=label],[class*=Label]');lab=((le?(le.innerText||''):'')+' '+t).replace(/\\s+/g,' ').trim();} return lab; }
   function findSection(word){ let c=Array.from(document.querySelectorAll('*')).filter(e=>vis(e)&&(e.innerText||'').trim().toLowerCase().startsWith(word.toLowerCase())&&(e.innerText||'').length<60); c.sort((a,b)=>(a.innerText||'').length-(b.innerText||'').length); let lab=c[0]; if(!lab)return null; let row=lab,h=0; while(row&&h<6){const t=row.querySelector('[class*=switchContainer],input[type=checkbox],[role=switch]');const p=Array.from(row.querySelectorAll('input')).find(i=>i.getAttribute('inputmode')==='decimal'); if(t&&p)return{toggle:t,price:p}; row=row.parentElement;h++;} return null; }
 
+  // ── modify-stop: reprice an existing resting stop IN PLACE (no cancel/gap) ──
+  if (o.action === 'modify-stop') {
+    const otab = Array.from(document.querySelectorAll('button,[role=button],[role=tab]')).find(b=>vis(b)&&/^orders\\b/i.test((b.innerText||'').trim()));
+    if (otab) { otab.click(); await sleep(700); }
+    const t = document.querySelector('[data-name=\\"QUESTRADE.orders-table\\"]');
+    if (!t) return {ok:false, log:['no orders table']};
+    const row = Array.from(t.querySelectorAll('[role=row],tr')).filter(vis).find(r=>{
+      const txt=(r.innerText||'').replace(/\\s+/g,' ').trim().toUpperCase();
+      return txt.startsWith(String(o.symbol).toUpperCase()+' ') && /\\bSTOP\\b/.test(txt) && /QUEUED/.test(txt);
+    });
+    if (!row) return {ok:false, log:['no resting QUEUED stop order for '+o.symbol]};
+    const edit = row.querySelector('[data-name=edit-settings-cell-button]');
+    if (!edit) return {ok:false, log:['no Modify button on the '+o.symbol+' stop row']};
+    edit.click(); await sleep(1200);
+    const pe = Array.from(document.querySelectorAll('input')).filter(e=>vis(e)&&e.type==='text').find(e=>/^price/i.test(labelFor(e)));
+    if (!pe) return {ok:false, log:['no Price field in Modify dialog']};
+    setInput(pe, o.price); await sleep(300);
+    const cf = document.querySelector('[data-name=place-and-modify-button]');
+    if (!cf || !vis(cf)) return {ok:false, log:['Modify Confirm button not visible']};
+    return {ok:true, staged:true, summary:'Modify '+o.symbol+' stop -> '+o.price+' (click Confirm)', log:['opened Modify for '+o.symbol+' stop, set price '+o.price]};
+  }
+
   // 1) switch symbol + verify
   try { window.TradingViewApi._activeChartWidgetWV.value().setSymbol(o.symbol, {}); } catch(e){ return {ok:false, log:['setSymbol failed: '+e.message]}; }
   await sleep(1800);
@@ -126,7 +148,10 @@ const CONFIRM_VISIBLE_FN = `(function(){ var b=Array.from(document.querySelector
   const results = [];
   for (let i = 0; i < orders.length; i++) {
     const o = orders[i];
-    console.log(`\n=== [${i + 1}/${orders.length}] staging ${o.side} ${o.qty} ${o.symbol} ${o.type} @ ${o.price}${o.stop != null ? ' (SL ' + o.stop + ')' : ''} ===`);
+    const desc = o.action === 'modify-stop'
+      ? `modify ${o.symbol} stop -> ${o.price}`
+      : `${o.side} ${o.qty} ${o.symbol} ${o.type} @ ${o.price}${o.stop != null ? ' (SL ' + o.stop + ')' : ''}`;
+    console.log(`\n=== [${i + 1}/${orders.length}] staging ${desc} ===`);
     const staged = await evalJs(`(${STAGE_FN})(${JSON.stringify(o)})`, true);
     staged.log.forEach(l => console.log("   " + l));
     if (!staged.ok) { console.log("   !! could not stage - skipping to next"); results.push({ ...o, staged: false }); continue; }

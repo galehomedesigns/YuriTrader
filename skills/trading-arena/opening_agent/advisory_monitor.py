@@ -153,6 +153,20 @@ def _stage_closes(close_syms):
     print(f"[advisory] spawned close queue for {len(orders)} positions on port {port}")
 
 
+def _stage_stop_move(sym, new_stop):
+    """Stage an in-place reprice of the resting protective stop (no cancel/gap)
+    for one symbol; the user clicks Confirm in the Modify dialog. Non-blocking."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    port = os.environ.get("OPENING_TV_CDP_PORT", "9225")
+    of = os.path.join(os.path.dirname(here), "logs", f"opening_modify_{sym}.json")
+    with open(of, "w") as f:
+        json.dump([{"action": "modify-stop", "symbol": sym, "price": round(new_stop, 2)}], f)
+    qjs = os.path.join(here, "tv_order_queue.js")
+    send_message(f"🔼 <b>Stop-move staged: {sym} → {new_stop:.2f}</b> — click Confirm on your laptop.")
+    subprocess.Popen(["node", qjs, "--port", str(port), "--orders-file", of])
+    print(f"[advisory] spawned stop-move for {sym} -> {new_stop}")
+
+
 # ── Live monitor ─────────────────────────────────────────────────────────────
 def _candidates():
     """Reuse the freshest pre-market scan (cached by run_opening_scan ~9:25) so we
@@ -256,9 +270,16 @@ def main():
             if rec["last_ts"] is not None and newest.get("date") == rec["last_ts"]:
                 continue                       # no new completed bar yet
             rec["last_ts"] = newest.get("date")
-            msgs = step(rec["eng"], newest)
-            for m in msgs:
-                send_message(m)
+            for t in rec["eng"].on_bar(newest, complete=True):
+                send_message(advice(t))
+                # G16 = "move stop up": stage an in-place reprice for one-click
+                # confirm (same arming gate; non-fatal).
+                if getattr(t, "rule", None) == "G16" and \
+                        os.environ.get("OPENING_TV_AUTO_STAGE", "").lower() == "true":
+                    try:
+                        _stage_stop_move(sym, t.price)
+                    except Exception as e:                       # noqa: BLE001
+                        print(f"[advisory] stop-move staging skipped: {e}", file=sys.stderr)
 
     # Cutoff: send close advice AND collect symbols the engine considers
     # in-position (it emits a G1 "close" ticket only when the entry filled).
