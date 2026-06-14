@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Opening Power — Paper Tracker</title>
+<style>
+:root {
+  --bg: #0d1117; --surface: #161b22; --surface-2: #1c222b; --border: #21262d;
+  --text: #e6edf3; --text-dim: #8b95a7; --text-muted: #556677;
+  --accent: #7c8aff; --accent-2: #c77dff; --ok: #00c853; --warn: #ffc107;
+  --fail: #ff1744; --pnl-pos: #69f0ae; --pnl-neg: #ef5350; --radius: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg); color: var(--text); padding: 20px; line-height: 1.5; }
+.container { max-width: 1100px; margin: 0 auto; }
+.dash-header { margin-bottom: 18px; }
+.dash-header h1 { font-size: 1.5rem; }
+.subtitle { color: var(--text-dim); font-size: 0.9rem; }
+.updated { color: var(--text-muted); font-size: 0.8rem; margin-top: 4px; }
+.banner { padding: 10px 14px; border-radius: var(--radius); margin: 14px 0; font-size: 0.9rem; }
+.banner-ok { background: rgba(0,200,83,0.12); border: 1px solid var(--ok); }
+.banner-warn { background: rgba(255,193,7,0.12); border: 1px solid var(--warn); }
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; margin: 16px 0; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.stat .value { font-size: 1.5rem; font-weight: 600; }
+.stat .label { color: var(--text-dim); font-size: 0.78rem; text-transform: uppercase; letter-spacing: .04em; }
+.pos { color: var(--pnl-pos); } .neg { color: var(--pnl-neg); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin: 16px 0; }
+.card h2 { font-size: 1rem; margin-bottom: 10px; color: var(--text); }
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 0.72rem; }
+.sym { font-weight: 600; }
+.badge { padding: 2px 8px; border-radius: 6px; font-size: 0.72rem; }
+.badge-muted { background: var(--surface-2); color: var(--text-dim); }
+.badge-ok { background: rgba(0,200,83,0.15); color: var(--pnl-pos); }
+.empty { color: var(--text-muted); padding: 12px; font-style: italic; }
+.note { color: var(--text-muted); font-size: 0.78rem; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="dash-header">
+    <h1>Opening Power — Paper Tracker</h1>
+    <div class="subtitle">Independent forward paper-test of the opening strategy on stocks — no orders, no money at risk.</div>
+    <div class="updated">Last updated: <span id="updated-at">&mdash;</span></div>
+  </header>
+  <div id="banner"></div>
+  <div id="stats-row" class="stat-row"></div>
+  <div class="card">
+    <h2>Paper trades (triggered)</h2>
+    <div id="trades"></div>
+  </div>
+  <div class="card">
+    <h2>Recent signal decisions</h2>
+    <div id="decisions"></div>
+    <div class="note" id="config-note"></div>
+  </div>
+</div>
+
+<script id="dashboard-data" type="application/json">{{DATA}}</script>
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('dashboard-data').textContent);
+  document.getElementById('updated-at').textContent = data.updated || '—';
+  const money = (v) => (v >= 0 ? '+$' : '-$') + Math.abs(v).toFixed(2);
+  const pct = (v) => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+
+  // banner
+  const b = document.getElementById('banner');
+  if ((data.trades || []).length === 0)
+    b.innerHTML = '<div class="banner banner-warn">No paper trades triggered yet. The strategy is selective — signals accumulate over time. Decisions scored so far are below.</div>';
+  else
+    b.innerHTML = '<div class="banner banner-ok">Forward paper test running — ' + data.trades.length + ' trade(s) scored. Net-of-slippage, $0 commission.</div>';
+
+  // stats
+  const cls = (v) => v >= 0 ? 'pos' : 'neg';
+  const stats = [
+    { value: data.signals ?? 0, label: 'Long signals' },
+    { value: data.triggered ?? 0, label: 'Triggered' },
+    { value: (data.win_rate ?? 0) + '%', label: 'Win rate' },
+    { value: money(data.net_pnl ?? 0), label: 'Net paper P&L', c: cls(data.net_pnl ?? 0) },
+    { value: pct(data.sum_pct ?? 0), label: 'Sum % return', c: cls(data.sum_pct ?? 0) },
+  ];
+  document.getElementById('stats-row').innerHTML = stats.map(s =>
+    `<div class="stat"><div class="value ${s.c||''}">${s.value}</div><div class="label">${s.label}</div></div>`).join('');
+
+  // trades table
+  const t = data.trades || [];
+  document.getElementById('trades').innerHTML = t.length ? (
+    '<table><thead><tr><th>Symbol</th><th>Date</th><th>Exit</th><th>Entry</th><th>Exit px</th><th>%</th><th>P&L</th></tr></thead><tbody>' +
+    t.map(r => `<tr><td class="sym">${r.symbol}</td><td>${r.date}</td><td>${r.reason}</td><td>${r.entry}</td><td>${r.exit}</td>` +
+      `<td class="${cls(r.pct)}">${pct(r.pct)}</td><td class="${cls(r.pnl)}">${money(r.pnl)}</td></tr>`).join('') +
+    '</tbody></table>'
+  ) : '<div class="empty">No triggered paper trades yet.</div>';
+
+  // decisions table
+  const d = data.decisions || [];
+  document.getElementById('decisions').innerHTML = d.length ? (
+    '<table><thead><tr><th>Symbol</th><th>Date</th><th>Decision</th><th>Mode</th></tr></thead><tbody>' +
+    d.map(r => `<tr><td class="sym">${r.symbol}</td><td>${r.date}</td><td><span class="badge badge-muted">${r.decision}</span></td><td>${r.mode||''}</td></tr>`).join('') +
+    '</tbody></table>'
+  ) : '<div class="empty">No decisions logged yet.</div>';
+
+  const cfg = data.config || {};
+  document.getElementById('config-note').textContent =
+    `Model: entry on bar-1 takeout, exit at initial stop or ${cfg.cutoff_min || 20}-min cutoff (conservative). ` +
+    `$0 commission (Questrade), ${((cfg.slippage_pct||0)*100).toFixed(2)}% slippage, $${cfg.position_usd || 500}/position. Long-only. Independent of the live system.`;
+})();
+</script>
+</body>
+</html>

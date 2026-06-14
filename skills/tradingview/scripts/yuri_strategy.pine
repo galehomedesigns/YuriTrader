@@ -4,11 +4,13 @@
 //
 // BUY: 3+ of 9 flags must fire
 // SELL: Trailing stop at 1.5% from peak, or hard stop at -2%
-// Position: $9 per trade, fractional shares
-// No overnight holds
+// STOCKS / Questrade: commission-free, so the only modeled cost is slippage.
+// Position: $500 per trade (cash-based; adjust to taste). No overnight holds.
 
 //@version=6
-strategy("Yuri Auto-Trader", overlay=true, default_qty_type=strategy.cash, default_qty_value=9, currency=currency.USD)
+// commission_value=0 (Questrade commission-free) + slippage=2 ticks so the
+// Strategy Tester reflects real stock execution, not a fee-free fantasy.
+strategy("Yuri Auto-Trader", overlay=true, default_qty_type=strategy.cash, default_qty_value=500, currency=currency.USD, commission_type=strategy.commission.cash_per_order, commission_value=0, slippage=2)
 
 // ── INPUTS ──
 minFlags       = input.int(3, "Minimum Buy Flags", minval=1, maxval=9)
