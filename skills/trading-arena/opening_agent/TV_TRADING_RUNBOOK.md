@@ -20,6 +20,25 @@
 
 ---
 
+## A2. DURING THE SESSION — order lifecycle & exits (when armed)
+When `OPENING_TV_AUTO_STAGE=true`, the agent stages each action for your one-click
+confirmation. You always click; it never sends.
+- **~9:32 — entries:** for each stock that passed the first-bar rule, a confirmation
+  pops up: `Buy N SYM @ <stop> STOP` **+ a Stop loss row**. Click **Send Order**. The
+  next one appears ~1-2s after each. (qty = floor((budget ÷ matches) ÷ entry).)
+- **9:32-9:50 — stop-moves (trailing):** when the coach says "move stop up," a
+  **Modify Order** dialog opens with the new stop price. Its **Confirm** button is
+  **grayed for a second or two while TradingView validates**, then enables — **wait
+  for it to light up, then click Confirm.** This reprices the stop in place (no gap).
+- **9:50 — cutoff close:** for each position you actually hold (cross-checked against
+  the real Questrade positions, sized to held shares), a `Sell N SYM @ <px> LIMIT`
+  confirmation pops up (a "marketable limit" priced through the market so it fills
+  like a market order but works on order-type-restricted securities). Click **Send
+  Order** on each to flatten.
+- **Adds / take-profits:** Telegram coaching only — you place those manually.
+- If a stock is too thin/volatile, an attached stop or order may be **rejected**
+  ("both marketable" / "change to limit"); the queue logs it and moves on.
+
 ## B. IF THE LAPTOP REBOOTS / CRASHES
 - Reboot it, log in.
 - Open one PowerShell → run `powershell -ExecutionPolicy Bypass -File $HOME\start_trading_browser.ps1`
@@ -69,6 +88,8 @@
 - **Tunnel won't bind / "remote port forwarding failed"** → an old tunnel is stuck. Close ALL PowerShell windows on the laptop, wait ~30s, re-run the script. (The script self-cleans dead tunnels now.)
 - **Watchlist sync says `login_required`** → the `.env` cookie expired. Re-run `tv_session_sync.js --port 9225` (pulls a fresh one from the trading Chrome).
 - **Order rejected "both marketable"** → the stock is too thin/volatile and the stop is too close to market; that name just isn't usable for an attached bracket. The queue logs it and moves on.
+- **Stop-move "no confirmation" / dialog vanished** → the Modify dialog's Confirm is **grayed for ~1-2s while it validates**, then enables. Wait for it to light up, then click. If you don't click, it auto-dismisses and the stop is unchanged (your original stop still protects you).
+- **Close rejected "change to limit"** → handled automatically (closes use a marketable limit), but if you ever close manually, use a limit for OTC/restricted names, not market.
 - **Re-arm safety / pause trading** → set `OPENING_TV_AUTO_STAGE=false` in `.env` (staging stops; advisory still coaches via Telegram).
 
 ---
