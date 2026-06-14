@@ -23,22 +23,25 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.base_bot import BaseBot
 from shared.market_scanner import AssetData
-from config import KRAKEN_ROUNDTRIP_FEE_PCT
+from config import roundtrip_fee_pct
 from typing import Dict, List, Optional
 
-# Fee floor as a percent (auto-tracks the corrected .env KRAKEN_TAKER_FEE_PCT).
-_FEE_FLOOR_PCT = KRAKEN_ROUNDTRIP_FEE_PCT * 100.0
-# A burst must clear the fee floor by this multiple before it's worth entering.
-_MIN_BURST_PCT = max(
-    _FEE_FLOOR_PCT * float(os.environ.get("MOMENTUM_FEE_MULT", "1.5")),
-    float(os.environ.get("MOMENTUM_MIN_MOVE_PCT", "3.0")),
-)
+# Asset-independent knobs (same for crypto + stock).
+_FEE_MULT = float(os.environ.get("MOMENTUM_FEE_MULT", "1.5"))
+_MIN_MOVE_FLOOR = float(os.environ.get("MOMENTUM_MIN_MOVE_PCT", "3.0"))
 # Don't chase a blow-off / illiquid pump we'd be buying at the very top of.
 _MAX_BURST_PCT = float(os.environ.get("MOMENTUM_MAX_MOVE_PCT", "40.0"))
-# Take-profit must be a clear multiple of the round-trip fee so a win is a
-# real win after Kraken takes its ~1.6%. Floor at 3.5%.
-_TP_PCT = max(3.5, _FEE_FLOOR_PCT * 2.0 + 0.5)
 _SL_PCT = -1.5
+
+
+def _fee_params(asset_type):
+    """Per-asset (fee_floor%, min_burst%, take_profit%). Crypto uses the Kraken
+    round-trip fee (unchanged); stock uses the spread proxy so the 1.6% floor
+    isn't applied to commission-free stocks."""
+    fee_floor = roundtrip_fee_pct(asset_type) * 100.0
+    min_burst = max(fee_floor * _FEE_MULT, _MIN_MOVE_FLOOR)
+    tp = max(3.5, fee_floor * 2.0 + 0.5)
+    return fee_floor, min_burst, tp
 
 
 class MomentumBurst(BaseBot):
@@ -53,7 +56,8 @@ class MomentumBurst(BaseBot):
         for sym, d in market_data.items():
             if d.rsi_14 is None or d.ema_21 is None:
                 continue
-            if (d.day_change_pct >= _MIN_BURST_PCT
+            _, min_burst, _ = _fee_params(d.asset_type)
+            if (d.day_change_pct >= min_burst
                     and d.macd_bullish
                     and (d.rvol or 0) > 2.0
                     and d.price > (d.ema_21 or 0)):
@@ -76,11 +80,12 @@ class MomentumBurst(BaseBot):
         """A: A genuine burst that clears the fee floor — but not a blow-off
         top we'd be the last buyer of."""
         move = data.day_change_pct
-        if move < _MIN_BURST_PCT:
-            return (False, f"+{move:.1f}% < {_MIN_BURST_PCT:.1f}% fee floor")
+        fee_floor, min_burst, _ = _fee_params(data.asset_type)
+        if move < min_burst:
+            return (False, f"+{move:.1f}% < {min_burst:.1f}% fee floor")
         if move > _MAX_BURST_PCT:
             return (False, f"+{move:.1f}% blow-off (> {_MAX_BURST_PCT:.0f}%)")
-        return (True, f"burst +{move:.1f}% (clears {_FEE_FLOOR_PCT:.1f}% fee)")
+        return (True, f"burst +{move:.1f}% (clears {fee_floor:.1f}% fee)")
 
     def check_trigger(self, data: AssetData) -> tuple:
         """Y: Volume surge + MACD up + RSI in the momentum (not exhausted) zone,
@@ -101,8 +106,9 @@ class MomentumBurst(BaseBot):
             return None
         pnl_pct = (data.price - entry) / entry * 100
 
-        if pnl_pct >= _TP_PCT:
-            return f"Take profit +{pnl_pct:.1f}% (fee-aware TP {_TP_PCT:.1f}%)"
+        _, _, tp_pct = _fee_params(data.asset_type)
+        if pnl_pct >= tp_pct:
+            return f"Take profit +{pnl_pct:.1f}% (fee-aware TP {tp_pct:.1f}%)"
         if pnl_pct <= _SL_PCT:
             return f"Stop loss {pnl_pct:.1f}%"
         if data.rsi_14 and data.rsi_14 > 88:

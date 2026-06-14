@@ -23,13 +23,13 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.base_bot import BaseBot
 from shared.market_scanner import AssetData
-from config import KRAKEN_ROUNDTRIP_FEE_PCT
+from config import roundtrip_fee_pct
 from typing import Dict, List, Optional
 
-# A win must clear the round-trip Kraken fee before the RSI mid-range exit is
-# allowed to bank it; below this, hold for TP/SL instead of scratching into a
-# fee loss. Same source as paper_trader's fee deduction (single source of truth).
-FEE_HURDLE_PCT = KRAKEN_ROUNDTRIP_FEE_PCT * 100.0
+# A win must clear the round-trip fee before the RSI mid-range exit is allowed to
+# bank it; below this, hold for TP/SL instead of scratching into a fee loss.
+# Computed per-asset in should_exit (Kraken fee for crypto — unchanged; spread
+# proxy for stocks) so crypto behavior is identical and stocks aren't over-held.
 
 # check_trend gate: ADX must be below "strong" (exhaustion plausible) but above
 # this floor — pure dead-flat chop (ADX < floor) has no trend to revert and is
@@ -115,6 +115,7 @@ class TrapCatcher(BaseBot):
         if entry <= 0:
             return None
         pnl_pct = (data.price - entry) / entry * 100
+        fee_hurdle_pct = roundtrip_fee_pct(data.asset_type) * 100.0
 
         if pnl_pct >= 3.0:
             return f"Take profit +{pnl_pct:.1f}%"
@@ -125,7 +126,7 @@ class TrapCatcher(BaseBot):
             if pnl_pct <= 0:
                 return f"RSI={data.rsi_14:.0f} reverted, no follow-through ({pnl_pct:.1f}%)"
             # ... or bank a win that has cleared the round-trip fee ...
-            if pnl_pct >= FEE_HURDLE_PCT:
+            if pnl_pct >= fee_hurdle_pct:
                 return f"RSI={data.rsi_14:.0f} mid-range, +{pnl_pct:.1f}% banked"
             # ... but in the 0..fee-hurdle dead zone, hold for TP/SL: exiting
             # here books a real-money loss after fees and front-runs the +3% TP.

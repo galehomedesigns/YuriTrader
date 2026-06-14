@@ -85,6 +85,17 @@ KRAKEN_ROUNDTRIP_FEE_PCT = float(
     os.environ.get("KRAKEN_ROUNDTRIP_FEE_PCT", str(round(_kraken_side_pct * 2 / 100, 6)))
 )
 
+# Stocks (Questrade) are commission-free; the only round-trip cost is spread/
+# slippage. Fee-aware bots use this for stock signals so they don't apply the
+# 1.6% Kraken fee floor to stocks. Override via .env STOCK_ROUNDTRIP_FEE_PCT.
+STOCK_ROUNDTRIP_FEE_PCT = float(os.environ.get("STOCK_ROUNDTRIP_FEE_PCT", "0.0010"))  # ~0.10% spread proxy
+
+
+def roundtrip_fee_pct(asset_type: str) -> float:
+    """Round-trip cost fraction by asset: Kraken fee for crypto, spread proxy
+    for stocks. Crypto path is unchanged from the original constant."""
+    return STOCK_ROUNDTRIP_FEE_PCT if asset_type == "stock" else KRAKEN_ROUNDTRIP_FEE_PCT
+
 # === FEE-AWARE PROMOTION GATE ===
 # A bot may only place LIVE crypto orders after it has proven a real,
 # fee-beating edge in PAPER: >= MIN_PROMOTION_TRADES closed paper trades whose
