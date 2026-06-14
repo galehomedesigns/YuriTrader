@@ -44,20 +44,34 @@ const STAGE_FN = `async (o) => {
     return { ok:false, chartSymbol, log:['SYMBOL MISMATCH: wanted '+o.symbol+' got '+chartSymbol] };
   log.push('symbol -> ' + chartSymbol);
 
+  // marketable-limit (type 'close'): read the live price off the side button and
+  // cross the spread, so it fills immediately like a market order but satisfies
+  // securities that reject MARKET (e.g. OTC names require a limit).
+  let otype = o.type, oprice = (o.price == null ? null : o.price);
+  if (o.type === 'close' || o.marketable) {
+    const pb = document.querySelector('[data-name='+o.side+'-order-button]');
+    const mm = pb ? (pb.innerText||'').match(/[0-9][0-9.,]*/) : null;
+    const px = mm ? parseFloat(mm[0].replace(/,/g,'')) : null;
+    if (!px) return {ok:false,chartSymbol,log:[...log,'could not read live price for marketable close']};
+    oprice = (o.side==='sell') ? +(px*0.99).toFixed(2) : +(px*1.01).toFixed(2);
+    otype = 'limit';
+    log.push('marketable -> limit @ '+oprice+' (live '+px+')');
+  }
+
   // 2) order type
-  const tab = Array.from(document.querySelectorAll('button,[role=button],[role=tab]')).find(b=>vis(b)&&(b.innerText||'').trim().toLowerCase()===o.type);
-  if(!tab) return {ok:false,chartSymbol,log:[...log,'ORDER-TYPE TAB NOT FOUND: '+o.type]};
-  tab.click(); log.push('type -> '+o.type); await sleep(450);
+  const tab = Array.from(document.querySelectorAll('button,[role=button],[role=tab]')).find(b=>vis(b)&&(b.innerText||'').trim().toLowerCase()===otype);
+  if(!tab) return {ok:false,chartSymbol,log:[...log,'ORDER-TYPE TAB NOT FOUND: '+otype]};
+  tab.click(); log.push('type -> '+otype); await sleep(450);
   // 3) side
   const sideEl = document.querySelector('[data-name=side-control-'+o.side+']');
   if(!sideEl) return {ok:false,chartSymbol,log:[...log,'SIDE NOT FOUND']};
   sideEl.click(); log.push('side -> '+o.side); await sleep(350);
   // 4) price
-  if(o.price!=null){ const pe=Array.from(document.querySelectorAll('input')).filter(e=>vis(e)&&e.type==='text').find(e=>/^price/i.test(labelFor(e))); if(!pe) return {ok:false,chartSymbol,log:[...log,'PRICE INPUT NOT FOUND']}; setInput(pe,o.price); log.push('price -> '+o.price); await sleep(250); }
+  if(oprice!=null){ const pe=Array.from(document.querySelectorAll('input')).filter(e=>vis(e)&&e.type==='text').find(e=>/^price/i.test(labelFor(e))); if(!pe) return {ok:false,chartSymbol,log:[...log,'PRICE INPUT NOT FOUND']}; setInput(pe,oprice); log.push('price -> '+oprice); await sleep(250); }
   // 5) qty (decimal input after Price; verify via qtyEl mirror)
   const dec=Array.from(document.querySelectorAll('input')).filter(e=>vis(e)&&e.getAttribute('inputmode')==='decimal');
   const pIdx=dec.findIndex(e=>/^price/i.test(labelFor(e)));
-  const qEl=(o.price==null||pIdx<0)?dec[0]:dec[pIdx+1];
+  const qEl=(oprice==null||pIdx<0)?dec[0]:dec[pIdx+1];
   if(!qEl) return {ok:false,chartSymbol,log:[...log,'QTY INPUT NOT FOUND']};
   setInput(qEl,o.qty); await sleep(400);
   const mirror=document.querySelector('[data-name=qtyEl]'); const mtxt=mirror?(mirror.innerText||'').trim():null;

@@ -122,6 +122,37 @@ def _stage_orders(book):
     print(f"[advisory] spawned queue runner: {len(orders)} orders on CDP port {port}")
 
 
+def _stage_closes(close_syms):
+    """Stage market-SELL closes for today's open positions for one-click confirm.
+    Cross-checks the real Questrade positions table: only stages a close for a
+    symbol that actually shows a long position, sized to the held qty. Never a
+    naked sell, and never touches a symbol we didn't trade today."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    port = os.environ.get("OPENING_TV_CDP_PORT", "9225")
+    try:
+        out = subprocess.run(["node", os.path.join(here, "tv_positions.js"), "--port", str(port)],
+                             capture_output=True, text=True, timeout=30)
+        positions = {p["symbol"].upper(): p for p in json.loads(out.stdout or "[]")}
+    except Exception as e:                                       # noqa: BLE001
+        print(f"[advisory] could not read positions - NOT staging closes: {e}", file=sys.stderr); return
+    orders = []
+    for s in close_syms:
+        pos = positions.get(s.upper())
+        if not pos or pos.get("side") != "long" or not (pos.get("qty", 0) > 0):
+            print(f"[advisory] {s}: no matching long position - skip close", file=sys.stderr); continue
+        orders.append({"symbol": s, "side": "sell", "type": "close", "qty": pos["qty"]})
+    if not orders:
+        print("[advisory] no open positions to close", file=sys.stderr); return
+    of = os.path.join(os.path.dirname(here), "logs", "opening_close_orders.json")
+    with open(of, "w") as f:
+        json.dump(orders, f)
+    qjs = os.path.join(here, "tv_order_queue.js")
+    send_message(f"🏁 <b>Cutoff — staging {len(orders)} CLOSE order(s)</b> (market sell, "
+                 "sized to your held shares). Confirm each on your laptop to flatten.")
+    subprocess.Popen(["node", qjs, "--port", str(port), "--orders-file", of])
+    print(f"[advisory] spawned close queue for {len(orders)} positions on port {port}")
+
+
 # ── Live monitor ─────────────────────────────────────────────────────────────
 def _candidates():
     """Reuse the freshest pre-market scan (cached by run_opening_scan ~9:25) so we
@@ -229,10 +260,21 @@ def main():
             for m in msgs:
                 send_message(m)
 
-    # Cutoff: close anything still open.
+    # Cutoff: send close advice AND collect symbols the engine considers
+    # in-position (it emits a G1 "close" ticket only when the entry filled).
+    close_syms = []
     for sym, rec in book.items():
-        for m in cutoff(rec["eng"]):
-            send_message(m)
+        for t in rec["eng"].on_cutoff():
+            send_message(advice(t))
+            if getattr(t, "rule", None) == "G1":
+                close_syms.append(sym)
+    # Stage one-click market-sell closes for those, cross-checked against the
+    # real Questrade positions (never sell what isn't held). Same arming gate.
+    if close_syms and os.environ.get("OPENING_TV_AUTO_STAGE", "").lower() == "true":
+        try:
+            _stage_closes(close_syms)
+        except Exception as e:                                   # noqa: BLE001
+            print(f"[advisory] close staging skipped: {e}", file=sys.stderr)
     ib.disconnect()
 
 
