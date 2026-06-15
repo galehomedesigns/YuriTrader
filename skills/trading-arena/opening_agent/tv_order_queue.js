@@ -37,7 +37,7 @@ const STAGE_FN = `async (o) => {
   function findSection(word){ let c=Array.from(document.querySelectorAll('*')).filter(e=>vis(e)&&(e.innerText||'').trim().toLowerCase().startsWith(word.toLowerCase())&&(e.innerText||'').length<60); c.sort((a,b)=>(a.innerText||'').length-(b.innerText||'').length); let lab=c[0]; if(!lab)return null; let row=lab,h=0; while(row&&h<6){const t=row.querySelector('[class*=switchContainer],input[type=checkbox],[role=switch]');const p=Array.from(row.querySelectorAll('input')).find(i=>i.getAttribute('inputmode')==='decimal'); if(t&&p)return{toggle:t,price:p}; row=row.parentElement;h++;} return null; }
 
   // ── modify-stop: reprice an existing resting stop IN PLACE (no cancel/gap) ──
-  if (o.action === 'modify-stop') {
+  if (o.action === 'modify-stop' || o.action === 'modify-tp') {
     const otab = Array.from(document.querySelectorAll('button,[role=button],[role=tab]')).find(b=>vis(b)&&/^orders\\b/i.test((b.innerText||'').trim()));
     if (otab) { otab.click(); await sleep(700); }
     const t = document.querySelector('[data-name=\\"QUESTRADE.orders-table\\"]');
@@ -46,19 +46,34 @@ const STAGE_FN = `async (o) => {
       const txt=(r.innerText||'').replace(/\\s+/g,' ').trim().toUpperCase();
       return txt.startsWith(String(o.symbol).toUpperCase()+' ') && /\\bSTOP\\b/.test(txt) && /QUEUED/.test(txt);
     });
-    if (!row) return {ok:false, log:['no resting QUEUED stop order for '+o.symbol]};
+    if (!row) return {ok:false, log:['no resting QUEUED bracket order for '+o.symbol]};
     const edit = row.querySelector('[data-name=edit-settings-cell-button]');
-    if (!edit) return {ok:false, log:['no Modify button on the '+o.symbol+' stop row']};
+    if (!edit) return {ok:false, log:['no Modify button on the '+o.symbol+' row']};
     edit.click(); await sleep(1200);
-    const pe = Array.from(document.querySelectorAll('input')).filter(e=>vis(e)&&e.type==='text').find(e=>/^price/i.test(labelFor(e)));
-    if (!pe) return {ok:false, log:['no Price field in Modify dialog']};
-    setInput(pe, o.price); await sleep(300);
-    // The Confirm button is grayed while TradingView validates the new price;
-    // wait for it to ENABLE so we only prompt the user when it's clickable.
+    const setWhat = [];
+    // (a) reprice the stop trigger (G16) if a new stop is given
+    if (o.price != null) {
+      const pe = Array.from(document.querySelectorAll('input')).filter(e=>vis(e)&&e.type==='text').find(e=>/^price/i.test(labelFor(e)));
+      if (!pe) return {ok:false, log:['no Price field in Modify dialog']};
+      setInput(pe, o.price); setWhat.push('stop '+o.price); await sleep(300);
+    }
+    // (b) enable + set the take-profit (G10) if given — makes it OCO with the stop
+    if (o.take_profit != null) {
+      let tp = findSection('Take profit');
+      if (!tp) { const fe=()=>Array.from(document.querySelectorAll('*')).filter(e=>vis(e)&&(e.innerText||'').trim().toLowerCase()==='exits'&&(e.innerText||'').length<12)[0]; for(let a=0;a<2&&!tp;a++){const hdr=fe(); if(!hdr)break; (hdr.closest('[role=button]')||hdr.parentElement||hdr).click(); await sleep(650); tp=findSection('Take profit');} }
+      if (!tp) return {ok:false, log:['no Take profit section in Modify dialog']};
+      const cb = tp.toggle.querySelector('input[type=checkbox]') || (tp.toggle.tagName==='INPUT'?tp.toggle:null);
+      if (!cb) return {ok:false, log:['no Take profit checkbox']};
+      if (!cb.checked) { cb.click(); await sleep(400); }
+      if (!cb.checked) return {ok:false, log:['Take profit toggle would not enable']};
+      setInput(tp.price, o.take_profit); setWhat.push('TP '+o.take_profit); await sleep(300);
+    }
+    if (!setWhat.length) return {ok:false, log:['modify called with neither stop nor take_profit']};
+    // The Confirm button is grayed while TradingView validates; wait for ENABLE.
     let cf = null, enabled = false;
     for (let k=0; k<15 && !enabled; k++) { cf = document.querySelector('[data-name=place-and-modify-button]'); enabled = !!(cf && vis(cf) && !cf.disabled && !/disabled/i.test(cf.className||'')); if(!enabled) await sleep(400); }
     if (!cf || !vis(cf)) return {ok:false, log:['Modify Confirm button not visible']};
-    return {ok:true, staged:true, summary:'Modify '+o.symbol+' stop -> '+o.price+(enabled?' (Confirm ready — click it)':' (wait for Confirm to enable, then click)'), log:['opened Modify for '+o.symbol+' stop, set price '+o.price+', confirm-enabled='+enabled]};
+    return {ok:true, staged:true, summary:'Modify '+o.symbol+' '+setWhat.join(', ')+(enabled?' (Confirm ready — click it)':' (wait for Confirm to enable, then click)'), log:['modify '+o.symbol+': '+setWhat.join(', ')+', confirm-enabled='+enabled]};
   }
 
   // 1) switch symbol + verify
@@ -151,8 +166,8 @@ const CONFIRM_VISIBLE_FN = `(function(){ var b=Array.from(document.querySelector
   const results = [];
   for (let i = 0; i < orders.length; i++) {
     const o = orders[i];
-    const desc = o.action === 'modify-stop'
-      ? `modify ${o.symbol} stop -> ${o.price}`
+    const desc = o.action === 'modify-stop' ? `modify ${o.symbol} stop -> ${o.price}`
+      : o.action === 'modify-tp' ? `modify ${o.symbol} take-profit -> ${o.take_profit}`
       : `${o.side} ${o.qty} ${o.symbol} ${o.type} @ ${o.price}${o.stop != null ? ' (SL ' + o.stop + ')' : ''}`;
     console.log(`\n=== [${i + 1}/${orders.length}] staging ${desc} ===`);
     const staged = await evalJs(`(${STAGE_FN})(${JSON.stringify(o)})`, true);

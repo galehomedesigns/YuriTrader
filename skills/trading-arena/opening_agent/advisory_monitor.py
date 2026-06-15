@@ -167,6 +167,20 @@ def _stage_stop_move(sym, new_stop):
     print(f"[advisory] spawned stop-move for {sym} -> {new_stop}")
 
 
+def _stage_take_profit(sym, tp_price):
+    """Stage adding a take-profit to the resting bracket (OCO with the stop) for
+    one symbol; the user clicks Confirm in the Modify dialog. Non-blocking."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    port = os.environ.get("OPENING_TV_CDP_PORT", "9225")
+    of = os.path.join(os.path.dirname(here), "logs", f"opening_tp_{sym}.json")
+    with open(of, "w") as f:
+        json.dump([{"action": "modify-tp", "symbol": sym, "take_profit": round(tp_price, 2)}], f)
+    qjs = os.path.join(here, "tv_order_queue.js")
+    send_message(f"💰 <b>Take-profit staged: {sym} → {tp_price:.2f}</b> — click Confirm on your laptop.")
+    subprocess.Popen(["node", qjs, "--port", str(port), "--orders-file", of])
+    print(f"[advisory] spawned take-profit for {sym} -> {tp_price}")
+
+
 # ── Live monitor ─────────────────────────────────────────────────────────────
 def _candidates():
     """Reuse the freshest pre-market scan (cached by run_opening_scan ~9:25) so we
@@ -272,14 +286,20 @@ def main():
             rec["last_ts"] = newest.get("date")
             for t in rec["eng"].on_bar(newest, complete=True):
                 send_message(advice(t))
-                # G16 = "move stop up": stage an in-place reprice for one-click
-                # confirm (same arming gate; non-fatal).
-                if getattr(t, "rule", None) == "G16" and \
-                        os.environ.get("OPENING_TV_AUTO_STAGE", "").lower() == "true":
+                armed = os.environ.get("OPENING_TV_AUTO_STAGE", "").lower() == "true"
+                rule = getattr(t, "rule", None)
+                # G16 = trailing stop-move; G10 = take-profit (push 2). Both staged
+                # as one-click bracket modifies (same arming gate; non-fatal).
+                if armed and rule == "G16":
                     try:
                         _stage_stop_move(sym, t.price)
                     except Exception as e:                       # noqa: BLE001
                         print(f"[advisory] stop-move staging skipped: {e}", file=sys.stderr)
+                elif armed and rule == "G10":
+                    try:
+                        _stage_take_profit(sym, t.price)
+                    except Exception as e:                       # noqa: BLE001
+                        print(f"[advisory] take-profit staging skipped: {e}", file=sys.stderr)
 
     # Cutoff: send close advice AND collect symbols the engine considers
     # in-position (it emits a G1 "close" ticket only when the entry filled).
