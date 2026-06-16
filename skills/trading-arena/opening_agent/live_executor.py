@@ -30,22 +30,11 @@ class LiveExecError(Exception):
     pass
 
 
-_SMOKE_FLAG = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           "..", "logs", "opening_smoke_ok.flag")
-
-
-def _smoke_ok():
-    """The live order path must have passed smoke_test.py at least once before any
-    real entry can transmit. Override with OPENING_SKIP_SMOKE=true (not advised)."""
-    if os.environ.get("OPENING_SKIP_SMOKE", "false").lower() == "true":
-        return True
-    return os.path.exists(_SMOKE_FLAG)
-
-
 def _armed():
-    """Real orders transmit only when armed AND the smoke test has passed."""
-    return (os.environ.get("OPENING_ALLOW_TRADING", "false").lower() == "true"
-            and _smoke_ok())
+    """Real orders transmit only when armed. (The one-time smoke-test pre-gate was
+    retired 2026-06-15 — the live order path has been exercised repeatedly in real
+    configuration, so OPENING_ALLOW_TRADING is now the sole arming switch.)"""
+    return os.environ.get("OPENING_ALLOW_TRADING", "false").lower() == "true"
 
 
 def max_budget():

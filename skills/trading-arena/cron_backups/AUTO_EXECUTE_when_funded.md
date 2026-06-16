@@ -20,19 +20,19 @@ from cron while in advisory mode.
 1. Fund the IBKR account to **≥ 2,500 CAD** (US trading unlocked).
 2. Switch the gateway to live + approve 2FA (already done if `.env` is live).
 3. `.env`: set `OPENING_ALLOW_TRADING=true`.
-4. Run the smoke test once — it must PASS (writes `logs/opening_smoke_ok.flag`):
-   `.venv/bin/python skills/trading-arena/opening_agent/smoke_test.py`
-5. Add these three cron lines (server = Mountain Time; ET = MT+2):
+4. Add these three cron lines (server = Mountain Time; ET = MT+2):
 ```
 25 7 * * 1-5 /home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/trading-arena/opening_agent/run_opening_live.py confirm  >> /home/tonygale/openclaw/skills/trading-arena/logs/opening_live_cron.log 2>&1
 32 7 * * 1-5 /home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/trading-arena/opening_agent/run_opening_live.py execute  >> /home/tonygale/openclaw/skills/trading-arena/logs/opening_live_cron.log 2>&1
 50 7 * * 1-5 /home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/trading-arena/opening_agent/run_opening_live.py cutoff   >> /home/tonygale/openclaw/skills/trading-arena/logs/opening_live_cron.log 2>&1
 ```
-6. Decide whether to KEEP the advisory coach (`advisory_monitor.py` at 9:32) running
+5. Decide whether to KEEP the advisory coach (`advisory_monitor.py` at 9:32) running
    alongside (you'd get both the orders AND the play-by-play), or remove it.
 
 Belt-and-suspenders: even with all crons live, NO real order transmits unless
-`OPENING_ALLOW_TRADING=true` AND the smoke flag exists (code-enforced in
-`live_executor.py`). So the steps above are the only way to arm.
+`OPENING_ALLOW_TRADING=true` (code-enforced in `live_executor.py`). So the steps
+above are the only way to arm. (The one-time smoke-test pre-gate was retired
+2026-06-15 after repeated live-config runs — `OPENING_ALLOW_TRADING` is now the
+sole arming switch.)
 
 Timestamped crontab snapshots live in this folder (`crontab_YYYYMMDD_HHMM.bak`).

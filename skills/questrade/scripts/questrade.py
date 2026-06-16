@@ -250,10 +250,10 @@ def cmd_portfolio():
     print(f"  {'-'*60}")
     for p in pos_list:
         symbol = p["symbol"]
-        qty = p["openQuantity"]
-        avg_cost = p["averageEntryPrice"]
-        current = p["currentPrice"]
-        pnl = p.get("openPnl", 0)
+        qty = p.get("openQuantity") or 0
+        avg_cost = p.get("averageEntryPrice") or 0
+        current = p.get("currentPrice") or 0
+        pnl = p.get("openPnl") or 0
         pnl_pct = ((current / avg_cost) - 1) * 100 if avg_cost > 0 else 0
         print(f"  {symbol:<10} {qty:>8.0f} {avg_cost:>10.2f} {current:>10.2f} {pnl:>12.2f} {pnl_pct:>7.1f}%")
 
