@@ -205,7 +205,7 @@ const PAGE_FN = `async (opts) => {
     console.error(`Cannot reach CDP at 127.0.0.1:${PORT} (tunnel down?): ${e.message}`);
     process.exit(2);
   }
-  const tv = tabs.find(t => t.type === "page" && t.url && t.url.includes("tradingview.com"));
+  const tv = require("./tv_tab").pickTradingTab(tabs);   // never the dedicated data tab
   if (!tv) { console.error("No TradingView tab found"); process.exit(2); }
   const ws = tv.webSocketDebuggerUrl.replace(/\/\/[^/]+\//, `//127.0.0.1:${PORT}/`);
   const sock = new WebSocket(ws);

@@ -149,7 +149,7 @@ const CONFIRM_VISIBLE_FN = `(function(){ var b=Array.from(document.querySelector
 
 (async () => {
   const tabs = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();
-  const tv = tabs.find(t => t.type === "page" && t.url && t.url.includes("tradingview.com/chart"));
+  const tv = require("./tv_tab").pickTradingTab(tabs);   // never the dedicated data tab
   if (!tv) { console.error("no chart tab"); process.exit(2); }
   const ws = tv.webSocketDebuggerUrl.replace(/\/\/[^/]+\//, `//127.0.0.1:${PORT}/`);
   const sock = new WebSocket(ws);
