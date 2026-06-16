@@ -8,6 +8,7 @@ it returns classifications. Everything here is unit-tested and back-testable.
 A "bar" is a dict: {"open","high","low","close","volume"} (volume optional).
 SMAs are computed by the caller (market_scanner already has sma()).
 """
+import os
 from dataclasses import dataclass, field
 
 # ── Config defaults (every value is a TRADING_AGENT.md §7 config key) ──────────
@@ -22,6 +23,12 @@ DEFAULTS = {
     "small_lookback": 5,          # avgBody window for "little" bars
     "trade_offset": 0.01,         # $ offset for all trigger levels (G5)
 }
+
+# Tunable without code edits. The opening-movers re-aim (2026-06-15) loosens TIGHT
+# so coiled-but-moving names actually qualify — 0.25% was too strict given the
+# funnel. Set OPENING_TIGHT_THRESHOLD in .env (e.g. 0.005 = 0.5%).
+DEFAULTS["tight_threshold"] = float(
+    os.environ.get("OPENING_TIGHT_THRESHOLD", DEFAULTS["tight_threshold"]))
 
 
 # ── Primitive bar geometry ────────────────────────────────────────────────────

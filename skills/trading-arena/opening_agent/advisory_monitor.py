@@ -219,8 +219,7 @@ def main():
     bars_by_sym = tv_bars.fetch_bars(cands, min_bars=200)
 
     # Arm: classify bar 1 (the latest completed bar at launch) for each candidate.
-    book = {}     # sym -> {"eng":..., "last_ts":...}
-    fired = []
+    book = {}     # sym -> {"eng":..., "last_ts":..., "advices":...}
     skipped = []  # (sym, reason) for candidates that didn't match
     for sym in cands:
         bars = bars_by_sym.get(sym, [])
@@ -235,8 +234,8 @@ def main():
         eng, advices = arm(sym, bar1, prior, smf, sms)
         if eng is not None:
             book[sym] = {"eng": eng, "last_ts": bars[-1].get("date"),
-                         "entry": C.entry_level_long(bar1), "stop": C.stop_level_long(bar1)}
-            fired += advices
+                         "entry": C.entry_level_long(bar1), "stop": C.stop_level_long(bar1),
+                         "advices": advices}
         else:
             skipped.append((sym, v.decision))
 
@@ -247,9 +246,20 @@ def main():
                      + (f"\n\n<b>Candidates checked ({len(skipped)}):</b>\n{skip_lines}" if skip_lines else ""))
         return
 
+    # PRIORITIZE: `cands` is rank-ordered (best score first), so `book` preserves
+    # that order. Cap to the top N so per-trade size (budget / N) stays meaningful
+    # instead of splitting $ across every passer. OPENING_MAX_TRADES (default 5).
+    max_trades = int(os.environ.get("OPENING_MAX_TRADES", "5"))
+    dropped = list(book.keys())[max_trades:]
+    if dropped:
+        book = dict(list(book.items())[:max_trades])
+    fired = [a for rec in book.values() for a in rec.get("advices", [])]
+
     skip_lines = "\n".join(f"  • {s} — {r}" for s, r in skipped) if skipped else ""
+    drop_line = (f"\n\n<b>Passed but not traded (top {max_trades} only):</b> "
+                 + ", ".join(dropped)) if dropped else ""
     send_message("🎯 <b>Opening Power — these passed the 2-min test (LONG):</b>\n"
-                 + "\n".join(fired)
+                 + "\n".join(fired) + drop_line
                  + (f"\n\n<b>Did not pass ({len(skipped)}):</b>\n{skip_lines}" if skip_lines else "")
                  + "\n\n<i>Manual mode: I'll tell you when to enter, move stops, add, "
                  "and close. Place the orders yourself.</i>")

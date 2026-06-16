@@ -303,11 +303,14 @@ def scan_tv(limit_movers=50, cfg=None):
     both = os.environ.get("OPENING_ALLOW_SHORTS", "false").lower() == "true"
     min_price = float(os.environ.get("OPENING_MIN_PRICE", "5"))
     min_pmvol = int(os.environ.get("OPENING_MIN_PREMARKET_VOLUME", "50000"))
+    min_gap = float(os.environ.get("OPENING_SCAN_MIN_GAP_PCT", "1"))
+    max_gap = float(os.environ.get("OPENING_SCAN_MAX_GAP_PCT", "6"))
     raw = tv_screener.movers(limit=limit_movers, min_price=min_price,
-                             min_premarket_vol=min_pmvol)
+                             min_premarket_vol=min_pmvol, min_gap=min_gap, max_gap=max_gap)
     if both:
         raw += tv_screener.movers(limit=limit_movers, min_price=min_price,
-                                  min_premarket_vol=min_pmvol, losers=True)
+                                  min_premarket_vol=min_pmvol, min_gap=min_gap,
+                                  max_gap=max_gap, losers=True)
     raw = raw[:limit_movers]
     full_syms = [f'{m["exchange"]}:{m["symbol"]}' for m in raw]
     bars_map = tv_bars.fetch_bars(full_syms, min_bars=200)
