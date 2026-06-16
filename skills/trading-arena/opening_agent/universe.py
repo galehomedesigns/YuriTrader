@@ -295,12 +295,43 @@ def scan_ibkr(limit_movers=50, cfg=None):
     return candidates
 
 
+def scan_tv(limit_movers=50, cfg=None):
+    """IBKR-FREE funnel: TradingView public screener for pre-market movers +
+    TradingView chart (CDP) for each mover's real-time 2-min bars. No IB Gateway,
+    no delayed data, no 2FA. This is the default path (OPENING_DATA_SOURCE=tv)."""
+    from opening_agent import tv_screener, tv_bars
+    both = os.environ.get("OPENING_ALLOW_SHORTS", "false").lower() == "true"
+    min_price = float(os.environ.get("OPENING_MIN_PRICE", "5"))
+    min_pmvol = int(os.environ.get("OPENING_MIN_PREMARKET_VOLUME", "50000"))
+    raw = tv_screener.movers(limit=limit_movers, min_price=min_price,
+                             min_premarket_vol=min_pmvol)
+    if both:
+        raw += tv_screener.movers(limit=limit_movers, min_price=min_price,
+                                  min_premarket_vol=min_pmvol, losers=True)
+    raw = raw[:limit_movers]
+    full_syms = [f'{m["exchange"]}:{m["symbol"]}' for m in raw]
+    bars_map = tv_bars.fetch_bars(full_syms, min_bars=200)
+    candidates = []
+    for m in raw:
+        full = f'{m["exchange"]}:{m["symbol"]}'
+        mv = Mover(m["symbol"], m["close"], 0.0, m["premarket_change"], m["direction"])
+        candidates.append(evaluate(mv, bars=bars_map.get(full, []), cfg=cfg))
+    usable = [c for c in candidates if c.state != "UNKNOWN"]
+    print(f"  [opening.scan/tv] movers={len(raw)} usable={len(usable)} "
+          f"(coverage: {len(usable)}/{len(raw)})", file=sys.stderr)
+    return candidates
+
+
 def scan(limit_movers=50, cfg=None, source=None):
     """Full funnel: movers → deep-evaluate → list[Candidate]. Logs coverage.
-    Default path is IBKR-native (one connection, fast); set
-    OPENING_BARS_SOURCE=questrade for the old per-symbol Questrade path."""
-    if source is None and os.environ.get("OPENING_BARS_SOURCE", "ibkr") == "ibkr":
-        return scan_ibkr(limit_movers=limit_movers, cfg=cfg)
+    Default OPENING_DATA_SOURCE=tv (IBKR-free, real-time TradingView). Set it to
+    'ibkr' for the legacy gateway path, or pass an explicit `source` (quote)."""
+    if source is None:
+        ds = os.environ.get("OPENING_DATA_SOURCE", "tv").lower()
+        if ds == "tv":
+            return scan_tv(limit_movers=limit_movers, cfg=cfg)
+        if ds == "ibkr":
+            return scan_ibkr(limit_movers=limit_movers, cfg=cfg)
     source = source or get_mover_source()
     movers = source.movers(limit=limit_movers)
     candidates = [evaluate(m, cfg=cfg) for m in movers]
