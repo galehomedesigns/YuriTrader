@@ -97,18 +97,28 @@ def _stage_orders(book):
     syms = list(book.keys())
     per = budget / len(syms)
     orders = []
+    skipped = []                                     # (symbol, reason) for transparency
     for s in syms:
         entry, stop = book[s].get("entry"), book[s].get("stop")
         if not entry or entry <= 0:
+            skipped.append((s, "no entry level"))
+            print(f"[advisory] {s}: no entry level - skipped", file=sys.stderr)
             continue
         qty = int(per // entry)                      # whole shares affordable per slot
         if qty < 1:
-            print(f"[advisory] {s}: ${per:.2f}/slot < 1 share @ {entry:.2f} - skipped", file=sys.stderr)
+            reason = f"${per:.2f}/slot < 1 share @ ${entry:.2f}"
+            skipped.append((s, reason))
+            print(f"[advisory] {s}: {reason} - skipped", file=sys.stderr)
             continue
         orders.append({"symbol": s, "side": "buy", "type": "stop",
                        "price": round(entry, 2), "qty": qty, "stop": round(stop, 2)})
+    skip_line = ("\n\n<b>Skipped ({}):</b>\n".format(len(skipped))
+                 + "\n".join(f"  • {s} — {r}" for s, r in skipped)) if skipped else ""
     if not orders:
-        print("[advisory] no affordable orders to stage", file=sys.stderr); return
+        print("[advisory] no affordable orders to stage", file=sys.stderr)
+        send_message(f"⚪ <b>No orders staged</b> — all {len(syms)} match(es) priced out of "
+                     f"the ${budget:.0f}/{len(syms)} = ${per:.2f} slot.{skip_line}")
+        return
     here = os.path.dirname(os.path.abspath(__file__))
     of = os.path.join(os.path.dirname(here), "logs", "opening_orders.json")
     with open(of, "w") as f:
@@ -116,7 +126,8 @@ def _stage_orders(book):
     port = os.environ.get("OPENING_TV_CDP_PORT", "9225")
     qjs = os.path.join(here, "tv_order_queue.js")
     send_message(f"⚡ <b>Staging {len(orders)} order(s) to TradingView</b> — review each "
-                 "confirmation on your laptop and click <b>Send Order</b> (or Cancel to skip).")
+                 "confirmation on your laptop and click <b>Send Order</b> (or Cancel to skip)."
+                 + skip_line)
     # Non-blocking: the queue runner handles confirmations while we keep coaching.
     subprocess.Popen(["node", qjs, "--port", str(port), "--orders-file", of])
     print(f"[advisory] spawned queue runner: {len(orders)} orders on CDP port {port}")
