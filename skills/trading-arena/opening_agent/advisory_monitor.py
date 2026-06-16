@@ -34,6 +34,7 @@ def _load_env():
 _load_env()
 from opening_agent import classifier as C
 from opening_agent import universe as U
+from opening_agent import tv_bars
 from opening_agent import tv_watchlist
 from opening_agent.engine import OpeningEngine
 from opening_agent.run_opening_scan import send_message
@@ -209,27 +210,20 @@ def _candidates():
 
 
 def main():
-    from ib_async import IB, util
-    util.patchAsyncio()
-    ib = IB()
-    ib.connect(os.environ.get("IBKR_HOST", "127.0.0.1"),
-               int(os.environ.get("IBKR_PORT", "4001")),
-               clientId=int(os.environ.get("ADVISORY_CLIENT_ID", "27")), timeout=20)
-    ib.reqMarketDataType(3)
-
     cands = _candidates() or [r["symbol"] for r in __import__(
         "opening_agent.ranker", fromlist=["rank"]).rank(U.scan(limit_movers=50), top_n=10)]
+
+    # Real-time 2-min bars for every candidate, in one batch off the TradingView
+    # data tab via CDP (no IBKR / no delay / no gateway). Each value is bars
+    # oldest->newest; missing/failed symbols come back as [].
+    bars_by_sym = tv_bars.fetch_bars(cands, min_bars=200)
 
     # Arm: classify bar 1 (the latest completed bar at launch) for each candidate.
     book = {}     # sym -> {"eng":..., "last_ts":...}
     fired = []
     skipped = []  # (sym, reason) for candidates that didn't match
     for sym in cands:
-        try:
-            bars = U._ibkr_2min_bars(ib, sym)
-        except Exception as e:
-            skipped.append((sym, f"IBKR data error: {e}"))
-            continue
+        bars = bars_by_sym.get(sym, [])
         if len(bars) < 200:
             skipped.append((sym, f"insufficient bars ({len(bars)}/200)"))
             continue
@@ -251,7 +245,7 @@ def main():
         send_message("⚪ <b>Opening Power</b> — no stock passed the 9:30 first-bar "
                      "rule. Nothing to trade today."
                      + (f"\n\n<b>Candidates checked ({len(skipped)}):</b>\n{skip_lines}" if skip_lines else ""))
-        ib.disconnect(); return
+        return
 
     skip_lines = "\n".join(f"  • {s} — {r}" for s, r in skipped) if skipped else ""
     send_message("🎯 <b>Opening Power — these passed the 2-min test (LONG):</b>\n"
@@ -284,11 +278,9 @@ def main():
     cutoff_time = open_time + timedelta(minutes=CUTOFF_MIN)
     while datetime.now(ET) < cutoff_time:
         time.sleep(POLL_SEC)
+        loop_bars = tv_bars.fetch_bars(list(book.keys()), min_bars=200)
         for sym, rec in list(book.items()):
-            try:
-                bars = U._ibkr_2min_bars(ib, sym)
-            except Exception:
-                continue
+            bars = loop_bars.get(sym, [])
             if not bars:
                 continue
             newest = bars[-1]
@@ -327,7 +319,6 @@ def main():
             _stage_closes(close_syms)
         except Exception as e:                                   # noqa: BLE001
             print(f"[advisory] close staging skipped: {e}", file=sys.stderr)
-    ib.disconnect()
 
 
 if __name__ == "__main__":

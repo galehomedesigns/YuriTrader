@@ -2,30 +2,29 @@
 """Pre-open go/no-go check for the Opening Power live (CDP) trading path.
 
 Runs ~1 hour before the open and Telegrams ONE consolidated status so nothing is
-discovered at 9:32. Checks the three things that actually stop a live morning:
+discovered at 9:32. IBKR is gone — the feed and orders are all TradingView now, so
+this checks the three things that actually stop a live morning:
 
-  1. IBKR quote feed authenticated  — real API managedAccounts/NetLiquidation call
-     (not just a port being open). This is the only IBKR use now: market data for
-     the classifier. A wedged "Connecting to server" session fails this.
-  2. 2FA push pending               — if the gateway is NOT authenticated, reads the
-     gateway container log to tell you WHY: a Second Factor dialog waiting for your
-     tap (approve it on IBKR Mobile) vs. just down (needs a recreate).
-  3. CDP order path up (port 9225)  — the laptop trading Chrome + reverse tunnel,
+  1. CDP order path up (port 9225) — the laptop trading Chrome + reverse tunnel,
      the ONLY browser that routes orders to Questrade. Down = no orders can stage.
      (Start it with laptop/start_trading_browser.ps1.)
+  2. TradingView real-time bars     — pulls live 2-min bars for a liquid test name
+     off the data tab via CDP. Confirms the upgraded TV feed is serving the
+     classifier (the data tab + real-time data both work).
+  3. TradingView screener           — the pre-market mover list (public endpoint).
 
-Reports green or a red action-list. Read-only — never recreates or trades.
+Reports green or a red action-list. Read-only — never trades.
 
     preopen_check.py            # check + Telegram
     preopen_check.py --print    # check + stdout only (no Telegram)
 """
 import os
-import signal
 import socket
-import subprocess
 import sys
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def _load_env():
@@ -40,64 +39,12 @@ def _load_env():
 
 
 _load_env()
-PORT = int(os.environ.get("IBKR_PORT", "4001"))
 CDP_PORT = int(os.environ.get("OPENING_TV_CDP_PORT", "9225"))
+TEST_SYMBOL = os.environ.get("OPENING_PREOPEN_TEST_SYMBOL", "NASDAQ:AAPL")
 
 
 def _et():
     return datetime.now(ZoneInfo("America/New_York"))
-
-
-class _Timeout(Exception):
-    pass
-
-
-def gateway_authenticated():
-    """True iff the live session delivers managedAccounts + NetLiquidation within
-    ~20s — the same functional probe the healthcheck uses."""
-    signal.signal(signal.SIGALRM, lambda *_: (_ for _ in ()).throw(_Timeout()))
-    signal.alarm(22)
-    ib = None
-    try:
-        from ib_async import IB, util
-        util.patchAsyncio()
-        ib = IB()
-        ib.connect(os.environ.get("IBKR_HOST", "127.0.0.1"), PORT,
-                   clientId=int(os.environ.get("PREOPEN_CHECK_CLIENT_ID", "93")),
-                   timeout=15)
-        accts = ib.managedAccounts()
-        summ = {v.tag: v.value for v in ib.accountSummary(accts[0])} if accts else {}
-        return bool(accts) and summ.get("NetLiquidation") is not None
-    except Exception:                          # noqa: BLE001 — any failure = unhealthy
-        return False
-    finally:
-        signal.alarm(0)
-        try:
-            if ib:
-                ib.disconnect()
-        except Exception:
-            pass
-
-
-def twofa_pending():
-    """True if the most recent 'Second Factor Authentication; event=Opened' in the
-    gateway log is newer than the most recent 'Login has completed' — i.e. a push
-    is waiting for your tap. None if the log can't be read."""
-    try:
-        out = subprocess.run(["docker", "logs", "--tail", "600", "ib-gateway"],
-                             capture_output=True, text=True, timeout=20)
-        lines = (out.stdout + "\n" + out.stderr).splitlines()
-    except Exception:                          # noqa: BLE001
-        return None
-    last_open_i = last_done_i = -1
-    for i, ln in enumerate(lines):
-        if "Second Factor Authentication" in ln and "event=Opened" in ln:
-            last_open_i = i
-        elif "Login has completed" in ln:
-            last_done_i = i
-    if last_open_i == -1:
-        return False
-    return last_open_i > last_done_i
 
 
 def port_up(port):
@@ -106,6 +53,28 @@ def port_up(port):
             return True
     except OSError:
         return False
+
+
+def tv_bars_ok():
+    """(ok, detail) — can we pull real-time 2-min bars off the TV data tab?"""
+    try:
+        from opening_agent import tv_bars
+        bars = tv_bars.fetch_one(TEST_SYMBOL, min_bars=200)
+        if len(bars) >= 200:
+            return True, f"{len(bars)} bars, last {bars[-1]['close']}"
+        return False, f"only {len(bars)} bars (<200)"
+    except Exception as e:                         # noqa: BLE001
+        return False, str(e)[:80]
+
+
+def screener_ok():
+    """(ok, detail) — does the TradingView pre-market scanner respond?"""
+    try:
+        from opening_agent import tv_screener
+        rows = tv_screener.movers(limit=3)
+        return (len(rows) > 0), f"{len(rows)} movers"
+    except Exception as e:                         # noqa: BLE001
+        return False, str(e)[:80]
 
 
 def _tg(msg):
@@ -127,32 +96,26 @@ def _tg(msg):
 def main():
     send = "--print" not in sys.argv
     et = _et()
-    auth = gateway_authenticated()
     cdp = port_up(CDP_PORT)
 
-    problems = []
-    oks = []
-
-    if auth:
-        oks.append("✅ IBKR quote feed authenticated (classifier can read bars)")
-    else:
-        pend = twofa_pending()
-        if pend is True:
-            problems.append("🔴 IBKR gateway NOT logged in — a <b>2FA push is waiting</b>. "
-                            "Approve it on <b>IBKR Mobile</b> now.")
-        elif pend is False:
-            problems.append("🔴 IBKR gateway NOT logged in and no 2FA pending — it likely "
-                            "needs a recreate (no quote feed = no trades).")
-        else:  # None — couldn't read the log
-            problems.append("🔴 IBKR gateway NOT delivering data (couldn't read the gateway "
-                            "log to tell if a 2FA is pending — check IBKR Mobile / the gateway).")
+    problems, oks = [], []
 
     if cdp:
         oks.append(f"✅ CDP order path up (laptop Chrome on :{CDP_PORT})")
     else:
-        problems.append(f"🔴 CDP order path DOWN (:{CDP_PORT}) — orders can't stage. "
-                        "Start <b>start_trading_browser.ps1</b> on the laptop and confirm "
-                        "TradingView is open, Questrade connected, sole TV login.")
+        problems.append(f"🔴 CDP order path DOWN (:{CDP_PORT}) — orders can't stage AND the "
+                        "bar feed can't read. Start <b>start_trading_browser.ps1</b> on the "
+                        "laptop; confirm TradingView is open, Questrade connected, sole TV login.")
+
+    # The bar feed needs the CDP browser, so only test it if the port is up.
+    if cdp:
+        ok, detail = tv_bars_ok()
+        (oks if ok else problems).append(
+            ("✅ TradingView real-time bars OK" if ok else "🔴 TradingView bars FAILED") + f" ({detail})")
+
+    sok, sdetail = screener_ok()
+    (oks if sok else problems).append(
+        ("✅ TradingView screener OK" if sok else "🔴 TradingView screener FAILED") + f" ({sdetail})")
 
     head = f"🌅 <b>Opening Power pre-open check</b> — {et:%H:%M ET}"
     if problems:
@@ -164,7 +127,7 @@ def main():
         _tg(msg)
     else:
         print(msg)
-    print(f"[preopen] {et:%H:%M ET} auth={auth} cdp={cdp} problems={len(problems)}")
+    print(f"[preopen] {et:%H:%M ET} cdp={cdp} problems={len(problems)}")
 
 
 if __name__ == "__main__":
