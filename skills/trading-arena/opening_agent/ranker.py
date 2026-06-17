@@ -111,17 +111,29 @@ def score(c):
     return round(total, 1), {k: round(v, 3) for k, v in comps.items()}
 
 
-def rank(candidates, top_n=10):
+def rank(candidates, top_n=10, news=None, news_factor=0.0):
     """Score and sort candidates best→worst. Returns list of dicts ready for
-    formatting: {rank, symbol, score, direction, verdict, components, kpis}."""
+    formatting: {rank, symbol, score, direction, verdict, components, kpis}.
+
+    `news` (optional) is {symbol -> {'sentiment': -1..+1, ...}} from
+    news_sentiment.batch(); `news_factor` is the MAX point budget it may move a
+    score (e.g. 5 → at most ±5 on the 0..100 scale). News is a tie-breaker/nudge,
+    never governing — the technical composite still decides the setup.
+    """
+    news = news or {}
     scored = []
     for c in candidates:
         s, comps = score(c)
+        sent = float((news.get(c.symbol) or {}).get("sentiment", 0.0))
+        news_adj = round(sent * news_factor, 1)          # bounded: sent∈[-1,1]
+        final = round(s + news_adj, 1)
         verdict = ("LONG" if (_setup_score(c) == 1.0 and c.bar_signal > 0)
                    else "SHORT" if (_setup_score(c) == 1.0 and c.bar_signal < 0)
                    else "WATCH" if _setup_score(c) > 0 else "NO-PLAY")
         scored.append({
-            "symbol": c.symbol, "score": s, "direction": verdict,
+            "symbol": c.symbol, "score": final, "base_score": s,
+            "news_adj": news_adj, "news_sentiment": round(sent, 2),
+            "direction": verdict,
             "state": c.state, "location": c.location,
             "pct_change": round(c.pct_change or 0, 2),
             "tightness": round(c.tightness or 0, 3),

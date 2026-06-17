@@ -99,12 +99,14 @@ def format_message(ranked, et_now):
             kbits.append(f"ADX {k['adx']:.0f}")
         if k.get("rvol") is not None:
             kbits.append(f"RVOL {k['rvol']:.1f}x")
+        nadj = r.get("news_adj", 0)
+        news_bit = f"  📰 {nadj:+.0f}" if nadj else ""
         lines.append(
             f"{_emoji(r['direction'])} <b>#{r['rank']} {r['symbol']}</b> "
             f"— <b>{r['score']}</b>  ({r['direction']})\n"
             f"   {r['state']}/{r['location']}  tight {r['tightness']}  "
             f"gap {r['pct_change']:+.1f}%  {'·'.join(r['power'])}\n"
-            f"   {' · '.join(kbits) if kbits else 'KPIs n/a'}"
+            f"   {' · '.join(kbits) if kbits else 'KPIs n/a'}{news_bit}"
         )
     lines.append("\n<i>/opening for the latest anytime.</i>")
     return "\n".join(lines)
@@ -116,7 +118,23 @@ def run(force=False, send=True):
         print(f"[opening] outside pre-market window ({et_now} ET) — skipping.")
         return
     candidates = universe.scan()
-    ranked = ranker.rank(candidates, top_n=10)
+    # No pre-2-min-bar cap by default: stage the FULL pre-qualified universe so the
+    # 9:30 first-bar rule (advisory_monitor) decides — don't trim before the bar.
+    # OPENING_SCAN_TOP_N can still cap the displayed/cached list if ever wanted.
+    _top_n = os.environ.get("OPENING_SCAN_TOP_N", "").strip()
+    # News nudge (bounded, NON-governing): a fresh company-specific catalyst gets a
+    # slightly higher priority, a bearish flag slightly lower — capped at
+    # ±OPENING_NEWS_FACTOR points (default 5). Set 0 to disable. Fail-safe to neutral.
+    news_factor = float(os.environ.get("OPENING_NEWS_FACTOR", "5") or 0)
+    news = {}
+    if news_factor:
+        try:
+            from opening_agent import news_sentiment
+            news = news_sentiment.batch([c.symbol for c in candidates])
+        except Exception as e:
+            print(f"[opening] news sentiment skipped: {e}")
+    ranked = ranker.rank(candidates, top_n=int(_top_n) if _top_n else None,
+                         news=news, news_factor=news_factor)
 
     record = {"ts_utc": datetime.now(timezone.utc).isoformat(), "et": et_now,
               "ranked": ranked}
