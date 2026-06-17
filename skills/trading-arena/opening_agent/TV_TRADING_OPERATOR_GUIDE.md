@@ -79,9 +79,17 @@ Armed = `OPENING_TV_AUTO_STAGE=true` and `OPENING_TRADE_BUDGET_USD=<amt>` in
 ---
 
 ## 5. TROUBLESHOOTING (decision tree)
+- **Telegram says 🚨 BROKER LINK DOWN** (or pre-open check flags "Questrade broker link
+  DOWN") → the Questrade↔TradingView connection dropped; orders can't route and
+  auto-staging is paused. **Re-link:** on the laptop trading tab, open the bottom
+  **Trading Panel → broker dropdown → reconnect Questrade** (re-enter the login if
+  prompted); keep that tab the **sole** TradingView session. You'll get a ✅ "Broker
+  link restored" text once it's back, and staging resumes. Coaching keeps running
+  throughout, so you can place orders by hand in the meantime (§6). Check it yourself
+  any time: `node tv_broker_health.js --port 9225` (→ `{"connected":true,...}`).
 - **Trading Chrome says "another session / disconnected"** → something else is logged
   into the same TV account. Sign out of TV in your everyday browser + phone. GX10
-  browser stays Guest.
+  browser stays Guest. (This is a common cause of the broker link dropping.)
 - **GX10 can't reach the browser** (`tv_session_sync.js` says NOT reachable; or
   `curl -s http://127.0.0.1:9225/json/version` fails) → tunnel/Chrome down. Re-run
   `start_trading_browser.ps1` on the laptop.

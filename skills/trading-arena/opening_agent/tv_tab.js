@@ -9,12 +9,19 @@
 const fs = require("fs");
 const DATA_TAB_FILE = "/home/tonygale/openclaw/skills/trading-arena/logs/tv_data_tab.json";
 
-function readDataTabId() {
-  try { return JSON.parse(fs.readFileSync(DATA_TAB_FILE, "utf8")).targetId || null; }
-  catch (e) { return null; }
+// The data tab is identified by BOTH a CDP targetId AND a random nonce that we
+// stamp into the tab's window. The nonce lets us prove a tab is the one WE
+// created — so we never adopt (or worse, drive setSymbol on) the user's trading
+// tab just because it picked up the legacy __OPENING_DATA_TAB__ marker.
+function readDataTab() {
+  try {
+    const o = JSON.parse(fs.readFileSync(DATA_TAB_FILE, "utf8"));
+    return { targetId: o.targetId || null, nonce: o.nonce || null };
+  } catch (e) { return { targetId: null, nonce: null }; }
 }
-function writeDataTabId(id) {
-  try { fs.writeFileSync(DATA_TAB_FILE, JSON.stringify({ targetId: id })); } catch (e) {}
+function readDataTabId() { return readDataTab().targetId; }
+function writeDataTab(id, nonce) {
+  try { fs.writeFileSync(DATA_TAB_FILE, JSON.stringify({ targetId: id, nonce: nonce })); } catch (e) {}
 }
 function clearDataTab() { try { fs.unlinkSync(DATA_TAB_FILE); } catch (e) {} }
 
@@ -26,4 +33,4 @@ function pickTradingTab(tabs) {
   return tabs.find(t => isChart(t) && t.id !== dataId) || tabs.find(t => isChart(t));
 }
 
-module.exports = { DATA_TAB_FILE, readDataTabId, writeDataTabId, clearDataTab, isChart, pickTradingTab };
+module.exports = { DATA_TAB_FILE, readDataTab, readDataTabId, writeDataTab, clearDataTab, isChart, pickTradingTab };

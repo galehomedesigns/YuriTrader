@@ -67,6 +67,22 @@ def tv_bars_ok():
         return False, str(e)[:80]
 
 
+def broker_ok():
+    """(ok, detail) — is the Questrade<->TradingView broker link actually connected
+    on the trading tab? Port-up only proves the browser/tunnel is reachable; this
+    proves orders can route (the link that dropped at the open 2026-06-16)."""
+    import json
+    import subprocess
+    here = os.path.dirname(os.path.abspath(__file__))
+    try:
+        out = subprocess.run(["node", os.path.join(here, "tv_broker_health.js"), "--port", str(CDP_PORT)],
+                             capture_output=True, text=True, timeout=30)
+        data = json.loads(out.stdout or "{}")
+        return bool(data.get("connected")), (data.get("detail") or "unknown")
+    except Exception as e:                             # noqa: BLE001
+        return False, str(e)[:80]
+
+
 def screener_ok():
     """(ok, detail) — does the TradingView pre-market scanner respond?"""
     try:
@@ -112,6 +128,14 @@ def main():
         ok, detail = tv_bars_ok()
         (oks if ok else problems).append(
             ("✅ TradingView real-time bars OK" if ok else "🔴 TradingView bars FAILED") + f" ({detail})")
+
+        bok, bdetail = broker_ok()
+        if bok:
+            oks.append(f"✅ Questrade broker link connected ({bdetail})")
+        else:
+            problems.append(f"🔴 Questrade broker link DOWN ({bdetail}) — orders can't route. On the "
+                            "laptop TradingView tab, open the bottom Trading Panel → broker dropdown → "
+                            "reconnect <b>Questrade</b>, and keep that tab the sole TV login.")
 
     sok, sdetail = screener_ok()
     (oks if sok else problems).append(

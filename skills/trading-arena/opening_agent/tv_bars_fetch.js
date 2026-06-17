@@ -12,6 +12,7 @@
  * Output (stdout): {"results":[{"symbol":"NASDAQ:AAPL","count":300,"bars":[{time,open,high,low,close,volume}...]}|{"symbol":...,"error":"..."}]}
  */
 const tab = require("./tv_tab");
+const crypto = require("crypto");
 function arg(name, def) { const i = process.argv.indexOf("--" + name); return i === -1 ? def : process.argv[i + 1]; }
 const PORT = arg("port", "9225");
 const SYMBOLS = (arg("symbols", "") || "").split(",").map(s => s.trim()).filter(Boolean);
@@ -34,51 +35,63 @@ async function jsonGet(path) { return (await (await fetch(`http://127.0.0.1:${PO
 function emit(obj, code = 0) { process.stdout.write(JSON.stringify(obj) + "\n", () => process.exit(code)); }
 
 const MARK = "__OPENING_DATA_TAB__";
+const NONCE = "__OPENING_DATA_NONCE__";
 
-async function isMarked(t) {
-  // open a short-lived connection and read the data-tab marker global
-  try {
-    const ws = t.webSocketDebuggerUrl.replace(/\/\/[^/]+\//, `//127.0.0.1:${PORT}/`);
-    const C = mkConn(ws); await C.ready; await C.call("Runtime.enable");
-    const r = await C.call("Runtime.evaluate", { expression: `window.${MARK}===true`, returnByValue: true });
-    C.sock.close();
-    return !!(r.result && r.result.result && r.result.result.value);
-  } catch (e) { return false; }
-}
-
-async function ensureDataTab(B) {
-  // Hygiene: there must be AT MOST ONE data tab. Find all marked chart tabs;
-  // keep the tracked one (or the first), close the rest so an orphan data tab is
-  // never mistaken for the trading tab by the order tools' file-based exclusion.
-  const want = tab.readDataTabId();
-  let tabs = await jsonGet("/json");
-  const charts = tabs.filter(tab.isChart);
-  const marked = [];
-  for (const t of charts) { if (await isMarked(t)) marked.push(t); }
-  let keeper = marked.find(t => t.id === want) || marked[0] || null;
-  for (const t of marked) { if (!keeper || t.id !== keeper.id) { try { await B.call("Target.closeTarget", { targetId: t.id }); } catch (e) {} } }
-
-  let page = keeper;
-  if (!page) {
-    const created = await B.call("Target.createTarget", { url: "https://www.tradingview.com/chart/", background: true });
-    const tid = created.result && created.result.targetId;
-    if (!tid) throw new Error("Target.createTarget failed");
-    for (let i = 0; i < 25; i++) { tabs = await jsonGet("/json"); page = tabs.find(t => t.id === tid); if (page && page.webSocketDebuggerUrl) break; await sleep(500); }
-    if (!page) throw new Error("data tab did not appear");
-  }
-  tab.writeDataTabId(page.id);
+async function connect(page) {
   const ws = page.webSocketDebuggerUrl.replace(/\/\/[^/]+\//, `//127.0.0.1:${PORT}/`);
   const P = mkConn(ws); await P.ready; await P.call("Runtime.enable");
-  // wait for TradingViewApi, then (re)stamp the marker so this tab is identifiable
+  return P;
+}
+
+async function readNonce(P) {
+  // read the nonce we stamped into the data tab's window (null if absent)
+  try {
+    const r = await P.call("Runtime.evaluate", { expression: `String(window.${NONCE}||"")`, returnByValue: true });
+    return (r.result && r.result.result && r.result.result.value) || null;
+  } catch (e) { return null; }
+}
+
+async function waitApi(P) {
   for (let i = 0; i < 30; i++) {
     const r = await P.call("Runtime.evaluate", { expression: "!!(window.TradingViewApi && window.TradingViewApi._activeChartWidgetWV && window.TradingViewApi._activeChartWidgetWV.value())", returnByValue: true });
-    if (r.result && r.result.result && r.result.result.value) {
-      await P.call("Runtime.evaluate", { expression: `window.${MARK}=true;` });
-      return P;
-    }
+    if (r.result && r.result.result && r.result.result.value) return true;
     await sleep(600);
   }
   throw new Error("TradingViewApi not ready in data tab");
+}
+
+async function ensureDataTab(B) {
+  // The data tab is ALWAYS a tab we created in the background and can prove is
+  // ours via (persisted targetId + matching window nonce). We NEVER adopt an
+  // arbitrary marked tab and NEVER close a tab we can't verify — the user's
+  // trading tab (which holds the broker/order ticket) must never be touched.
+  const saved = tab.readDataTab();
+  let tabs = await jsonGet("/json");
+
+  // 1) Reuse path: the persisted tab still exists AND carries our nonce.
+  if (saved.targetId && saved.nonce) {
+    const t = tabs.find(x => x.id === saved.targetId && tab.isChart(x) && x.webSocketDebuggerUrl);
+    if (t) {
+      const P = await connect(t);
+      if (await readNonce(P) === saved.nonce) { await waitApi(P); return P; }
+      P.sock.close();   // id was recycled to some other tab — fall through to create
+    }
+  }
+
+  // 2) Create a fresh dedicated background data tab. Stamp a new nonce so future
+  //    runs (and the order tools' file-based exclusion) can identify it as ours.
+  const nonce = crypto.randomUUID();
+  const created = await B.call("Target.createTarget", { url: "https://www.tradingview.com/chart/", background: true });
+  const tid = created.result && created.result.targetId;
+  if (!tid) throw new Error("Target.createTarget failed");
+  let page = null;
+  for (let i = 0; i < 25; i++) { tabs = await jsonGet("/json"); page = tabs.find(t => t.id === tid); if (page && page.webSocketDebuggerUrl) break; await sleep(500); }
+  if (!page) throw new Error("data tab did not appear");
+  const P = await connect(page);
+  await waitApi(P);
+  await P.call("Runtime.evaluate", { expression: `window.${MARK}=true;window.${NONCE}=${JSON.stringify(nonce)};` });
+  tab.writeDataTab(page.id, nonce);
+  return P;
 }
 
 async function readSymbol(P, fullSym) {
