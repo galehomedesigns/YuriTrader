@@ -186,7 +186,9 @@ def evaluate(mover, bars=None, cfg=None):
     price = closes[-1]
     sma_fast = indicators.sma(closes, 20)
     sma_slow = indicators.sma(closes, 200)
-    state, _ = C.market_state(sma_fast, sma_slow, price, cfg)
+    # Volatility yardstick for the ATR-normalized TIGHT gate (no-op in flat-% mode).
+    atr_val = C.atr(bars, {**C.DEFAULTS, **(cfg or {})}["atr_len"])
+    state, _ = C.market_state(sma_fast, sma_slow, price, cfg, atr_val=atr_val)
     last_bar, prior = bars[-1], bars[:-1]
 
     # Existing Yuri KPIs on the same 2-min series (reuse the arena's AssetData so
@@ -208,7 +210,7 @@ def evaluate(mover, bars=None, cfg=None):
     return Candidate(
         symbol=mover.symbol, direction=mover.direction, pct_change=mover.pct_change,
         price=price, sma_fast=sma_fast, sma_slow=sma_slow, state=state,
-        tightness=C.tightness(sma_fast, sma_slow, price),
+        tightness=C.tightness(sma_fast, sma_slow, price, cfg, atr_val=atr_val),
         location=C.location(bars[-1]["open"], sma_fast, sma_slow),
         bar_tags=C.classify_bar(last_bar, prior, cfg),
         bar_signal=C.bar_signal(last_bar, prior, cfg),

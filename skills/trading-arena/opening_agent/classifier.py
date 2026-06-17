@@ -30,6 +30,14 @@ DEFAULTS = {
 DEFAULTS["tight_threshold"] = float(
     os.environ.get("OPENING_TIGHT_THRESHOLD", DEFAULTS["tight_threshold"]))
 
+# TIGHT can be judged two ways. Legacy: a flat percentage of price (over-selects
+# sleepy large-caps, rejects coiled-but-volatile movers). OPENING_TIGHT_MODE=atr
+# normalizes to the stock's OWN volatility — tight iff |SMA20-SMA200| <=
+# tight_atr_mult * ATR(atr_len) — so "coiled" means coiled for THIS name.
+DEFAULTS["tight_mode"] = os.environ.get("OPENING_TIGHT_MODE", "pct").lower()
+DEFAULTS["tight_atr_mult"] = float(os.environ.get("OPENING_TIGHT_ATR_MULT", "1.0"))
+DEFAULTS["atr_len"] = int(os.environ.get("OPENING_ATR_LEN", "14"))
+
 
 # ── Primitive bar geometry ────────────────────────────────────────────────────
 def body(bar):
@@ -58,26 +66,53 @@ def avg_body(bars, n):
     return sum(body(b) for b in window) / len(window)
 
 
+def true_range(bar, prev_close):
+    return max(bar["high"] - bar["low"], abs(bar["high"] - prev_close),
+               abs(bar["low"] - prev_close))
+
+
+def atr(bars, n=14):
+    """Average True Range over the last n bars (simple mean of TR) — the volatility
+    yardstick for the ATR-normalized TIGHT gate. Returns None if <2 bars."""
+    if not bars or len(bars) < 2:
+        return None
+    trs = [true_range(bars[i], bars[i - 1]["close"]) for i in range(1, len(bars))]
+    if not trs:
+        return None
+    w = trs[-n:] if n else trs
+    return sum(w) / len(w)
+
+
 # ── Market state (TIGHT / WIDE) and location ─────────────────────────────────
-def market_state(sma_fast, sma_slow, price, cfg=None):
+def market_state(sma_fast, sma_slow, price, cfg=None, atr_val=None):
     """Return ('TIGHT'|'WIDE', direction) where direction is +1/-1 (sign of
-    SMA20-SMA200) and 0 when exactly equal. TIGHT iff sep/price <= threshold."""
+    SMA20-SMA200) and 0 when exactly equal. TIGHT iff the SMA separation is small:
+    flat-% mode -> sep/price <= tight_threshold; ATR mode (tight_mode=='atr' with
+    an atr_val supplied) -> sep/ATR <= tight_atr_mult."""
     cfg = {**DEFAULTS, **(cfg or {})}
     if not price or sma_fast is None or sma_slow is None:
         return ("UNKNOWN", 0)
     sep = abs(sma_fast - sma_slow)
     direction = (sma_fast > sma_slow) - (sma_fast < sma_slow)  # +1 / -1 / 0
-    state = "TIGHT" if (sep / price) <= cfg["tight_threshold"] else "WIDE"
-    return (state, direction)
+    if cfg.get("tight_mode") == "atr" and atr_val:
+        tight = (sep / atr_val) <= cfg["tight_atr_mult"]
+    else:                                      # flat-% (legacy) or no ATR available
+        tight = (sep / price) <= cfg["tight_threshold"]
+    return ("TIGHT" if tight else "WIDE", direction)
 
 
-def tightness(sma_fast, sma_slow, price):
-    """0..1 where 1 = SMAs identical (tightest). Used by the ranker. Returns None
-    if inputs missing."""
+def tightness(sma_fast, sma_slow, price, cfg=None, atr_val=None):
+    """0..1 where 1 = SMAs identical (tightest), 0 = at/over the TIGHT cutoff. Used
+    by the ranker. Honors the same mode as market_state (flat-% or ATR-normalized).
+    None if inputs missing."""
     if not price or sma_fast is None or sma_slow is None:
         return None
-    return max(0.0, 1.0 - (abs(sma_fast - sma_slow) / price) / DEFAULTS["tight_threshold"]) \
-        if (abs(sma_fast - sma_slow) / price) <= DEFAULTS["tight_threshold"] else 0.0
+    cfg = {**DEFAULTS, **(cfg or {})}
+    if cfg.get("tight_mode") == "atr" and atr_val:
+        ratio = (abs(sma_fast - sma_slow) / atr_val) / cfg["tight_atr_mult"]
+    else:
+        ratio = (abs(sma_fast - sma_slow) / price) / cfg["tight_threshold"]
+    return max(0.0, 1.0 - ratio) if ratio <= 1.0 else 0.0
 
 
 def location(open_price, sma_fast, sma_slow):
@@ -214,7 +249,8 @@ def classify_opening(symbol, bar1, prior_bars, sma_fast, sma_slow, cfg=None):
     matching location (G3/G4). Direction must agree (positive bar in positive
     location → long). Anything else is MISMATCH (patience play, §5) or NO_PLAY."""
     cfg = {**DEFAULTS, **(cfg or {})}
-    state, _dir = market_state(sma_fast, sma_slow, bar1["open"], cfg)
+    atr_val = atr((prior_bars or []) + [bar1], cfg["atr_len"])
+    state, _dir = market_state(sma_fast, sma_slow, bar1["open"], cfg, atr_val=atr_val)
     loc = location(bar1["open"], sma_fast, sma_slow)
     tags = classify_bar(bar1, prior_bars, cfg)
     sig = bar_signal(bar1, prior_bars, cfg)
