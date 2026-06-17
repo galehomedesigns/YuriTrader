@@ -4,10 +4,10 @@
 Mirrors buy_watcher.py but for equities instead of crypto. Runs via system
 cron every 30 min. For each run:
   1. Checks that US market is open (9:30–16:00 ET, Mon-Fri). Exits silently otherwise.
-  2. Calls advisor.get_top_opportunity(1, asset_class="stock") — same brain as /best.
-  3. If firing_count >= STOCK_BUY_WATCHER_MIN_FIRING, sends a Telegram alert
+  2. Calls advisor.get_top_opportunity() with min_firing — same brain as /best.
+  3. Sends a Telegram alert for EVERY stock meeting the threshold,
      with share-count Buy buttons (1 / 5 / 10 shares).
-  4. Dedups: same symbol within 2h is suppressed unless firing_count grows.
+  4. Dedups per symbol: same symbol within 2h is suppressed unless firing_count grows.
 
 Callback buttons go through the stock_concierge daemon — it reads the shared
 concierge_state.db where we save pending actions.
@@ -101,7 +101,12 @@ def load_state():
         return {}
     try:
         with open(STATE_FILE) as f:
-            return json.load(f)
+            data = json.load(f)
+        # Migrate old single-entry format {"symbol": "X", "firing": 3, "ts": ...}
+        if "symbol" in data and "ts" in data:
+            sym = data["symbol"]
+            return {sym: {"firing": data.get("firing", 0), "ts": data["ts"]}}
+        return data
     except Exception:
         return {}
 
@@ -114,8 +119,9 @@ def save_state(data):
         print(f"  state save error: {e}", file=sys.stderr)
 
 
-def should_suppress(symbol, firing_count, prev):
-    if not prev or prev.get("symbol") != symbol:
+def should_suppress(symbol, firing_count, prev_all):
+    prev = prev_all.get(symbol)
+    if not prev:
         return False
     age_sec = time.time() - prev.get("ts", 0)
     if age_sec > DEDUP_WINDOW_MIN * 60:
@@ -133,7 +139,9 @@ def main():
         return
 
     try:
-        results = advisor.get_top_opportunity(top_n=1, asset_class="stock")
+        results = advisor.get_top_opportunity(
+            top_n=20, asset_class="stock", min_firing=ALERT_MIN_FIRING,
+        )
     except Exception as e:
         print(f"Advisor error: {e}", file=sys.stderr)
         return
@@ -142,72 +150,75 @@ def main():
         print(f"No opportunities found. {results[0] if results else ''}")
         return
 
-    top = results[0]
-    sym = top["symbol"]
-    firing = top["firing_count"]
+    prev_all = load_state()
+    sent_count = 0
 
-    if firing < ALERT_MIN_FIRING:
-        print(f"{sym}: only {firing}/9 bots firing (threshold {ALERT_MIN_FIRING}) — no alert.")
-        return
+    for top in results:
+        sym = top["symbol"]
+        firing = top["firing_count"]
 
-    prev = load_state()
-    if should_suppress(sym, firing, prev):
-        print(f"{sym}: duplicate of recent alert ({firing}/9) — suppressed.")
-        return
+        if should_suppress(sym, firing, prev_all):
+            print(f"{sym}: duplicate of recent alert ({firing}/9) — suppressed.")
+            continue
 
-    # Build the message — same layout as crypto buy_watcher, stock framing
-    price = top["price"]
-    change = top["day_change_pct"]
-    firing_names = ", ".join(top["firing_bots"]) if top["firing_bots"] else "none"
-    levels = top["levels"]
-    ind = top["indicators"]
-    currency = "CAD" if sym.upper().endswith(".TO") else "USD"
+        # Build the message — same layout as crypto buy_watcher, stock framing
+        price = top["price"]
+        change = top["day_change_pct"]
+        firing_names = ", ".join(top["firing_bots"]) if top["firing_bots"] else "none"
+        levels = top["levels"]
+        ind = top["indicators"]
+        currency = "CAD" if sym.upper().endswith(".TO") else "USD"
 
-    text = (
-        f"🟢 <b>STOCK BUY SIGNAL — {html.escape(sym)}</b>  "
-        f"({firing}/9 bots agree)\n"
-        f"<b>Price:</b> ${price:,.2f} {currency}  ({change:+.2f}% day)\n\n"
-        f"<b>📊 Indicators:</b>\n"
-        f"• RSI(14): {ind['rsi_14']:.0f}\n"
-        f"• ADX(14): {ind['adx_14']:.0f}\n"
-        f"• BB width: {ind['bb_bandwidth']:.4f}\n"
-        f"• Candle: {html.escape(ind['candlestick'] or 'none')}\n"
-        f"• ATR(14): ${ind['atr_14']:.4f}\n\n"
-        f"<b>🤖 Bot consensus:</b>\n{html.escape(firing_names)}\n\n"
-        f"<b>📈 Suggested levels:</b>\n"
-        f"• Entry:  ${levels['entry']:,.2f}\n"
-        f"• Stop:   ${levels['stop']:,.2f} ({levels['stop_pct']:+.1f}%)\n"
-        f"• Target: ${levels['target']:,.2f} ({levels['target_pct']:+.1f}%)\n"
-        f"• R:R:    {levels['rr']:.1f}:1\n\n"
-        f"<b>💬 Analysis:</b>\n<i>{html.escape(top['analysis'])}</i>\n\n"
-        f"<i>Auto-scan every 30 min, 9:30 AM–4 PM ET Mon-Fri.</i>"
-    )
-
-    # Inline share-count buttons — cost shown at send time
-    context = {
-        "symbol": sym, "price": price, "firing": firing,
-        "levels": levels, "indicators": ind,
-        "currency": currency, "source": "stock_buy_watcher",
-    }
-    row = []
-    for qty in SHARE_AMOUNTS:
-        total = qty * price
-        # Reuse existing amount_usd column to store qty for stock callbacks
-        cb = state.save_pending_action(
-            "buy", symbol=sym, amount_usd=qty, context=context
+        text = (
+            f"🟢 <b>STOCK BUY SIGNAL — {html.escape(sym)}</b>  "
+            f"({firing}/9 bots agree)\n"
+            f"<b>Price:</b> ${price:,.2f} {currency}  ({change:+.2f}% day)\n\n"
+            f"<b>📊 Indicators:</b>\n"
+            f"• RSI(14): {ind['rsi_14']:.0f}\n"
+            f"• ADX(14): {ind['adx_14']:.0f}\n"
+            f"• BB width: {ind['bb_bandwidth']:.4f}\n"
+            f"• Candle: {html.escape(ind['candlestick'] or 'none')}\n"
+            f"• ATR(14): ${ind['atr_14']:.4f}\n\n"
+            f"<b>🤖 Bot consensus:</b>\n{html.escape(firing_names)}\n\n"
+            f"<b>📈 Suggested levels:</b>\n"
+            f"• Entry:  ${levels['entry']:,.2f}\n"
+            f"• Stop:   ${levels['stop']:,.2f} ({levels['stop_pct']:+.1f}%)\n"
+            f"• Target: ${levels['target']:,.2f} ({levels['target_pct']:+.1f}%)\n"
+            f"• R:R:    {levels['rr']:.1f}:1\n\n"
+            f"<b>💬 Analysis:</b>\n<i>{html.escape(top['analysis'])}</i>\n\n"
+            f"<i>Auto-scan every 30 min, 9:30 AM–4 PM ET Mon-Fri.</i>"
         )
-        label = f"Buy {qty} sh (${total:,.0f})"
-        row.append({"text": label, "callback_data": cb})
-    buttons = [row]
-    skip_cb = state.save_pending_action("skip", symbol=sym, context=context)
-    buttons.append([{"text": "❌ Skip", "callback_data": skip_cb}])
 
-    ok = send_message(text, keyboard=buttons)
-    if ok:
-        print(f"Alert sent: {sym} ({firing}/9 bots, price ${price:.2f})")
-        save_state({"symbol": sym, "firing": firing, "ts": time.time()})
-    else:
-        print(f"Alert send FAILED: {sym} ({firing}/9 bots)", file=sys.stderr)
+        # Inline share-count buttons — cost shown at send time
+        context = {
+            "symbol": sym, "price": price, "firing": firing,
+            "levels": levels, "indicators": ind,
+            "currency": currency, "source": "stock_buy_watcher",
+        }
+        row = []
+        for qty in SHARE_AMOUNTS:
+            total = qty * price
+            cb = state.save_pending_action(
+                "buy", symbol=sym, amount_usd=qty, context=context
+            )
+            label = f"Buy {qty} sh (${total:,.0f})"
+            row.append({"text": label, "callback_data": cb})
+        buttons = [row]
+        skip_cb = state.save_pending_action("skip", symbol=sym, context=context)
+        buttons.append([{"text": "❌ Skip", "callback_data": skip_cb}])
+
+        ok = send_message(text, keyboard=buttons)
+        if ok:
+            print(f"Alert sent: {sym} ({firing}/9 bots, price ${price:.2f})")
+            prev_all[sym] = {"firing": firing, "ts": time.time()}
+            sent_count += 1
+        else:
+            print(f"Alert send FAILED: {sym} ({firing}/9 bots)", file=sys.stderr)
+
+    if sent_count == 0 and not results:
+        print(f"No stocks met threshold ({ALERT_MIN_FIRING}/9 bots).")
+
+    save_state(prev_all)
 
 
 if __name__ == "__main__":

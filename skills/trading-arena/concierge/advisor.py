@@ -234,13 +234,14 @@ def _get_stock_watchlist():
         return []
 
 
-def get_top_opportunity(top_n=1, asset_class="crypto"):
+def get_top_opportunity(top_n=1, asset_class="crypto", min_firing=0):
     """Main entry point — returns the top N opportunities with analysis.
 
     Args:
         top_n: how many opportunities to return
         asset_class: "crypto" (default, fetches from Kraken) or "stock"
                      (fetches from Supabase arena_watchlist + Finnhub/TwelveData)
+        min_firing: minimum firing_count to include (0 = no filter)
 
     Returns:
         list of dicts, each containing:
@@ -279,6 +280,10 @@ def get_top_opportunity(top_n=1, asset_class="crypto"):
 
     # Rank by firing count (most bots agreeing), tiebreak by partial count
     opportunities.sort(key=lambda o: (o["firing_count"], o["partial_count"]), reverse=True)
+
+    # Filter by minimum firing count before slicing (avoids wasted LLM calls)
+    if min_firing > 0:
+        opportunities = [o for o in opportunities if o["firing_count"] >= min_firing]
 
     # Take top N
     top = opportunities[:top_n]

@@ -191,11 +191,11 @@ def cmd_help(_):
 
 
 def cmd_best(_):
-    """Run the stock advisor and present top opportunity with share-count buttons."""
-    send_message("⏳ Analyzing top stock opportunities... (this takes ~20s)")
+    """Run the stock advisor and present all qualifying opportunities with share-count buttons."""
+    send_message("⏳ Analyzing stock opportunities... (this takes ~20s)")
 
     try:
-        results = advisor.get_top_opportunity(top_n=1, asset_class="stock")
+        results = advisor.get_top_opportunity(top_n=20, asset_class="stock", min_firing=1)
     except Exception as e:
         send_message(f"❌ Advisor error: <code>{str(e)[:300]}</code>")
         return
@@ -205,57 +205,57 @@ def cmd_best(_):
         send_message(f"No opportunities found. <i>{html.escape(err)}</i>")
         return
 
-    top = results[0]
-    sym = top["symbol"]
-    price = top["price"]
-    change = top["day_change_pct"]
-    firing = top["firing_count"]
-    firing_names = ", ".join(top["firing_bots"]) if top["firing_bots"] else "none"
-    levels = top["levels"]
-    ind = top["indicators"]
-    currency = "CAD" if sym.upper().endswith(".TO") else "USD"
+    for i, top in enumerate(results, 1):
+        sym = top["symbol"]
+        price = top["price"]
+        change = top["day_change_pct"]
+        firing = top["firing_count"]
+        firing_names = ", ".join(top["firing_bots"]) if top["firing_bots"] else "none"
+        levels = top["levels"]
+        ind = top["indicators"]
+        currency = "CAD" if sym.upper().endswith(".TO") else "USD"
 
-    text = (
-        f"🎯 <b>#1 STOCK OPPORTUNITY — {html.escape(sym)}</b>\n"
-        f"<b>Price:</b> ${price:,.2f} {currency}  ({change:+.2f}% day)\n\n"
-        f"<b>📊 Indicators:</b>\n"
-        f"• RSI(14): {ind['rsi_14']:.0f}\n"
-        f"• ADX(14): {ind['adx_14']:.0f}\n"
-        f"• BB width: {ind['bb_bandwidth']:.4f}\n"
-        f"• Candle: {html.escape(ind['candlestick'] or 'none')}\n"
-        f"• ATR(14): ${ind['atr_14']:.4f}\n\n"
-        f"<b>🤖 Bot consensus:</b> {firing}/9 firing\n"
-        f"{html.escape(firing_names)}\n\n"
-        f"<b>📈 Suggested levels:</b>\n"
-        f"• Entry:  ${levels['entry']:,.2f}\n"
-        f"• Stop:   ${levels['stop']:,.2f} ({levels['stop_pct']:+.1f}%)\n"
-        f"• Target: ${levels['target']:,.2f} ({levels['target_pct']:+.1f}%)\n"
-        f"• R:R:    {levels['rr']:.1f}:1\n\n"
-        f"<b>💬 Analysis:</b>\n<i>{html.escape(top['analysis'])}</i>"
-    )
-
-    if firing == 0:
-        text += "\n\n⚠️ <b>0 bots firing — not a clean setup. Skipping recommended.</b>"
-        send_message(text)
-        return
-
-    context = {
-        "symbol": sym, "price": price, "firing": firing,
-        "levels": levels, "indicators": ind,
-        "currency": currency, "source": "stock_concierge_best",
-    }
-    row = []
-    for qty in SHARE_AMOUNTS:
-        total = qty * price
-        cb = state.save_pending_action(
-            "buy", symbol=sym, amount_usd=qty, context=context
+        text = (
+            f"🎯 <b>#{i} STOCK OPPORTUNITY — {html.escape(sym)}</b>\n"
+            f"<b>Price:</b> ${price:,.2f} {currency}  ({change:+.2f}% day)\n\n"
+            f"<b>📊 Indicators:</b>\n"
+            f"• RSI(14): {ind['rsi_14']:.0f}\n"
+            f"• ADX(14): {ind['adx_14']:.0f}\n"
+            f"• BB width: {ind['bb_bandwidth']:.4f}\n"
+            f"• Candle: {html.escape(ind['candlestick'] or 'none')}\n"
+            f"• ATR(14): ${ind['atr_14']:.4f}\n\n"
+            f"<b>🤖 Bot consensus:</b> {firing}/9 firing\n"
+            f"{html.escape(firing_names)}\n\n"
+            f"<b>📈 Suggested levels:</b>\n"
+            f"• Entry:  ${levels['entry']:,.2f}\n"
+            f"• Stop:   ${levels['stop']:,.2f} ({levels['stop_pct']:+.1f}%)\n"
+            f"• Target: ${levels['target']:,.2f} ({levels['target_pct']:+.1f}%)\n"
+            f"• R:R:    {levels['rr']:.1f}:1\n\n"
+            f"<b>💬 Analysis:</b>\n<i>{html.escape(top['analysis'])}</i>"
         )
-        row.append({"text": f"Buy {qty} sh (${total:,.0f})", "callback_data": cb})
-    buttons = [row]
-    skip_cb = state.save_pending_action("skip", symbol=sym, context=context)
-    buttons.append([{"text": "❌ Skip", "callback_data": skip_cb}])
 
-    send_message(text, keyboard=buttons)
+        if firing == 0:
+            text += "\n\n⚠️ <b>0 bots firing — not a clean setup. Skipping recommended.</b>"
+            send_message(text)
+            continue
+
+        context = {
+            "symbol": sym, "price": price, "firing": firing,
+            "levels": levels, "indicators": ind,
+            "currency": currency, "source": "stock_concierge_best",
+        }
+        row = []
+        for qty in SHARE_AMOUNTS:
+            total = qty * price
+            cb = state.save_pending_action(
+                "buy", symbol=sym, amount_usd=qty, context=context
+            )
+            row.append({"text": f"Buy {qty} sh (${total:,.0f})", "callback_data": cb})
+        buttons = [row]
+        skip_cb = state.save_pending_action("skip", symbol=sym, context=context)
+        buttons.append([{"text": "❌ Skip", "callback_data": skip_cb}])
+
+        send_message(text, keyboard=buttons)
 
 
 def cmd_positions(_):
