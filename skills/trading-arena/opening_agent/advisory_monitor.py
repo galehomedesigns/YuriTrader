@@ -5,7 +5,7 @@ After the open, for every stock whose first 2-min bar passes the rule, this
 watches each subsequent 2-min bar for 20 minutes and Telegrams you exactly what to
 do MANUALLY: when to ENTER, where to set the STOP, when to move the stop up (each
 push), when to ADD, and when to CLOSE at the cutoff. It places NO orders — you
-trade in TWS / IBKR Mobile. (Same R2-R7 logic as engine.py, rendered as advice.)
+trade in TradingView. (Same R2-R7 logic as engine.py, rendered as advice.)
 
 Launched ~9:32 ET (after bar 1 completes); runs to the 20-min cutoff, then exits.
 """
@@ -272,7 +272,7 @@ def _broker_health():
 # ── Live monitor ─────────────────────────────────────────────────────────────
 def _candidates():
     """Reuse the freshest pre-market scan (cached by run_opening_scan ~9:25) so we
-    don't run a second IBKR scan. Falls back to [] -> main() rescans."""
+    don't run a second scan. Falls back to [] -> main() rescans."""
     import json
     cache = os.environ.get(
         "OPENING_SCAN_CACHE",

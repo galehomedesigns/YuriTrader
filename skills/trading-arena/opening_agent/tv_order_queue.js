@@ -36,6 +36,59 @@ const STAGE_FN = `async (o) => {
   function labelFor(inp){ let lab=inp.getAttribute('aria-label')||inp.placeholder||''; let n=inp,h=0; while(n&&h<4&&!lab){n=n.parentElement;h++;if(!n)break;const t=Array.from(n.childNodes).filter(c=>c.nodeType===3).map(c=>c.textContent.trim()).filter(Boolean).join(' ');const le=n.querySelector('label,[class*=label],[class*=Label]');lab=((le?(le.innerText||''):'')+' '+t).replace(/\\s+/g,' ').trim();} return lab; }
   function findSection(word){ let c=Array.from(document.querySelectorAll('*')).filter(e=>vis(e)&&(e.innerText||'').trim().toLowerCase().startsWith(word.toLowerCase())&&(e.innerText||'').length<60); c.sort((a,b)=>(a.innerText||'').length-(b.innerText||'').length); let lab=c[0]; if(!lab)return null; let row=lab,h=0; while(row&&h<6){const t=row.querySelector('[class*=switchContainer],input[type=checkbox],[role=switch]');const p=Array.from(row.querySelectorAll('input')).find(i=>i.getAttribute('inputmode')==='decimal'); if(t&&p)return{toggle:t,price:p}; row=row.parentElement;h++;} return null; }
 
+  // Resilient order-type tab finder with fuzzy matching and retries.
+  async function findOrderTypeTab(targetType) {
+    const norm = targetType.trim().toLowerCase();
+    const aliases = {
+      'stop': ['stop', 'stop order', 'stp'],
+      'limit': ['limit', 'limit order', 'lmt'],
+      'market': ['market', 'market order', 'mkt'],
+      'stop limit': ['stop limit', 'stop-limit', 'stop limit order', 'stplmt']
+    };
+    const candidates = aliases[norm] || [norm];
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const allBtns = Array.from(document.querySelectorAll('button,[role=button],[role=tab],[data-name*=order-type]'));
+      const visBtns = allBtns.filter(b => vis(b));
+      for (const b of visBtns) { const txt = (b.innerText || '').trim().toLowerCase(); if (candidates.includes(txt)) return b; }
+      for (const b of visBtns) { const txt = (b.innerText || '').trim().toLowerCase(); for (const c of candidates) { if (txt.startsWith(c)) return b; } }
+      for (const b of visBtns) { const dn = (b.getAttribute('data-name') || '').toLowerCase(); if (dn.includes(norm) || dn.includes(norm.replace(' ', '-')) || dn.includes(norm.replace(' ', '_'))) return b; }
+      for (const b of visBtns) { const al = (b.getAttribute('aria-label') || '').toLowerCase(); for (const c of candidates) { if (al.includes(c)) return b; } }
+      if (attempt < 2) await sleep(600);
+    }
+    return null;
+  }
+
+  // Resilient submit button finder with multiple fallback selectors.
+  async function findSubmitButton() {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let btn = document.querySelector('[data-name=place-and-modify-button]');
+      if (btn && vis(btn)) return btn;
+      btn = document.querySelector('[data-name*=place-button],[data-name*=submit-button],[data-name*=order-button]');
+      if (btn && vis(btn)) return btn;
+      const allBtns = Array.from(document.querySelectorAll('button,[role=button]')).filter(b => vis(b));
+      btn = allBtns.find(b => { const txt = (b.innerText || '').trim().toLowerCase(); return /^(buy|sell)\\s/.test(txt) && !/send order|cancel/i.test(txt); });
+      if (btn) return btn;
+      btn = allBtns.find(b => /place|review order|create order/i.test((b.innerText || '').trim()));
+      if (btn) return btn;
+      if (attempt < 2) await sleep(500);
+    }
+    return null;
+  }
+
+  // Ensure the order ENTRY ticket is open. The Questrade panel shows
+  // Positions/Orders but the entry form (order-type tabs/side/place) stays
+  // closed until the toolbar "Trade" button is clicked.
+  async function ensureTicketOpen() {
+    const up = () => !!(document.querySelector('[data-name=place-and-modify-button]') || document.querySelector('[data-name^=side-control]'));
+    if (up()) return true;
+    for (let attempt = 0; attempt < 3 && !up(); attempt++) {
+      const trade = Array.from(document.querySelectorAll('button,[role=button]')).find(b => vis(b) && /^trade$/i.test((b.innerText || '').trim()));
+      if (trade) trade.click();
+      for (let k = 0; k < 12 && !up(); k++) await sleep(300);
+    }
+    return up();
+  }
+
   // ── modify-stop: reprice an existing resting stop IN PLACE (no cancel/gap) ──
   if (o.action === 'modify-stop' || o.action === 'modify-tp') {
     const otab = Array.from(document.querySelectorAll('button,[role=button],[role=tab]')).find(b=>vis(b)&&/^orders\\b/i.test((b.innerText||'').trim()));
@@ -51,13 +104,11 @@ const STAGE_FN = `async (o) => {
     if (!edit) return {ok:false, log:['no Modify button on the '+o.symbol+' row']};
     edit.click(); await sleep(1200);
     const setWhat = [];
-    // (a) reprice the stop trigger (G16) if a new stop is given
     if (o.price != null) {
       const pe = Array.from(document.querySelectorAll('input')).filter(e=>vis(e)&&e.type==='text').find(e=>/^price/i.test(labelFor(e)));
       if (!pe) return {ok:false, log:['no Price field in Modify dialog']};
       setInput(pe, o.price); setWhat.push('stop '+o.price); await sleep(300);
     }
-    // (b) enable + set the take-profit (G10) if given — makes it OCO with the stop
     if (o.take_profit != null) {
       let tp = findSection('Take profit');
       if (!tp) { const fe=()=>Array.from(document.querySelectorAll('*')).filter(e=>vis(e)&&(e.innerText||'').trim().toLowerCase()==='exits'&&(e.innerText||'').length<12)[0]; for(let a=0;a<2&&!tp;a++){const hdr=fe(); if(!hdr)break; (hdr.closest('[role=button]')||hdr.parentElement||hdr).click(); await sleep(650); tp=findSection('Take profit');} }
@@ -69,11 +120,10 @@ const STAGE_FN = `async (o) => {
       setInput(tp.price, o.take_profit); setWhat.push('TP '+o.take_profit); await sleep(300);
     }
     if (!setWhat.length) return {ok:false, log:['modify called with neither stop nor take_profit']};
-    // The Confirm button is grayed while TradingView validates; wait for ENABLE.
     let cf = null, enabled = false;
     for (let k=0; k<15 && !enabled; k++) { cf = document.querySelector('[data-name=place-and-modify-button]'); enabled = !!(cf && vis(cf) && !cf.disabled && !/disabled/i.test(cf.className||'')); if(!enabled) await sleep(400); }
     if (!cf || !vis(cf)) return {ok:false, log:['Modify Confirm button not visible']};
-    return {ok:true, staged:true, summary:'Modify '+o.symbol+' '+setWhat.join(', ')+(enabled?' (Confirm ready — click it)':' (wait for Confirm to enable, then click)'), log:['modify '+o.symbol+': '+setWhat.join(', ')+', confirm-enabled='+enabled]};
+    return {ok:true, staged:true, summary:'Modify '+o.symbol+' '+setWhat.join(', ')+(enabled?' (Confirm ready)':' (wait for Confirm to enable)'), log:['modify '+o.symbol+': '+setWhat.join(', ')+', confirm-enabled='+enabled]};
   }
 
   // 1) switch symbol + verify
@@ -91,11 +141,6 @@ const STAGE_FN = `async (o) => {
   if (o.type === 'close' || o.marketable) {
     const frac = Math.abs(o.qty - Math.round(o.qty)) > 1e-9;
     if (frac) {
-      // Questrade REJECTS fractional LIMIT orders, so the marketable-limit trick
-      // can't close a fractional position — use a plain MARKET order instead.
-      // (Whole-share closes keep marketable-limit, which also clears OTC names
-      // that reject MARKET; fractional+OTC is a rare combo and will surface as a
-      // rejection in the poll below if it happens.)
       otype = 'market'; oprice = null;
       log.push('fractional qty ' + o.qty + ' -> MARKET close (limit would be rejected)');
     } else {
@@ -109,16 +154,38 @@ const STAGE_FN = `async (o) => {
     }
   }
 
-  // 2) order type
-  const tab = Array.from(document.querySelectorAll('button,[role=button],[role=tab]')).find(b=>vis(b)&&(b.innerText||'').trim().toLowerCase()===otype);
-  if(!tab) return {ok:false,chartSymbol,log:[...log,'ORDER-TYPE TAB NOT FOUND: '+otype]};
+  // 1b) make sure the entry ticket is open before locating its controls
+  if (!(await ensureTicketOpen())) return {ok:false,chartSymbol,log:[...log,'ORDER TICKET NOT OPEN: clicked "Trade" but the entry form never appeared']};
+
+  // 2) order type (resilient finder with retries)
+  const tab = await findOrderTypeTab(otype);
+  if(!tab) {
+    const allBtns = Array.from(document.querySelectorAll('button,[role=button],[role=tab]')).filter(b=>vis(b)).map(b=>(b.innerText||'').trim().toLowerCase().slice(0,30));
+    return {ok:false,chartSymbol,log:[...log,'ORDER-TYPE TAB NOT FOUND: '+otype+' | visible: '+JSON.stringify(allBtns.slice(0,15))]};
+  }
   tab.click(); log.push('type -> '+otype); await sleep(450);
+
   // 3) side
-  const sideEl = document.querySelector('[data-name=side-control-'+o.side+']');
+  let sideEl = document.querySelector('[data-name=side-control-'+o.side+']');
+  if (!sideEl) {
+    await sleep(300);
+    sideEl = Array.from(document.querySelectorAll('button,[role=button],[role=tab]')).find(b => vis(b) && (b.getAttribute('data-name')||'').includes('side') && (b.innerText||'').trim().toLowerCase() === o.side);
+  }
   if(!sideEl) return {ok:false,chartSymbol,log:[...log,'SIDE NOT FOUND']};
   sideEl.click(); log.push('side -> '+o.side); await sleep(350);
+
   // 4) price
-  if(oprice!=null){ const pe=Array.from(document.querySelectorAll('input')).filter(e=>vis(e)&&e.type==='text').find(e=>/^price/i.test(labelFor(e))); if(!pe) return {ok:false,chartSymbol,log:[...log,'PRICE INPUT NOT FOUND']}; setInput(pe,oprice); log.push('price -> '+oprice); await sleep(250); }
+  if(oprice!=null){
+    let pe = null;
+    for (let attempt = 0; attempt < 3 && !pe; attempt++) {
+      pe = Array.from(document.querySelectorAll('input')).filter(e=>vis(e)&&e.type==='text').find(e=>/^price/i.test(labelFor(e)));
+      if (!pe) pe = Array.from(document.querySelectorAll('input')).filter(e=>vis(e)&&e.getAttribute('inputmode')==='decimal').find(e=>/price/i.test(labelFor(e)));
+      if (!pe && attempt < 2) await sleep(400);
+    }
+    if(!pe) return {ok:false,chartSymbol,log:[...log,'PRICE INPUT NOT FOUND']};
+    setInput(pe,oprice); log.push('price -> '+oprice); await sleep(250);
+  }
+
   // 5) qty (decimal input after Price; verify via qtyEl mirror)
   const dec=Array.from(document.querySelectorAll('input')).filter(e=>vis(e)&&e.getAttribute('inputmode')==='decimal');
   const pIdx=dec.findIndex(e=>/^price/i.test(labelFor(e)));
@@ -126,8 +193,14 @@ const STAGE_FN = `async (o) => {
   if(!qEl) return {ok:false,chartSymbol,log:[...log,'QTY INPUT NOT FOUND']};
   setInput(qEl,o.qty); await sleep(400);
   const mirror=document.querySelector('[data-name=qtyEl]'); const mtxt=mirror?(mirror.innerText||'').trim():null;
-  if(mtxt!==String(o.qty)) return {ok:false,chartSymbol,log:[...log,'QTY MIRROR MISMATCH: '+mtxt]};
+  if(mtxt!==String(o.qty)){
+    log.push('QTY MIRROR: set '+o.qty+' but qtyEl shows '+mtxt+' - retrying');
+    await sleep(300); setInput(qEl,o.qty); await sleep(400);
+    const mtxt2=mirror?(mirror.innerText||'').trim():null;
+    if(mtxt2!==String(o.qty)) return {ok:false,chartSymbol,log:[...log,'QTY MIRROR MISMATCH after retry: '+mtxt2]};
+  }
   log.push('qty -> '+o.qty+' (confirmed)');
+
   // 5b) attach protective stop-loss (expand Exits if needed; click inner checkbox)
   if(o.stop!=null){
     let sl=findSection('Stop loss');
@@ -140,15 +213,13 @@ const STAGE_FN = `async (o) => {
     setInput(sl.price,o.stop); await sleep(300);
     log.push('stop-loss -> '+o.stop+' (on='+cb.checked+')');
   }
-  // 6) submit -> open confirmation (poll + rejection detection); never sends
-  const submit=document.querySelector('[data-name=place-and-modify-button]');
-  if(!submit) return {ok:false,chartSymbol,log:[...log,'SUBMIT BUTTON NOT FOUND']};
+
+  // 6) submit -> open confirmation (resilient button finder + rejection detection)
+  const submit = await findSubmitButton();
+  if(!submit) return {ok:false,chartSymbol,log:[...log,'SUBMIT BUTTON NOT FOUND (tried place-and-modify-button + fallbacks)']};
   const before=(submit.innerText||'').replace(/\\s+/g,' ').trim();
   submit.click(); log.push('clicked submit (was "'+before+'")');
-  // Poll up to ~10s for the confirmation dialog (broker round-trip can be slow) or
-  // a rejection. Detection here only PACES the queue — the authoritative outcome
-  // is reconciled against Questrade positions after the run, so a missed dialog is
-  // never reported as a failure on its own.
+
   let confirmVisible=false, rejection=null;
   for(let k=0;k<25&&!confirmVisible&&!rejection;k++){
     await sleep(400);
@@ -162,8 +233,6 @@ const STAGE_FN = `async (o) => {
 
 const CONFIRM_VISIBLE_FN = `(function(){ var b=Array.from(document.querySelectorAll('button,[role=button]')).find(x=>(x.offsetParent!==null && x.getClientRects().length>0) && /send order|place order|confirm/i.test(x.innerText||'')); return !!b; })()`;
 
-// Read the Questrade positions table -> [{symbol, side, qty}] (clicks the
-// Positions sub-tab first). The post-run source of truth for whether closes filled.
 const READ_POSITIONS_FN = `(async()=>{
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const vis=el=>!!(el&&el.offsetParent!==null&&el.getClientRects().length>0);
@@ -202,9 +271,6 @@ const READ_POSITIONS_FN = `(async()=>{
   const ticker = s => String(s).split(':').pop().toUpperCase();
   const closeOrders = orders.filter(isClose);
 
-  // Snapshot positions BEFORE staging so closes can be reconciled against the real
-  // broker state afterward — the dialog poll lies (false "no confirmation"), the
-  // positions table is the only trustworthy fill signal. Only for close batches.
   const posBefore = {};
   if (closeOrders.length) {
     try {
@@ -214,7 +280,7 @@ const READ_POSITIONS_FN = `(async()=>{
   }
 
   const results = [];
-  const NO_DIALOG_FALLBACK_MS = 12000;   // never detected the dialog -> still give you time, then advance
+  const NO_DIALOG_FALLBACK_MS = 12000;
   for (let i = 0; i < orders.length; i++) {
     const o = orders[i];
     const desc = o.action === 'modify-stop' ? `modify ${o.symbol} stop -> ${o.price}`
@@ -225,31 +291,26 @@ const READ_POSITIONS_FN = `(async()=>{
     staged.log.forEach(l => console.log("   " + l));
     if (staged.rejection) { console.log("   !! broker REJECTED - skipping"); results.push({ ...o, staged: false, rejected: staged.rejection }); continue; }
     if (!staged.submitted) { console.log("   !! could not fill ticket - skipping to next"); results.push({ ...o, staged: false }); continue; }
-    console.log(`   >> CONFIRM ON SCREEN${staged.ok ? '' : ' (dialog not auto-detected — it may still be open)'}: ${staged.summary || desc}  (click Send Order, or Cancel to skip)`);
+    console.log(`   >> CONFIRM ON SCREEN${staged.ok ? '' : ' (dialog not auto-detected)'}: ${staged.summary || desc}  (click Send Order, or Cancel to skip)`);
 
-    // Wait for you to act. If we positively saw the dialog, wait for it to close
-    // (full timeout = you confirmed/cancelled). If we never detected it, wait only
-    // a short fallback so we neither skip instantly NOR hang the queue — the
-    // position reconciliation below reports what actually happened either way.
     const start = Date.now();
     let sawOpen = staged.ok, closed = false;
     await sleep(300);
     while (Date.now() - start < PER_ORDER_TIMEOUT_MS) {
       const open = await evalJs(CONFIRM_VISIBLE_FN);
       if (open) sawOpen = true;
-      else if (sawOpen) { closed = true; break; }                       // was open, now gone -> you acted
-      else if (Date.now() - start > NO_DIALOG_FALLBACK_MS) break;        // never detected -> stop waiting
+      else if (sawOpen) { closed = true; break; }
+      else if (Date.now() - start > NO_DIALOG_FALLBACK_MS) break;
       await sleep(350);
     }
     if (sawOpen && !closed) { console.log("   .. timed out waiting for your confirm - stopping queue"); results.push({ ...o, staged: true, dialogClosed: false }); break; }
     console.log(sawOpen ? "   .. confirmation closed - advancing"
       : isClose(o) ? "   .. advancing (outcome will be reconciled via positions)"
-      : "   .. advancing (confirm not auto-detected — verify the order landed)");
+      : "   .. advancing (confirm not auto-detected)");
     results.push({ ...o, staged: true, dialogClosed: closed, sawConfirm: sawOpen });
     await sleep(400);
   }
 
-  // ── Reconcile CLOSES against real positions (the authoritative outcome) ──────
   let reconcile = null;
   if (closeOrders.length) {
     const posAfter = {};
@@ -259,7 +320,6 @@ const READ_POSITIONS_FN = `(async()=>{
     const rows = closeOrders.map(o => {
       const t = ticker(o.symbol);
       const before = posBefore[t] || 0, after = posAfter[t] || 0;
-      // flattened = the position is gone or reduced by ~the ordered qty
       const flattened = before > 0 ? (after <= before - Math.min(o.qty, before) + 1e-6) : (after === 0);
       return { symbol: t, before, after, ordered: o.qty, flattened };
     });

@@ -7,12 +7,12 @@ set; Stage 2 fetches 2-min bars for just those and runs the deterministic
 classifier. Coverage (candidates in vs evaluated) is logged — never silently
 truncated.
 
-Mover sources are pluggable:
-  - IBKRMovers  : IBKR server-side scanner (TOP_PERC_GAIN/LOSE) — whole market,
-                  no per-symbol calls. PRODUCTION source. Needs the gateway up.
-  - QuoteMovers : per-symbol Finnhub /quote over a provided seed list, kept for
-                  dev/testing without the gateway (NOT a curated watchlist —
-                  pass it whatever universe you want screened).
+Production path is scan_tv (OPENING_DATA_SOURCE=tv): TradingView's public
+screener for pre-market movers + TradingView (CDP) for each mover's real-time
+2-min bars. No external gateway, no delayed data, no 2FA.
+
+QuoteMovers (per-symbol Finnhub /quote over a provided seed list) is kept only
+for dev/testing without the live feed, via OPENING_MOVER_SOURCE=quote.
 """
 import os
 import sys
@@ -60,7 +60,7 @@ class Candidate:
 class QuoteMovers:
     """Dev/test source: screen a provided symbol list via Finnhub /quote and keep
     those moving in a clear direction. Rate-limited (~60/min free) so the seed
-    list should be bounded; IBKRMovers is the real whole-market source."""
+    list should be bounded; scan_tv is the production whole-market source."""
 
     def __init__(self, seed_symbols, min_abs_pct=1.0):
         self.seed = seed_symbols
@@ -87,65 +87,10 @@ class QuoteMovers:
         return out[:limit]
 
 
-class IBKRMovers:
-    """Production source: IBKR server-side scanner. Returns whole-market movers by
-    percent gain/loss without per-symbol calls. Requires the IB Gateway running
-    (infra/ib-gateway). Untested until the gateway is up — see note in
-    OPENING_AGENT design."""
-
-    def __init__(self, both_directions=True):
-        self.both = both_directions
-
-    def movers(self, limit=200):
-        try:
-            from ib_async import IB, ScannerSubscription
-        except Exception as e:               # noqa: BLE001
-            print(f"  [IBKRMovers] ib_async unavailable: {e}", file=sys.stderr)
-            return []
-        host = os.environ.get("IBKR_HOST", "127.0.0.1")
-        port = int(os.environ.get("IBKR_PORT", "4002"))
-        cid = int(os.environ.get("OPENING_SCANNER_CLIENT_ID", "23"))
-        loc = os.environ.get("OPENING_SCAN_LOCATION", "STK.US.MAJOR")
-        ib = IB()
-        out = []
-        try:
-            ib.connect(host, port, clientId=cid, timeout=20)
-            codes = ["TOP_PERC_GAIN"] + (["TOP_PERC_LOSE"] if self.both else [])
-            # stockTypeFilter="CORP" = common stocks only -> excludes ALL ETFs
-            # (incl. leveraged SOXL/TQQQ/TSLL), matching the strategy's intent of
-            # individual-stock institutional footprints. Set "ALL" to re-include.
-            stock_type = os.environ.get("OPENING_STOCK_TYPE_FILTER", "CORP")
-            for code in codes:
-                sub = ScannerSubscription(
-                    instrument="STK", locationCode=loc, scanCode=code,
-                    stockTypeFilter=stock_type,
-                    abovePrice=float(os.environ.get("OPENING_MIN_PRICE", "5")),
-                    aboveVolume=int(os.environ.get("OPENING_MIN_VOLUME", "100000")),
-                )
-                for row in ib.reqScannerData(sub, [], []):
-                    c = row.contractDetails.contract
-                    direction = 1 if code == "TOP_PERC_GAIN" else -1
-                    out.append(Mover(c.symbol, 0.0, 0.0, 0.0, direction))
-        except Exception as e:               # noqa: BLE001
-            print(f"  [IBKRMovers] scanner failed: {e}", file=sys.stderr)
-        finally:
-            try:
-                ib.disconnect()
-            except Exception:
-                pass
-        # de-dupe preserving order
-        seen, uniq = set(), []
-        for m in out:
-            if m.symbol not in seen:
-                seen.add(m.symbol); uniq.append(m)
-        return uniq[:limit]
-
-
 def get_mover_source():
-    """Pick the source from OPENING_MOVER_SOURCE (default 'ibkr')."""
-    src = os.environ.get("OPENING_MOVER_SOURCE", "ibkr").lower()
-    if src == "ibkr":
-        return IBKRMovers()
+    """Dev/testing mover source. Production uses scan_tv (OPENING_DATA_SOURCE=tv);
+    this only serves OPENING_MOVER_SOURCE=quote over a seed list."""
+    src = os.environ.get("OPENING_MOVER_SOURCE", "quote").lower()
     if src == "quote":
         seed = [s.strip().upper() for s in
                 os.environ.get("OPENING_SEED_SYMBOLS", "").split(",") if s.strip()]
@@ -219,88 +164,10 @@ def evaluate(mover, bars=None, cfg=None):
     )
 
 
-def _ibkr_2min_bars(ib, symbol, duration="2 D"):
-    """≥200 2-min bars via IBKR reqHistoricalData (~1s/symbol, delayed data ok).
-    Returns bar dicts oldest→newest, or [] on failure."""
-    from ib_async import Stock
-    try:
-        c = Stock(symbol.upper(), "SMART", "USD")
-        ib.qualifyContracts(c)
-        bars = ib.reqHistoricalData(c, endDateTime="", durationStr=duration,
-                                    barSizeSetting="2 mins", whatToShow="TRADES",
-                                    useRTH=False, formatDate=1)
-        return [{"open": b.open, "high": b.high, "low": b.low, "close": b.close,
-                 "volume": float(b.volume or 0), "date": b.date} for b in bars]
-    except Exception:                          # noqa: BLE001
-        return []
-
-
-def _day_change_pct(bars):
-    """Gap / pre-market move = latest price vs the prior session's close, computed
-    from the 2-min bars we already have (no extra data call). Returns % or 0.0."""
-    if not bars:
-        return 0.0
-    last = bars[-1]
-    today = getattr(last.get("date"), "date", lambda: None)()
-    prior_close = None
-    for b in reversed(bars[:-1]):
-        d = getattr(b.get("date"), "date", lambda: None)()
-        if d and today and d < today:
-            prior_close = b["close"]
-            break
-    if not prior_close:
-        prior_close = bars[0]["close"]
-    return round((last["close"] - prior_close) / prior_close * 100, 2) if prior_close else 0.0
-
-
-def scan_ibkr(limit_movers=50, cfg=None):
-    """Single-connection funnel: IBKR scanner for movers + IBKR historical for
-    each mover's 2-min bars. ~20x faster than the Questrade path and one socket."""
-    from ib_async import IB, ScannerSubscription, util
-    util.patchAsyncio()
-    host = os.environ.get("IBKR_HOST", "127.0.0.1")
-    port = int(os.environ.get("IBKR_PORT", "4002"))
-    cid = int(os.environ.get("OPENING_SCANNER_CLIENT_ID", "23"))
-    loc = os.environ.get("OPENING_SCAN_LOCATION", "STK.US.MAJOR")
-    stype = os.environ.get("OPENING_STOCK_TYPE_FILTER", "CORP")
-    both = os.environ.get("OPENING_ALLOW_SHORTS", "false").lower() == "true"
-    ib = IB()
-    try:
-        ib.connect(host, port, clientId=cid, timeout=20)
-        ib.reqMarketDataType(3)                # delayed data (free) fallback
-        movers, seen = [], set()
-        for code, direction in ([("TOP_PERC_GAIN", 1)]
-                                + ([("TOP_PERC_LOSE", -1)] if both else [])):
-            sub = ScannerSubscription(
-                instrument="STK", locationCode=loc, scanCode=code,
-                stockTypeFilter=stype,
-                abovePrice=float(os.environ.get("OPENING_MIN_PRICE", "5")),
-                aboveVolume=int(os.environ.get("OPENING_MIN_VOLUME", "100000")))
-            for row in ib.reqScannerData(sub, [], []):
-                s = row.contractDetails.contract.symbol
-                if s not in seen:
-                    seen.add(s); movers.append(Mover(s, 0.0, 0.0, 0.0, direction))
-        movers = movers[:limit_movers]
-        candidates = []
-        for m in movers:
-            bars = _ibkr_2min_bars(ib, m.symbol)
-            m.pct_change = _day_change_pct(bars)       # real gap from the bars
-            candidates.append(evaluate(m, bars=bars, cfg=cfg))
-    finally:
-        try:
-            ib.disconnect()
-        except Exception:
-            pass
-    usable = [c for c in candidates if c.state != "UNKNOWN"]
-    print(f"  [opening.scan/ibkr] movers={len(movers)} usable={len(usable)} "
-          f"(coverage: {len(usable)}/{len(movers)})", file=sys.stderr)
-    return candidates
-
-
 def scan_tv(limit_movers=50, cfg=None):
-    """IBKR-FREE funnel: TradingView public screener for pre-market movers +
-    TradingView chart (CDP) for each mover's real-time 2-min bars. No IB Gateway,
-    no delayed data, no 2FA. This is the default path (OPENING_DATA_SOURCE=tv)."""
+    """Production funnel: TradingView public screener for pre-market movers +
+    TradingView chart (CDP) for each mover's real-time 2-min bars. No external
+    gateway, no delayed data, no 2FA. The default path (OPENING_DATA_SOURCE=tv)."""
     from opening_agent import tv_screener, tv_bars
     both = os.environ.get("OPENING_ALLOW_SHORTS", "false").lower() == "true"
     min_price = float(os.environ.get("OPENING_MIN_PRICE", "5"))
@@ -329,14 +196,10 @@ def scan_tv(limit_movers=50, cfg=None):
 
 def scan(limit_movers=50, cfg=None, source=None):
     """Full funnel: movers → deep-evaluate → list[Candidate]. Logs coverage.
-    Default OPENING_DATA_SOURCE=tv (IBKR-free, real-time TradingView). Set it to
-    'ibkr' for the legacy gateway path, or pass an explicit `source` (quote)."""
-    if source is None:
-        ds = os.environ.get("OPENING_DATA_SOURCE", "tv").lower()
-        if ds == "tv":
-            return scan_tv(limit_movers=limit_movers, cfg=cfg)
-        if ds == "ibkr":
-            return scan_ibkr(limit_movers=limit_movers, cfg=cfg)
+    Production path is real-time TradingView (OPENING_DATA_SOURCE=tv). Pass an
+    explicit `source` (e.g. QuoteMovers) for dev/testing."""
+    if source is None and os.environ.get("OPENING_DATA_SOURCE", "tv").lower() == "tv":
+        return scan_tv(limit_movers=limit_movers, cfg=cfg)
     source = source or get_mover_source()
     movers = source.movers(limit=limit_movers)
     candidates = [evaluate(m, cfg=cfg) for m in movers]

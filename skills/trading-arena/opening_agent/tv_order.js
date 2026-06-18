@@ -84,39 +84,148 @@ const PAGE_FN = `async (opts) => {
     }
     return null;
   }
-  function switchOn(t) {
-    const a = t.getAttribute('aria-checked'); if (a != null) return a === 'true';
-    const inp = t.querySelector('input[type=checkbox]'); if (inp) return inp.checked;
-    return /checked|enabled|active/i.test(t.className) || !!t.querySelector('[class*=checked],[aria-checked=true]');
+
+  // Resilient order-type tab finder: tries exact match first, then startsWith,
+  // then includes. Handles Pro UI variations like "Stop Order", "Limit Order",
+  // extra whitespace, different casing. Retries up to 3 times with delays to
+  // handle late-rendering panels after symbol switch.
+  async function findOrderTypeTab(targetType) {
+    const norm = targetType.trim().toLowerCase();
+    // Map shorthand to possible label variations
+    const aliases = {
+      'stop': ['stop', 'stop order', 'stp'],
+      'limit': ['limit', 'limit order', 'lmt'],
+      'market': ['market', 'market order', 'mkt'],
+      'stop limit': ['stop limit', 'stop-limit', 'stop limit order', 'stplmt']
+    };
+    const candidates = aliases[norm] || [norm];
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const allBtns = Array.from(document.querySelectorAll('button,[role=button],[role=tab],[data-name*=order-type]'));
+      const visBtns = allBtns.filter(b => vis(b));
+
+      // Phase 1: exact match on trimmed lowercase innerText
+      for (const b of visBtns) {
+        const txt = (b.innerText || '').trim().toLowerCase();
+        if (candidates.includes(txt)) return b;
+      }
+
+      // Phase 2: innerText starts with one of our candidates
+      for (const b of visBtns) {
+        const txt = (b.innerText || '').trim().toLowerCase();
+        for (const c of candidates) {
+          if (txt.startsWith(c)) return b;
+        }
+      }
+
+      // Phase 3: data-name attribute contains the type
+      for (const b of visBtns) {
+        const dn = (b.getAttribute('data-name') || '').toLowerCase();
+        if (dn.includes(norm) || dn.includes(norm.replace(' ', '-')) || dn.includes(norm.replace(' ', '_'))) return b;
+      }
+
+      // Phase 4: aria-label contains the type
+      for (const b of visBtns) {
+        const al = (b.getAttribute('aria-label') || '').toLowerCase();
+        for (const c of candidates) {
+          if (al.includes(c)) return b;
+        }
+      }
+
+      if (attempt < 2) await sleep(600);
+    }
+    return null;
   }
 
-  // 1) order type
-  const tab = Array.from(document.querySelectorAll('button,[role=button],[role=tab]'))
-    .find(b => vis(b) && (b.innerText || '').trim().toLowerCase() === opts.type);
-  if (!tab) return { ok: false, log: ['ORDER-TYPE TAB NOT FOUND: ' + opts.type] };
+  // Resilient submit button finder: tries multiple selectors with retries.
+  async function findSubmitButton() {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      // Primary: data-name attribute
+      let btn = document.querySelector('[data-name=place-and-modify-button]');
+      if (btn && vis(btn)) return btn;
+
+      // Fallback 1: data-name contains relevant keywords
+      btn = document.querySelector('[data-name*=place-button],[data-name*=submit-button],[data-name*=order-button]');
+      if (btn && vis(btn)) return btn;
+
+      // Fallback 2: button whose text matches expected patterns
+      const allBtns = Array.from(document.querySelectorAll('button,[role=button]')).filter(b => vis(b));
+      btn = allBtns.find(b => {
+        const txt = (b.innerText || '').trim().toLowerCase();
+        return /^(buy|sell)\\s/.test(txt) && !/send order|cancel/i.test(txt);
+      });
+      if (btn) return btn;
+
+      // Fallback 3: any button with "place" or "review" in text
+      btn = allBtns.find(b => /place|review order|create order/i.test((b.innerText || '').trim()));
+      if (btn) return btn;
+
+      if (attempt < 2) await sleep(500);
+    }
+    return null;
+  }
+
+  // Ensure the order ENTRY ticket is open. On a fresh chart the Questrade broker
+  // panel shows Positions/Orders but the entry ticket (order-type tabs, side
+  // controls, place button) stays closed until the toolbar "Trade" button is
+  // clicked. Every step below assumes it's open, so open it first if needed.
+  async function ensureTicketOpen() {
+    const up = () => !!(document.querySelector('[data-name=place-and-modify-button]') || document.querySelector('[data-name^=side-control]'));
+    if (up()) return true;
+    for (let attempt = 0; attempt < 3 && !up(); attempt++) {
+      const trade = Array.from(document.querySelectorAll('button,[role=button]')).find(b => vis(b) && /^trade$/i.test((b.innerText || '').trim()));
+      if (trade) trade.click();
+      for (let k = 0; k < 12 && !up(); k++) await sleep(300);   // ~3.6s
+    }
+    return up();
+  }
+
+  // 0) make sure the entry ticket is actually open before locating its controls
+  if (!(await ensureTicketOpen())) {
+    return { ok: false, chartSymbol, log: ['ORDER TICKET NOT OPEN: clicked "Trade" but the order entry form never appeared'] };
+  }
+
+  // 1) order type (with retries and fuzzy matching)
+  const tab = await findOrderTypeTab(opts.type);
+  if (!tab) {
+    const allBtns = Array.from(document.querySelectorAll('button,[role=button],[role=tab]')).filter(b => vis(b)).map(b => (b.innerText||'').trim().toLowerCase().slice(0,30));
+    return { ok: false, log: ['ORDER-TYPE TAB NOT FOUND: ' + opts.type + ' | visible buttons: ' + JSON.stringify(allBtns.slice(0,15))] };
+  }
   tab.click(); log.push('order type -> ' + opts.type);
   await sleep(450);
 
   // 2) side
-  const sideEl = document.querySelector('[data-name=side-control-' + opts.side + ']');
+  let sideEl = document.querySelector('[data-name=side-control-' + opts.side + ']');
+  if (!sideEl) {
+    // Fallback: find by aria-label or text content
+    await sleep(300);
+    sideEl = Array.from(document.querySelectorAll('button,[role=button],[role=tab]')).find(b => vis(b) && (b.getAttribute('data-name')||'').includes('side') && (b.innerText||'').trim().toLowerCase() === opts.side);
+  }
   if (!sideEl) return { ok: false, log: [...log, 'SIDE CONTROL NOT FOUND: ' + opts.side] };
   sideEl.click(); log.push('side -> ' + opts.side);
   await sleep(350);
 
   // 3) price (stop/limit trigger) - first visible text input whose label is Price
   if (opts.price != null) {
-    const priceEl = Array.from(document.querySelectorAll('input'))
-      .filter(e => vis(e) && e.type === 'text')
-      .find(e => /^price/i.test(labelFor(e)));
+    let priceEl = null;
+    for (let attempt = 0; attempt < 3 && !priceEl; attempt++) {
+      priceEl = Array.from(document.querySelectorAll('input'))
+        .filter(e => vis(e) && e.type === 'text')
+        .find(e => /^price/i.test(labelFor(e)));
+      if (!priceEl) {
+        // Fallback: decimal input that isn't qty
+        priceEl = Array.from(document.querySelectorAll('input'))
+          .filter(e => vis(e) && e.getAttribute('inputmode') === 'decimal')
+          .find(e => /price/i.test(labelFor(e)));
+      }
+      if (!priceEl && attempt < 2) await sleep(400);
+    }
     if (!priceEl) return { ok: false, log: [...log, 'PRICE INPUT NOT FOUND'] };
     setInput(priceEl, opts.price); log.push('price -> ' + opts.price);
     await sleep(250);
   }
 
-  // 4) quantity - the decimal input right AFTER the Price field. The qtyEl
-  //    element is a display DIV (title="Quantity") that mirrors the live qty,
-  //    so after setting we verify against it and abort if it didn't update
-  //    (means we hit the wrong field) rather than guess.
+  // 4) quantity
   const decInputs = Array.from(document.querySelectorAll('input')).filter(e => vis(e) && e.getAttribute('inputmode') === 'decimal');
   const priceIdx = decInputs.findIndex(e => /^price/i.test(labelFor(e)));
   const qtyInput = (opts.price == null || priceIdx < 0) ? decInputs[0] : decInputs[priceIdx + 1];
@@ -125,16 +234,20 @@ const PAGE_FN = `async (opts) => {
   await sleep(400);
   const qtyMirror = document.querySelector('[data-name=qtyEl]');
   const mirrorTxt = qtyMirror ? (qtyMirror.innerText || '').trim() : null;
-  if (mirrorTxt !== String(opts.qty)) return { ok: false, log: [...log, 'QTY MIRROR MISMATCH: set ' + opts.qty + ' but qtyEl shows ' + mirrorTxt + ' - wrong field, aborting'] };
-  log.push('qty confirmed via qtyEl mirror = ' + mirrorTxt);
+  if (mirrorTxt !== String(opts.qty)) {
+    log.push('QTY MIRROR: set ' + opts.qty + ' but qtyEl shows ' + mirrorTxt + ' - retrying');
+    await sleep(300);
+    setInput(qtyInput, opts.qty);
+    await sleep(400);
+    const mirrorTxt2 = qtyMirror ? (qtyMirror.innerText || '').trim() : null;
+    if (mirrorTxt2 !== String(opts.qty)) return { ok: false, log: [...log, 'QTY MIRROR MISMATCH after retry: ' + mirrorTxt2 + ' - wrong field, aborting'] };
+  }
+  log.push('qty confirmed via qtyEl mirror = ' + String(opts.qty));
 
   // 5b) attach protective stop-loss (bracket) if requested
   if (opts.stop != null) {
     let sl = findSection('Stop loss');
     if (!sl) {
-      // Exits got collapsed by the order-type re-render. We don't know its
-      // current state, so toggle the "Exits" header up to twice until the
-      // Stop-loss section actually appears (handles both collapsed/expanded).
       const findExits = () => Array.from(document.querySelectorAll('*')).filter(e => vis(e) && (e.innerText || '').trim().toLowerCase() === 'exits' && (e.innerText || '').length < 12)[0];
       for (let attempt = 0; attempt < 2 && !sl; attempt++) {
         const hdr = findExits();
@@ -146,8 +259,6 @@ const PAGE_FN = `async (opts) => {
       }
     }
     if (!sl) return { ok: false, chartSymbol, log: [...log, 'STOP-LOSS SECTION NOT FOUND (even after trying to expand Exits)'] };
-    // The switch state lives in an inner <input type=checkbox>; click THAT (not
-    // the container), once, only if currently off, then verify .checked.
     const cb = sl.toggle.querySelector('input[type=checkbox]') || (sl.toggle.tagName === 'INPUT' ? sl.toggle : null);
     if (!cb) return { ok: false, chartSymbol, log: [...log, 'STOP-LOSS CHECKBOX NOT FOUND'] };
     if (!cb.checked) { cb.click(); await sleep(400); }
@@ -164,26 +275,22 @@ const PAGE_FN = `async (opts) => {
   const qtyBack = qtyInput.value;
   log.push('readback price=' + priceBack + ' qty=' + qtyBack);
 
-  // verify before opening anything
   if (String(qtyBack).trim() === '' || Number(qtyBack) <= 0) return { ok: false, log: [...log, 'QTY READBACK INVALID - not opening'] };
   if (opts.price != null && (priceBack == null || String(priceBack).trim() === '')) return { ok: false, log: [...log, 'PRICE READBACK INVALID - not opening'] };
 
   if (opts.fillOnly) return { ok: true, staged: false, filled: true, chartSymbol, log, priceBack, qtyBack };
 
-  // 6) submit -> opens confirmation. The right panel's submit is the
-  //    place-and-modify-button ("Start creating order" / "Buy <sym>"), NOT the
-  //    floating buy-order-button. This does NOT send; a confirmation follows.
-  const btn = document.querySelector('[data-name=place-and-modify-button]');
-  if (!btn) return { ok: false, chartSymbol, log: [...log, 'SUBMIT BUTTON (place-and-modify-button) NOT FOUND'] };
+  // 6) submit -> opens confirmation (with resilient button finder)
+  const btn = await findSubmitButton();
+  if (!btn) return { ok: false, chartSymbol, log: [...log, 'SUBMIT BUTTON NOT FOUND (tried place-and-modify-button + fallbacks)'] };
   const btnBefore = (btn.innerText || '').replace(/\\s+/g, ' ').trim();
   btn.click(); log.push('clicked submit (was: "' + btnBefore + '")');
 
-  // 7) poll up to ~4s for the confirmation (Send Order / Cancel) to render. If
-  //    it never appears, report the submit button's text so we can see the state.
+  // 7) poll up to ~4s for the confirmation (Send Order / Cancel) to render.
   let confirmVisible = false, rejection = null;
   for (let k = 0; k < 10 && !confirmVisible && !rejection; k++) {
     await sleep(400);
-    const sb = Array.from(document.querySelectorAll('button,[role=button]')).find(b => /send order|confirm/i.test(b.innerText || ''));
+    const sb = Array.from(document.querySelectorAll('button,[role=button]')).find(b => /send order|place order|confirm/i.test(b.innerText || ''));
     confirmVisible = vis(sb);
     const rej = Array.from(document.querySelectorAll('*')).find(e => vis(e) && /was rejected|both marketable|order rejected|please modify/i.test(e.innerText || '') && (e.innerText || '').length < 220);
     if (rej) rejection = (rej.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 180);

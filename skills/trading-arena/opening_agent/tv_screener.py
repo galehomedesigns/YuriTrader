@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Pre-market mover scan via TradingView's public scanner API — the IBKR-free
-replacement for universe.IBKRMovers (TOP_PERC_GAIN).
+"""Pre-market mover scan via TradingView's public scanner API — the production
+whole-market mover source (TOP_PERC_GAIN equivalent).
 
 scanner.tradingview.com/america/scan is a public POST endpoint (no auth, no
 browser, no CDP). We ask for US common stocks above a price/volume floor, sorted
-by pre-market % change, and return the top N as movers. Mirrors the IBKR scanner's
-intent: individual common stocks (type=stock excludes ETFs/leveraged funds, like
-IBKR's stockTypeFilter=CORP), price>=5, real pre-market participation.
+by pre-market % change, and return the top N as movers. Restricts to individual
+common stocks (type=stock excludes ETFs/leveraged funds), price>=5, real
+pre-market participation.
 
     tv_screener.py [--limit 50] [--min-price 5] [--min-pmvol 50000] [--losers]
 """

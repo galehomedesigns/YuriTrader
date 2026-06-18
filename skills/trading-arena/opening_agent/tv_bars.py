@@ -1,5 +1,5 @@
 """Python bridge to tv_bars_fetch.js — real-time 2-min bars from TradingView via
-CDP, in the dict format universe.py/engine consume. Replaces IBKR _ibkr_2min_bars.
+CDP, in the dict format universe.py/engine consume.
 
     from opening_agent import tv_bars
     bars_map = tv_bars.fetch_bars(["NASDAQ:AAPL", "NYSE:F"])   # {sym: [bar,...]}
@@ -7,8 +7,8 @@ CDP, in the dict format universe.py/engine consume. Replaces IBKR _ibkr_2min_bar
 
 bar = {"open","high","low","close","volume","date"} oldest->newest; date = unix
 epoch seconds (int) of the bar (used only for de-dup in the advisory loop).
-Failed/missing symbols come back as []. The node side runs a DEDICATED background
-TradingView tab, isolated from the trading/order chart.
+Failed/missing symbols come back as []. The node side runs DEDICATED background
+TradingView tabs (parallel), isolated from the trading/order chart.
 """
 import json
 import os
@@ -22,6 +22,10 @@ def _port():
     return os.environ.get("OPENING_TV_CDP_PORT", "9225")
 
 
+def _parallel():
+    return os.environ.get("OPENING_CDP_PARALLEL_TABS", "3")
+
+
 def fetch_bars(symbols, min_bars=200, res="2", timeout=240):
     """symbols: list of 'EXCHANGE:TICKER' or bare 'TICKER'. Returns
     {requested_symbol: [bar dicts]}; failed/missing -> []."""
@@ -31,7 +35,8 @@ def fetch_bars(symbols, min_bars=200, res="2", timeout=240):
     try:
         p = subprocess.run(
             ["node", _FETCH, "--symbols", ",".join(symbols),
-             "--min", str(min_bars), "--res", str(res), "--port", _port()],
+             "--min", str(min_bars), "--res", str(res), "--port", _port(),
+             "--parallel", _parallel()],
             capture_output=True, text=True, timeout=timeout)
         lines = [l for l in p.stdout.splitlines() if l.strip().startswith("{")]
         data = json.loads(lines[-1]) if lines else {"results": []}

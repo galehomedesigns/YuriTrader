@@ -6,7 +6,7 @@ SCAFFOLD STATUS: this implements the decision logic as a deterministic state
 machine that consumes 2-min bars (with intra-bar high/low updates) and EMITS
 order tickets. It is signal_only (G15): it NEVER transmits an order — it returns
 OrderTicket objects for a human/host to act on. Going live (auto_execute) requires
-(a) a real-time bar feed (IBKR reqRealTimeBars) the cron architecture lacks, and
+(a) a real-time bar feed (now TradingView CDP 2-min bars) the cron lacks, and
 (b) explicit arming. Not armed. No broker import here.
 
 The host drives it:

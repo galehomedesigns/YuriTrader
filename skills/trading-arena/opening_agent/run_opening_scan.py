@@ -62,10 +62,7 @@ def in_premarket_window():
     return WIN_START * 60 <= mins < WIN_END_H * 60 + WIN_END_M
 
 
-def send_message(text):
-    if not STOCK_BOT_TOKEN:
-        print("  [opening] no TELEGRAM_STOCK_BOT_TOKEN — skipping send", file=sys.stderr)
-        return False
+def _tg_send_one(text):
     data = urllib.parse.urlencode({
         "chat_id": CHAT_ID, "text": text, "parse_mode": "HTML",
         "disable_web_page_preview": "true",
@@ -77,6 +74,29 @@ def send_message(text):
     except Exception as e:                   # noqa: BLE001
         print(f"  [opening] TG send error: {e}", file=sys.stderr)
         return False
+
+
+def _chunk(text, limit=3900):
+    """Split on newline boundaries so each chunk stays under Telegram's 4096
+    cap with complete (HTML-valid) lines. The funnel digest routinely exceeds
+    the cap once the universe is large, which silently 400s a single send."""
+    chunks, cur = [], ""
+    for line in text.split("\n"):
+        if cur and len(cur) + 1 + len(line) > limit:
+            chunks.append(cur)
+            cur = line
+        else:
+            cur = f"{cur}\n{line}" if cur else line
+    if cur:
+        chunks.append(cur)
+    return chunks
+
+
+def send_message(text):
+    if not STOCK_BOT_TOKEN:
+        print("  [opening] no TELEGRAM_STOCK_BOT_TOKEN — skipping send", file=sys.stderr)
+        return False
+    return all(_tg_send_one(c) for c in _chunk(text))
 
 
 def _emoji(direction):

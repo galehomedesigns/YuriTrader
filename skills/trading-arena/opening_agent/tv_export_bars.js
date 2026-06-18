@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * tv_export_bars.js - pull the REAL-TIME 2-min OHLC series for a symbol off the
- * TradingView chart via CDP (the upgraded TV account's live feed). Replaces IBKR
- * reqHistoricalData as the bar source for the opening classifier.
+ * TradingView chart via CDP (the upgraded TV account's live feed). The bar
+ * source for the opening classifier.
  *
  * exportData() is disabled by TradingView ("not supported"), so we read the loaded
  * series straight from the chart model: getSeries()._series.bars() -> PlotList of
