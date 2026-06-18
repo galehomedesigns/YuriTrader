@@ -19,6 +19,7 @@ CLI:
     python3 tv_watchlist.py --from-cache         # use opening_scan_latest.json ranked[]
 """
 import argparse
+import concurrent.futures
 import json
 import os
 import re
@@ -53,6 +54,33 @@ _UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
 _US_EXCHANGES = ["NASDAQ", "NYSE", "AMEX", "NYSE ARCA", "BATS", "CBOE", "OTC"]
 _TAG_RE = re.compile(r"<[^>]+>")
 
+# Cross-run ticker -> EXCHANGE:TICKER cache. The symbol-search endpoint is slow
+# and rate-limited; resolving ~50 tickers serially each run took ~8 min. We
+# persist successful resolutions so repeat tickers skip the lookup entirely, and
+# resolve the rest concurrently (see _resolve_all).
+_CACHE_FILE = os.path.join(_LOGS, "tv_symbol_cache.json")
+
+
+def _load_cache():
+    try:
+        with open(_CACHE_FILE) as f:
+            return {k: v for k, v in json.load(f).items() if isinstance(v, str)}
+    except Exception:
+        return {}
+
+
+_SYM_CACHE = _load_cache()
+
+
+def _save_cache():
+    try:
+        tmp = _CACHE_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(_SYM_CACHE, f, indent=0, sort_keys=True)
+        os.replace(tmp, _CACHE_FILE)
+    except Exception as e:                            # cache is best-effort
+        print(f"  [tv-wl] symbol-cache save failed: {e}", file=sys.stderr)
+
 
 class TVAuthError(RuntimeError):
     """Raised when the session cookie is missing or rejected (login required)."""
@@ -85,16 +113,18 @@ def _api_request(url, data=None, method=None, timeout=20):
         return e.code, body
 
 
-def resolve_symbol(ticker, _cache={}):
+def resolve_symbol(ticker):
     """Plain ticker (e.g. 'AMD') -> TradingView symbol (e.g. 'NASDAQ:AMD').
 
-    Falls back to the plain ticker if symbol-search returns nothing usable.
+    Successful resolutions are cached across runs (_SYM_CACHE). A plain-ticker
+    FALLBACK (search failed/empty) is NOT cached, so a transient failure is
+    retried next run rather than stuck. Callers persist via _save_cache().
     """
     t = ticker.strip().upper()
     if not t or t.startswith("###"):
         return ticker  # pass section headers through untouched
-    if t in _cache:
-        return _cache[t]
+    if t in _SYM_CACHE:
+        return _SYM_CACHE[t]
     url = ("https://symbol-search.tradingview.com/symbol_search/?"
            + urllib.parse.urlencode({"text": t, "type": "stock", "hl": "0", "lang": "en"}))
     try:
@@ -106,8 +136,7 @@ def resolve_symbol(ticker, _cache={}):
             payload = json.loads(r.read().decode())
     except Exception as e:  # noqa: BLE001 — network/parse; fall back to plain
         print(f"  [tv-wl] symbol-search failed for {t}: {e}", file=sys.stderr)
-        _cache[t] = t
-        return t
+        return t                                   # transient — do not cache
 
     rows = payload if isinstance(payload, list) else payload.get("symbols", [])
     # Strip highlight tags; keep only exact-ticker stock matches.
@@ -128,9 +157,31 @@ def resolve_symbol(ticker, _cache={}):
     if not chosen and cands:                       # any exact match
         exch, sym = cands[0]
         chosen = f"{exch}:{sym}" if exch else sym
-    result = chosen or t                           # last resort: plain ticker
-    _cache[t] = result
-    return result
+    if chosen:
+        _SYM_CACHE[t] = chosen                     # cache only real resolutions
+        return chosen
+    return t                                        # last resort: plain ticker
+
+
+def _resolve_all(tickers, workers=10):
+    """Resolve tickers CONCURRENTLY (each is an independent slow HTTP lookup),
+    then persist the cache once. Cuts ~50 serial lookups from minutes to the
+    slowest single call. Returns {ticker: tvsym}."""
+    todo = list(tickers)
+    if not todo:
+        return {}
+    out = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(workers, len(todo))) as ex:
+        futs = {ex.submit(resolve_symbol, t): t for t in todo}
+        for fut in concurrent.futures.as_completed(futs):
+            t = futs[fut]
+            try:
+                out[t] = fut.result()
+            except Exception as e:                 # noqa: BLE001
+                print(f"  [tv-wl] resolve error {t}: {e}", file=sys.stderr)
+                out[t] = t
+    _save_cache()
+    return out
 
 
 def get_active_list():
@@ -173,7 +224,7 @@ def sync(tickers, dry_run=False, header=True, label="Opening Power"):
             seen.add(u)
             ordered.append(u)
 
-    resolved = {t: resolve_symbol(t) for t in ordered}
+    resolved = _resolve_all(ordered)               # concurrent + cross-run cached
     payload = list(dict.fromkeys(resolved[t] for t in ordered))  # dedupe, keep order
     if header:
         et = datetime.now(ZoneInfo("America/New_York")).strftime("%m-%d %H:%M")
