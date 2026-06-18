@@ -43,6 +43,13 @@ const PAGE_FN = `async (opts) => {
   const log = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const vis = el => !!(el && el.offsetParent !== null && el.getClientRects().length > 0);
+  // HARD GUARD: never stage on a DATA tab. An orphaned data tab (our nonce in
+  // window, tracking file lost) can be mis-picked as the trading tab; an order
+  // staged there never reaches the broker. The real trading tab never carries
+  // this nonce. Run tv_data_teardown.js to clear orphans.
+  if (window.__OPENING_DATA_NONCE__) {
+    return { ok: false, log: ['REFUSING: connected to a DATA tab (has __OPENING_DATA_NONCE__), not the trading tab. Run tv_data_teardown.js to close orphaned data tabs.'] };
+  }
   const chartSymbol = (window.TradingViewApi && window.TradingViewApi._activeChartWidgetWV)
     ? window.TradingViewApi._activeChartWidgetWV.value().symbol() : null;
   log.push('chart symbol = ' + chartSymbol);

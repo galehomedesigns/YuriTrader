@@ -30,28 +30,29 @@ const fix = u => u.replace(/\/\/[^/]+\//, `//127.0.0.1:${PORT}/`);
 
 (async () => {
   const files = fs.readdirSync(LOGS).filter(f => f.startsWith("tv_data_tab") && f.endsWith(".json"));
-  const tracked = files.map(f => { try { return { f, ...JSON.parse(fs.readFileSync(path.join(LOGS, f), "utf8")) }; } catch (e) { return { f }; } }).filter(x => x.targetId);
   const tabs = await jget("/json");
   const trading = tab.pickTradingTab(tabs);
   if (!trading) { console.error("no trading tab found — refusing to do anything"); process.exit(2); }
-  console.log("trading tab (PROTECTED):", trading.id.slice(0, 12));
 
+  // Sweep EVERY chart tab for our data nonce in its window — close any that
+  // carry it, tracked or not. This catches ORPHANED data tabs (window nonce
+  // present but their tracking file was lost) which would otherwise leak and,
+  // worse, get mis-picked as the trading tab by pickTradingTab (it only excludes
+  // *tracked* ids). The user's trading tab never carries the nonce, so it's safe.
+  const ver = await jget("/json/version");
   let closed = 0, kept = 0;
-  for (const t of tracked) {
-    const fp = path.join(LOGS, t.f);
-    if (t.targetId === trading.id) { console.log("  REFUSE", t.targetId.slice(0, 12), "— is the trading tab"); kept++; continue; }
-    const live = tabs.find(x => x.id === t.targetId && x.webSocketDebuggerUrl && tab.isChart(x));
-    if (!live) { console.log("  gone   ", t.targetId.slice(0, 12), "— already closed; clearing file"); try { fs.unlinkSync(fp); } catch (e) {} continue; }
-    const P = mkConn(fix(live.webSocketDebuggerUrl)); await P.ready;
+  for (const c of tabs.filter(x => tab.isChart(x) && x.webSocketDebuggerUrl)) {
+    const P = mkConn(fix(c.webSocketDebuggerUrl)); await P.ready;
     const r = await P.call("Runtime.evaluate", { expression: 'String(window.__OPENING_DATA_NONCE__||"")', returnByValue: true });
-    const liveNonce = (r.result && r.result.result && r.result.result.value) || null;
+    const nonce = (r.result && r.result.result && r.result.result.value) || null;
     P.sock.close();
-    if (!t.nonce || liveNonce !== t.nonce) { console.log("  KEEP   ", t.targetId.slice(0, 12), "— nonce mismatch, not provably ours"); kept++; continue; }
-    const ver = await jget("/json/version");
+    if (!nonce) { kept++; continue; }                       // no data nonce -> not ours (trading tab etc.)
     const B = mkConn(fix(ver.webSocketDebuggerUrl)); await B.ready;
-    await B.call("Target.closeTarget", { targetId: t.targetId }); B.sock.close();
-    try { fs.unlinkSync(fp); } catch (e) {}
-    console.log("  CLOSED ", t.targetId.slice(0, 12), "(nonce verified)"); closed++;
+    await B.call("Target.closeTarget", { targetId: c.id }); B.sock.close();
+    const orphan = !files.some(f => { try { return JSON.parse(fs.readFileSync(path.join(LOGS, f), "utf8")).targetId === c.id; } catch (e) { return false; } });
+    console.log("  CLOSED ", c.id.slice(0, 12), "(data nonce verified" + (orphan ? ", ORPHAN — was untracked" : "") + ")"); closed++;
   }
-  console.log(`done: closed=${closed} kept=${kept}`);
+  // Clear all tracking files — every data tab we knew about is now closed.
+  for (const f of files) { try { fs.unlinkSync(path.join(LOGS, f)); } catch (e) {} }
+  console.log(`done: closed=${closed} kept=${kept} (trading tab ${trading.id.slice(0, 12)} protected)`);
 })().catch(e => { console.error("ERR", e.message); process.exit(3); });

@@ -30,6 +30,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // DOM routine: switch symbol, fill ticket (+optional stop), open confirmation.
 const STAGE_FN = `async (o) => {
   const log = [];
+  // HARD GUARD: never operate on a DATA tab. An orphaned data tab (our nonce in
+  // window, tracking file lost) can be mis-picked as the trading tab; staging or
+  // setSymbol there never reaches the broker. The trading tab never has this.
+  if (window.__OPENING_DATA_NONCE__) {
+    return { ok: false, log: ['REFUSING: connected to a DATA tab (has __OPENING_DATA_NONCE__), not the trading tab. Run tv_data_teardown.js to close orphaned data tabs.'] };
+  }
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const vis = el => !!(el && el.offsetParent !== null && el.getClientRects().length > 0);
   function setInput(el, val){ const proto = el.tagName==='TEXTAREA'?HTMLTextAreaElement:HTMLInputElement; const s=Object.getOwnPropertyDescriptor(proto.prototype,'value').set; el.focus(); s.call(el,String(val)); el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); if(el.blur)el.blur(); }
