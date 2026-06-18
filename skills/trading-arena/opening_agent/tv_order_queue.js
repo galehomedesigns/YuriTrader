@@ -218,6 +218,16 @@ const STAGE_FN = `async (o) => {
   const submit = await findSubmitButton();
   if(!submit) return {ok:false,chartSymbol,log:[...log,'SUBMIT BUTTON NOT FOUND (tried place-and-modify-button + fallbacks)']};
   const before=(submit.innerText||'').replace(/\\s+/g,' ').trim();
+  // Verify staged type matches otype (the actual type after close/marketable
+  // remapping) via the submit button's own text - abort if the tab didn't take.
+  const _bt=before.toLowerCase();
+  const _typeOk =
+    (otype==='market')     ? (/\\bmarket\\b|\\bmkt\\b/.test(_bt) || !/\\blimit\\b|\\bstop\\b/.test(_bt)) :
+    (otype==='limit')      ? (/\\blimit\\b|\\blmt\\b/.test(_bt) && !/\\bstop\\b/.test(_bt)) :
+    (otype==='stop limit') ? (/stop[\\s-]?limit|stplmt/.test(_bt)) :
+    (otype==='stop')       ? (/\\bstop\\b|\\bstp\\b/.test(_bt) && !/stop[\\s-]?limit/.test(_bt)) : true;
+  if(!_typeOk) return {ok:false,chartSymbol,log:[...log,'ORDER-TYPE MISMATCH: requested "'+otype+'" but ticket shows "'+before+'" - NOT opening']};
+  log.push('order-type verified via submit text: "'+before+'"');
   submit.click(); log.push('clicked submit (was "'+before+'")');
 
   let confirmVisible=false, rejection=null;

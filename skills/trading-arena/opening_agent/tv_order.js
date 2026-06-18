@@ -284,6 +284,18 @@ const PAGE_FN = `async (opts) => {
   const btn = await findSubmitButton();
   if (!btn) return { ok: false, chartSymbol, log: [...log, 'SUBMIT BUTTON NOT FOUND (tried place-and-modify-button + fallbacks)'] };
   const btnBefore = (btn.innerText || '').replace(/\\s+/g, ' ').trim();
+  // Verify the STAGED order type matches what was requested. The submit button
+  // text is TradingView's own rendering of the order (e.g. "Buy 1 MP @ 62 STOP"),
+  // so it is ground truth — if the type tab didn't take, abort BEFORE opening the
+  // confirmation rather than stage a wrong-type order.
+  const _bt = btnBefore.toLowerCase();
+  const _typeOk =
+    (opts.type === 'market')     ? (/\\bmarket\\b|\\bmkt\\b/.test(_bt) || !/\\blimit\\b|\\bstop\\b/.test(_bt)) :
+    (opts.type === 'limit')      ? (/\\blimit\\b|\\blmt\\b/.test(_bt) && !/\\bstop\\b/.test(_bt)) :
+    (opts.type === 'stop limit') ? (/stop[\\s-]?limit|stplmt/.test(_bt)) :
+    (opts.type === 'stop')       ? (/\\bstop\\b|\\bstp\\b/.test(_bt) && !/stop[\\s-]?limit/.test(_bt)) : true;
+  if (!_typeOk) return { ok: false, chartSymbol, log: [...log, 'ORDER-TYPE MISMATCH: requested "' + opts.type + '" but ticket shows "' + btnBefore + '" - NOT opening'] };
+  log.push('order-type verified via submit text: "' + btnBefore + '"');
   btn.click(); log.push('clicked submit (was: "' + btnBefore + '")');
 
   // 7) poll up to ~4s for the confirmation (Send Order / Cancel) to render.
