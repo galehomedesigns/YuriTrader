@@ -8,9 +8,12 @@ no tick feed is needed for entry/stop (G5/G7).
 SAFETY MODEL (real money):
   - Own arming gate OPENING_ALLOW_TRADING (separate from the manual concierge's
     gates) — must be "true" or every placement is a validate-only dry run.
-  - Hard budget cap: total notional deployed can never exceed the confirmed
-    budget (<= OPENING_MAX_BUDGET_USD, default 80). Enforced in code.
-  - Whole shares only; a symbol whose even slice can't buy >=1 share is skipped.
+  - Budget cap: total notional deployed never exceeds the budget you confirm at
+    9:25. OPENING_MAX_BUDGET_USD is an OPTIONAL standing ceiling (fat-finger
+    guard); UNSET = no extra cap (defaults to infinity, NOT 80) — your confirmed
+    amount and account buying power are the real limits.
+  - Whole shares only; a symbol whose even slice can't buy >=1 share is skipped
+    (the scan digest flags these up front so a pricey lone qualifier is visible).
   - Every entry carries its protective one-bar stop as a child order.
   - validate=True (or gate off) builds the full order plan and returns it WITHOUT
     transmitting anything.

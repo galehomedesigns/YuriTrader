@@ -132,6 +132,7 @@ def rank(candidates, top_n=10, news=None, news_factor=0.0):
                    else "WATCH" if _setup_score(c) > 0 else "NO-PLAY")
         scored.append({
             "symbol": c.symbol, "score": final, "base_score": s,
+            "price": round(c.price or 0, 2),
             "news_adj": news_adj, "news_sentiment": round(sent, 2),
             "direction": verdict,
             "state": c.state, "location": c.location,

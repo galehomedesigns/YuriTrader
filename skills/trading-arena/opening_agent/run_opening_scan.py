@@ -52,6 +52,11 @@ CACHE = os.environ.get(
 WIN_START = int(os.environ.get("OPENING_WINDOW_START_ET", "7"))
 WIN_END_H = int(os.environ.get("OPENING_WINDOW_END_HOUR_ET", "9"))
 WIN_END_M = int(os.environ.get("OPENING_WINDOW_END_MIN_ET", "30"))
+# Total $ you intend to deploy across the morning's matches (even-split, whole
+# shares — see live_executor.plan_allocations). Used only to FLAG qualifiers the
+# budget can't buy a single share of, so a pricey lone qualifier isn't silently
+# un-tradeable. Does not gate anything.
+TRADE_BUDGET = float(os.environ.get("OPENING_TRADE_BUDGET_USD", "500") or 500)
 
 
 def in_premarket_window():
@@ -108,8 +113,23 @@ def format_message(ranked, et_now):
         return ("📊 <b>Opening Power — pre-market</b>\n"
                 f"<i>{et_now}</i>\n\nNo qualifying setups right now "
                 "(no directional movers in a TIGHT state).")
+    def _unaffordable(r):
+        p = r.get("price") or 0
+        return p > 0 and TRADE_BUDGET < p
+
+    # Coiled qualifiers (the ones the 9:30 first-bar rule can actually act on).
+    # If EVERY one of them costs more than the whole budget, the morning would
+    # stage nothing — call that out loudly at the top so it isn't a silent no-op.
+    coiled = [r for r in ranked if r.get("state") in ("TIGHT", "MATCH")]
     lines = [f"📊 <b>Opening Power — Top {len(ranked)}</b>  <i>{et_now} ET</i>",
              "<i>Best→worst match. signal_only — no orders.</i>", ""]
+    if coiled and all(_unaffordable(r) for r in coiled):
+        cheapest = min((r.get("price") or 0) for r in coiled)
+        lines.append(
+            f"⚠️ <b>Budget too small:</b> all {len(coiled)} coiled qualifier(s) "
+            f"cost more than your ${TRADE_BUDGET:.0f} budget "
+            f"(cheapest ${cheapest:.2f}/share). None will be tradeable — raise "
+            f"OPENING_TRADE_BUDGET_USD or expect no order.\n")
     for r in ranked:
         k = r["kpis"]
         kbits = []
@@ -121,9 +141,11 @@ def format_message(ranked, et_now):
             kbits.append(f"RVOL {k['rvol']:.1f}x")
         nadj = r.get("news_adj", 0)
         news_bit = f"  📰 {nadj:+.0f}" if nadj else ""
+        aff_bit = (f"  ⚠️ ${TRADE_BUDGET:.0f}&lt;1 share @ ${r['price']:.2f}"
+                   if _unaffordable(r) else "")
         lines.append(
             f"{_emoji(r['direction'])} <b>#{r['rank']} {r['symbol']}</b> "
-            f"— <b>{r['score']}</b>  ({r['direction']})\n"
+            f"— <b>{r['score']}</b>  ({r['direction']}){aff_bit}\n"
             f"   {r['state']}/{r['location']}  tight {r['tightness']}  "
             f"gap {r['pct_change']:+.1f}%  {'·'.join(r['power'])}\n"
             f"   {' · '.join(kbits) if kbits else 'KPIs n/a'}{news_bit}"
