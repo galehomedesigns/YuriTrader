@@ -12,6 +12,8 @@
  *
  * Usage:
  *   node tv_order.js --side buy --type stop --price 350 --qty 1 [--port 9224]
+ *   node tv_order.js --side buy --type "stop limit" --price 350 --limit 351 --qty 1
+ *        # stop limit (required for Canadian-listed names): --price=stop trigger, --limit=limit cap
  *   node tv_order.js ... --fill-only      # fill the ticket but do NOT open confirm
  *
  * Exit 0 = staged (confirmation open, awaiting human) or filled (--fill-only).
@@ -33,10 +35,14 @@ const QTY = arg("qty", null);
 const FILL_ONLY = arg("fill-only", false);
 const EXPECT_SYMBOL = arg("expect-symbol", null);
 const STOP = arg("stop", null);
+const LIMIT = arg("limit", null);
 
 if (!["buy", "sell"].includes(SIDE)) { console.error("side must be buy|sell"); process.exit(1); }
 if (QTY == null) { console.error("--qty required"); process.exit(1); }
 if (TYPE !== "market" && PRICE == null) { console.error("--price required for " + TYPE); process.exit(1); }
+// Stop-limit (required for Canadian-listed names) has TWO prices: --price is the
+// stop trigger, --limit is the limit cap. Both must be supplied.
+if (TYPE === "stop limit" && (LIMIT == null || LIMIT === true)) { console.error("--limit (limit price) required for stop limit; --price is the stop trigger"); process.exit(1); }
 
 // The DOM routine that runs inside the TradingView page.
 const PAGE_FN = `async (opts) => {
@@ -238,8 +244,24 @@ const PAGE_FN = `async (opts) => {
   sideEl.click(); log.push('side -> ' + opts.side);
   await sleep(350);
 
-  // 3) price (stop/limit trigger) - first visible text input whose label is Price
-  if (opts.price != null) {
+  // 3) price field(s). Stop-limit has TWO inputs: "Stop price" (trigger) +
+  // "Limit price" (cap); every other type has a single "Price" input.
+  let stopEl = null, limitEl = null;
+  const isStopLimit = opts.type === 'stop limit';
+  const findDecByLabel = (re) => Array.from(document.querySelectorAll('input'))
+    .filter(e => vis(e) && e.getAttribute('inputmode') === 'decimal')
+    .find(e => re.test(labelFor(e)));
+  if (isStopLimit) {
+    for (let attempt = 0; attempt < 3 && (!stopEl || !limitEl); attempt++) {
+      if (!stopEl) stopEl = findDecByLabel(/stop\\s*price/i);
+      if (!limitEl) limitEl = findDecByLabel(/limit\\s*price/i);
+      if ((!stopEl || !limitEl) && attempt < 2) await sleep(400);
+    }
+    if (!stopEl) return { ok: false, log: [...log, 'STOP-PRICE INPUT NOT FOUND'] };
+    if (!limitEl) return { ok: false, log: [...log, 'LIMIT-PRICE INPUT NOT FOUND'] };
+    setInput(stopEl, opts.price); log.push('stop price -> ' + opts.price); await sleep(220);
+    setInput(limitEl, opts.limit); log.push('limit price -> ' + opts.limit); await sleep(220);
+  } else if (opts.price != null) {
     let priceEl = null;
     for (let attempt = 0; attempt < 3 && !priceEl; attempt++) {
       priceEl = Array.from(document.querySelectorAll('input'))
@@ -258,10 +280,16 @@ const PAGE_FN = `async (opts) => {
     await sleep(250);
   }
 
-  // 4) quantity
+  // 4) quantity. For stop-limit, qty is the first decimal input that is neither
+  // the Stop-price nor the Limit-price field; otherwise it follows the price.
   const decInputs = Array.from(document.querySelectorAll('input')).filter(e => vis(e) && e.getAttribute('inputmode') === 'decimal');
-  const priceIdx = decInputs.findIndex(e => /^price/i.test(labelFor(e)));
-  const qtyInput = (opts.price == null || priceIdx < 0) ? decInputs[0] : decInputs[priceIdx + 1];
+  let qtyInput;
+  if (isStopLimit) {
+    qtyInput = decInputs.find(e => e !== stopEl && e !== limitEl);
+  } else {
+    const priceIdx = decInputs.findIndex(e => /^price/i.test(labelFor(e)));
+    qtyInput = (opts.price == null || priceIdx < 0) ? decInputs[0] : decInputs[priceIdx + 1];
+  }
   if (!qtyInput) return { ok: false, log: [...log, 'QTY INPUT NOT FOUND'] };
   setInput(qtyInput, opts.qty); log.push('qty -> ' + opts.qty);
   await sleep(400);
@@ -301,15 +329,22 @@ const PAGE_FN = `async (opts) => {
   }
 
   // 5) read back for verification
-  const priceBack = (() => {
-    const e = Array.from(document.querySelectorAll('input')).filter(x => vis(x) && x.type === 'text').find(x => /^price/i.test(labelFor(x)));
-    return e ? e.value : null;
-  })();
+  let priceBack, limitBack = null;
+  if (isStopLimit) {
+    priceBack = stopEl ? stopEl.value : null;
+    limitBack = limitEl ? limitEl.value : null;
+  } else {
+    priceBack = (() => {
+      const e = Array.from(document.querySelectorAll('input')).filter(x => vis(x) && x.type === 'text').find(x => /^price/i.test(labelFor(x)));
+      return e ? e.value : null;
+    })();
+  }
   const qtyBack = qtyInput.value;
-  log.push('readback price=' + priceBack + ' qty=' + qtyBack);
+  log.push('readback ' + (isStopLimit ? ('stop=' + priceBack + ' limit=' + limitBack) : ('price=' + priceBack)) + ' qty=' + qtyBack);
 
   if (String(qtyBack).trim() === '' || Number(qtyBack) <= 0) return { ok: false, log: [...log, 'QTY READBACK INVALID - not opening'] };
   if (opts.price != null && (priceBack == null || String(priceBack).trim() === '')) return { ok: false, log: [...log, 'PRICE READBACK INVALID - not opening'] };
+  if (isStopLimit && (limitBack == null || String(limitBack).trim() === '')) return { ok: false, log: [...log, 'LIMIT READBACK INVALID - not opening'] };
 
   if (opts.fillOnly) return { ok: true, staged: false, filled: true, chartSymbol, log, priceBack, qtyBack };
 
@@ -325,8 +360,8 @@ const PAGE_FN = `async (opts) => {
   const _typeOk =
     (opts.type === 'market')     ? (/\\bmarket\\b|\\bmkt\\b/.test(_bt) || !/\\blimit\\b|\\bstop\\b/.test(_bt)) :
     (opts.type === 'limit')      ? (/\\blimit\\b|\\blmt\\b/.test(_bt) && !/\\bstop\\b/.test(_bt)) :
-    (opts.type === 'stop limit') ? (/stop[\\s-]?limit|stplmt/.test(_bt)) :
-    (opts.type === 'stop')       ? (/\\bstop\\b|\\bstp\\b/.test(_bt) && !/stop[\\s-]?limit/.test(_bt)) : true;
+    (opts.type === 'stop limit') ? (/stop[\\s\\S]*?limit|stplmt/.test(_bt)) :
+    (opts.type === 'stop')       ? (/\\bstop\\b|\\bstp\\b/.test(_bt) && !/stop[\\s\\S]*?limit/.test(_bt)) : true;
   if (!_typeOk) return { ok: false, chartSymbol, log: [...log, 'ORDER-TYPE MISMATCH: requested "' + opts.type + '" but ticket shows "' + btnBefore + '" - NOT opening'] };
   log.push('order-type verified via submit text: "' + btnBefore + '"');
   btn.click(); log.push('clicked submit (was: "' + btnBefore + '")');
@@ -346,7 +381,7 @@ const PAGE_FN = `async (opts) => {
     return { ok: false, chartSymbol, confirmVisible, log: [...log, 'NO confirmation after submit; submit button now reads: "' + after.replace(/\\s+/g, ' ').trim() + '"'] };
   }
   log.push('confirmation dialog is open - awaiting human');
-  return { ok: true, staged: true, confirmVisible: true, chartSymbol, log, priceBack, qtyBack };
+  return { ok: true, staged: true, confirmVisible: true, chartSymbol, log, priceBack, limitBack, qtyBack };
 }`;
 
 (async () => {
@@ -366,7 +401,7 @@ const PAGE_FN = `async (opts) => {
   const call = (method, params = {}) => new Promise(res => { const i = ++id; waiters[i] = res; sock.send(JSON.stringify({ id: i, method, params })); });
   await new Promise((res, rej) => { sock.addEventListener("open", res); sock.addEventListener("error", () => rej(new Error("ws failed"))); });
 
-  const opts = { side: SIDE, type: TYPE, price: PRICE === null ? null : String(PRICE), qty: String(QTY), fillOnly: !!FILL_ONLY, expectSymbol: (EXPECT_SYMBOL && EXPECT_SYMBOL !== true) ? EXPECT_SYMBOL : null, stop: (STOP && STOP !== true) ? String(STOP) : null };
+  const opts = { side: SIDE, type: TYPE, price: PRICE === null ? null : String(PRICE), limit: (LIMIT !== null && LIMIT !== true) ? String(LIMIT) : null, qty: String(QTY), fillOnly: !!FILL_ONLY, expectSymbol: (EXPECT_SYMBOL && EXPECT_SYMBOL !== true) ? EXPECT_SYMBOL : null, stop: (STOP && STOP !== true) ? String(STOP) : null };
   const expr = `(${PAGE_FN})(${JSON.stringify(opts)})`;
   const res = await call("Runtime.evaluate", { expression: expr, returnByValue: true, awaitPromise: true });
   sock.close();
