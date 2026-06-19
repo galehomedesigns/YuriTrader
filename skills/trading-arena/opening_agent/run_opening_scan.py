@@ -47,6 +47,22 @@ CACHE = os.environ.get(
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                  "logs", "opening_scan_latest.json"),
 )
+NEWS_CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                          "logs", "news_sentiment_cache.json")
+
+
+def _load_news_cache():
+    """Sentiment pre-computed by precache_news.py (~8:00 ET). Returns {sym:{...}}
+    if the cache is from TODAY (ET), else {} — fail-safe to neutral since news is
+    a non-governing ±OPENING_NEWS_FACTOR nudge."""
+    try:
+        d = json.load(open(NEWS_CACHE))
+        today = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+        if d.get("et_date") == today:
+            return d.get("sentiment", {})
+    except Exception:
+        pass
+    return {}
 # Pre-market window (ET), inclusive start .. exclusive end. Spec: scan 9:00, final
 # pass 9:29; user wants hourly from earlier. Default 07:00-09:30 ET, weekdays.
 WIN_START = int(os.environ.get("OPENING_WINDOW_START_ET", "7"))
@@ -170,11 +186,22 @@ def run(force=False, send=True):
     news_factor = float(os.environ.get("OPENING_NEWS_FACTOR", "5") or 0)
     news = {}
     if news_factor:
-        try:
-            from opening_agent import news_sentiment
-            news = news_sentiment.batch([c.symbol for c in candidates])
-        except Exception as e:
-            print(f"[opening] news sentiment skipped: {e}")
+        news = _load_news_cache()        # pre-computed by precache_news.py (~8:00 ET)
+        if not news:
+            # No fresh cache: compute inline ONLY for a small universe. Never run an
+            # LLM pass over hundreds of movers on the time-critical 9:20 path — that
+            # is exactly what the 8:00 pre-cache exists to avoid.
+            inline_max = int(os.environ.get("OPENING_NEWS_INLINE_MAX", "60"))
+            if len(candidates) <= inline_max:
+                try:
+                    from opening_agent import news_sentiment
+                    news = news_sentiment.batch([c.symbol for c in candidates])
+                except Exception as e:
+                    print(f"[opening] news sentiment skipped: {e}")
+            else:
+                print(f"[opening] no fresh news cache + {len(candidates)} movers > "
+                      f"{inline_max} cap — news NEUTRAL (run precache_news.py ~8:00)",
+                      file=sys.stderr)
     ranked = ranker.rank(candidates, top_n=int(_top_n) if _top_n else None,
                          news=news, news_factor=news_factor)
 

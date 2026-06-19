@@ -164,10 +164,13 @@ def evaluate(mover, bars=None, cfg=None):
     )
 
 
-def scan_tv(limit_movers=50, cfg=None):
+def scan_tv(limit_movers=None, cfg=None):
     """Production funnel: TradingView public screener for pre-market movers +
     TradingView chart (CDP) for each mover's real-time 2-min bars. No external
-    gateway, no delayed data, no 2FA. The default path (OPENING_DATA_SOURCE=tv)."""
+    gateway, no delayed data, no 2FA. The default path (OPENING_DATA_SOURCE=tv).
+    How many movers get deep-evaluated = OPENING_SCAN_LIMIT (default 50)."""
+    if limit_movers is None:
+        limit_movers = int(os.environ.get("OPENING_SCAN_LIMIT", "50"))
     from opening_agent import tv_screener, tv_bars
     both = os.environ.get("OPENING_ALLOW_SHORTS", "false").lower() == "true"
     min_price = float(os.environ.get("OPENING_MIN_PRICE", "5"))
@@ -194,10 +197,13 @@ def scan_tv(limit_movers=50, cfg=None):
     return candidates
 
 
-def scan(limit_movers=50, cfg=None, source=None):
+def scan(limit_movers=None, cfg=None, source=None):
     """Full funnel: movers → deep-evaluate → list[Candidate]. Logs coverage.
     Production path is real-time TradingView (OPENING_DATA_SOURCE=tv). Pass an
-    explicit `source` (e.g. QuoteMovers) for dev/testing."""
+    explicit `source` (e.g. QuoteMovers) for dev/testing. limit_movers defaults to
+    OPENING_SCAN_LIMIT (50)."""
+    if limit_movers is None:
+        limit_movers = int(os.environ.get("OPENING_SCAN_LIMIT", "50"))
     if source is None and os.environ.get("OPENING_DATA_SOURCE", "tv").lower() == "tv":
         return scan_tv(limit_movers=limit_movers, cfg=cfg)
     source = source or get_mover_source()
