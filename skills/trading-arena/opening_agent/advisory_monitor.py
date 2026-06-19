@@ -42,6 +42,12 @@ import shared.indicators as _ind
 
 ET = ZoneInfo("America/New_York")
 CUTOFF_MIN = int(os.environ.get("OPENING_SESSION_CUTOFF_MIN", "30"))
+# EOD behaviour at the cutoff: 'flatten' = market-close everything (default, safe).
+# 'ride' = let a breakeven-PROTECTED winner keep trailing the stop past the clock
+# (capture more of a continued move); losers/scratch still flatten at the cutoff,
+# and a hard +OPENING_RIDE_MAX_MIN backstop flattens any remainder.
+EOD_MODE = os.environ.get("OPENING_EOD_MODE", "flatten").lower()
+RIDE_MAX_MIN = int(os.environ.get("OPENING_RIDE_MAX_MIN", "30"))
 POLL_SEC = int(os.environ.get("ADVISORY_POLL_SEC", "45"))
 
 RELINK_HELP = ("<i>Re-link: on the laptop TradingView trading tab, open the bottom "
@@ -177,6 +183,20 @@ def _stage_entries(subset, tag):
     # Non-blocking: the queue runner handles confirmations while we keep coaching.
     subprocess.Popen(["node", qjs, "--port", str(port), "--orders-file", of])
     print(f"[advisory] spawned queue runner: {len(orders)} orders on CDP port {port}")
+
+
+def _held_longs():
+    """Set of symbols currently held LONG on Questrade (via tv_positions.js), used
+    by ride-mode to detect when a resting stop has filled. None on read error."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    port = os.environ.get("OPENING_TV_CDP_PORT", "9225")
+    try:
+        out = subprocess.run(["node", os.path.join(here, "tv_positions.js"), "--port", str(port)],
+                             capture_output=True, text=True, timeout=30)
+        return {p["symbol"].upper() for p in json.loads(out.stdout or "[]")
+                if p.get("side") == "long" and (p.get("qty", 0) or 0) > 0}
+    except Exception:                                           # noqa: BLE001
+        return None
 
 
 def _stage_closes(close_syms):
@@ -537,18 +557,27 @@ def main():
                      f"through {arm_cutoff.strftime('%H:%M')} ET. Nothing traded today." + ins)
         return
 
-    # Cutoff: send close advice AND collect symbols the engine considers
-    # in-position (it emits a G1 "close" ticket only when the entry filled).
-    close_syms = []
+    # Cutoff. flatten mode (default): market-close everything in-position. ride
+    # mode: flatten only NON-protected positions; let a breakeven-PROTECTED winner
+    # keep riding its trailing stop past the clock (its resting stop already locks
+    # >= breakeven, so the worst case is a breakeven exit and the upside is open).
+    def _protected(eng):
+        return (eng.state in (IN_HALF, IN_FULL) and eng.filled > 0
+                and eng.stop_price is not None and eng.entry_price is not None
+                and ((eng.side > 0 and eng.stop_price >= eng.entry_price)
+                     or (eng.side < 0 and eng.stop_price <= eng.entry_price)))
+
+    riding, close_syms = [], []
     for sym, rec in book.items():
+        if EOD_MODE == "ride" and _protected(rec["eng"]):
+            riding.append(sym)
+            continue
         for t in rec["eng"].on_cutoff():
             send_message(advice(t))
             if getattr(t, "rule", None) == "G1":
                 close_syms.append(sym)
-    # Stage one-click market-sell closes for those, cross-checked against the
-    # real Questrade positions (never sell what isn't held). Same arming gate.
-    # If the broker link is down at the cutoff this is a flat-NOW situation —
-    # we can't route the close, so alert loudly to flatten by hand.
+    # Stage one-click market-sell closes for the non-riding set, cross-checked
+    # against the real Questrade positions (never sell what isn't held).
     if close_syms and auto_stage:
         if not check_broker("cutoff"):
             send_message(f"🚨 <b>Cutoff — CLOSE {', '.join(close_syms)} NOW, by hand</b> — the "
@@ -558,6 +587,49 @@ def main():
                 _stage_closes(close_syms)
             except Exception as e:                               # noqa: BLE001
                 print(f"[advisory] close staging skipped: {e}", file=sys.stderr)
+
+    # ── Ride loop (ride mode): keep trailing the stop on protected winners past
+    # the cutoff until the resting stop fills (position gone) or the hard
+    # +RIDE_MAX_MIN backstop, then flatten any remainder.
+    if riding:
+        send_message(f"🏇 <b>Riding {', '.join(riding)}</b> past the {CUTOFF_MIN}-min cutoff — "
+                     f"breakeven-protected, trailing the stop. Exits on stop fill or by "
+                     f"+{RIDE_MAX_MIN} min, whichever comes first.")
+        ride_deadline = cutoff_time + timedelta(minutes=RIDE_MAX_MIN)
+        while riding and datetime.now(ET) < ride_deadline:
+            time.sleep(POLL_SEC)
+            check_broker("ride")
+            held = _held_longs()
+            rbars = tv_bars.fetch_bars(riding, min_bars=200)
+            for sym in list(riding):
+                if held is not None and sym.upper() not in held:
+                    send_message(f"✅ <b>{sym}</b> — stop filled / position closed. Done riding.")
+                    riding.remove(sym)
+                    continue
+                newest, _ = _latest_complete(rbars.get(sym, []))
+                if newest is None or last_ts.get(sym) == newest.get("date"):
+                    continue
+                last_ts[sym] = newest.get("date")
+                for t in book[sym]["eng"].on_bar(newest, complete=True):
+                    send_message(advice(t))
+                    rule = getattr(t, "rule", None)
+                    if auto_stage and broker["ok"] is not False and rule == "G16":
+                        try:
+                            _stage_stop_move(sym, t.price)        # trail the resting stop up
+                        except Exception as e:                    # noqa: BLE001
+                            print(f"[advisory] ride stop-move skipped: {e}", file=sys.stderr)
+                    elif rule in ("G7", "G1") and sym in riding:  # engine says stopped/flat
+                        riding.remove(sym)
+        if riding:                                                # backstop reached
+            send_message(f"🏁 <b>Ride backstop (+{RIDE_MAX_MIN}m) — flattening {', '.join(riding)} now.</b>")
+            if auto_stage:
+                if check_broker("ride-backstop"):
+                    try:
+                        _stage_closes(riding)
+                    except Exception as e:                        # noqa: BLE001
+                        print(f"[advisory] ride backstop close skipped: {e}", file=sys.stderr)
+                else:
+                    send_message(f"🚨 CLOSE {', '.join(riding)} NOW by hand — link down.\n\n{RELINK_HELP}")
 
 
 if __name__ == "__main__":
