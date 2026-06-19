@@ -143,7 +143,30 @@ class OpeningEngine:
             return [OrderTicket(self.symbol, "SELL" if self.side > 0 else "BUY",
                                 "MKT", self.filled, self.stop_price,
                                 "stop hit — flatten, no re-entry", "G7")]
-        return []
+        # Breakeven ratchet: once unrealized gain >= 1R, move stop to entry price.
+        # This locks in breakeven on any trade that reaches 1x the initial risk,
+        # so extended cutoff windows only help (can't turn a winner into a loser).
+        out = []
+        if self.entry_price and self.stop_price:
+            if self.side > 0:
+                risk = self.entry_price - self.stop_price
+                if risk > 0 and bar["high"] >= self.entry_price + risk \
+                        and self.stop_price < self.entry_price:
+                    self.stop_price = self.entry_price
+                    self._log(f"breakeven stop @{self.entry_price} (1R reached)", "G16")
+                    out.append(OrderTicket(self.symbol, "SELL", "STP", self.filled,
+                                           self.entry_price,
+                                           "breakeven stop — 1R profit reached", "G16"))
+            else:
+                risk = self.stop_price - self.entry_price
+                if risk > 0 and bar["low"] <= self.entry_price - risk \
+                        and self.stop_price > self.entry_price:
+                    self.stop_price = self.entry_price
+                    self._log(f"breakeven stop @{self.entry_price} (1R reached)", "G16")
+                    out.append(OrderTicket(self.symbol, "BUY", "STP", self.filled,
+                                           self.entry_price,
+                                           "breakeven stop — 1R profit reached", "G16"))
+        return out
 
     def _manage_adds_and_pushes(self, bar):
         out = []

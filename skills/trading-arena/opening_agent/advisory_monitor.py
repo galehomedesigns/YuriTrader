@@ -41,7 +41,7 @@ from opening_agent.run_opening_scan import send_message
 import shared.indicators as _ind
 
 ET = ZoneInfo("America/New_York")
-CUTOFF_MIN = int(os.environ.get("OPENING_SESSION_CUTOFF_MIN", "20"))
+CUTOFF_MIN = int(os.environ.get("OPENING_SESSION_CUTOFF_MIN", "30"))
 POLL_SEC = int(os.environ.get("ADVISORY_POLL_SEC", "45"))
 
 RELINK_HELP = ("<i>Re-link: on the laptop TradingView trading tab, open the bottom "
@@ -137,6 +137,22 @@ def _stage_entries(subset, tag):
         qty = int(per // entry)                       # whole shares affordable per slot
         if qty < 1:
             reason = f"${per:.2f}/slot < 1 share @ ${entry:.2f}"
+            skipped.append((s, reason))
+            print(f"[advisory] {s}: {reason} - skipped", file=sys.stderr)
+            continue
+        # Risk cap: skip if bar-1 risk exceeds the max allowed %
+        bar_spread = entry - stop
+        max_risk = float(os.environ.get("OPENING_MAX_RISK_PCT", "3.0"))
+        risk_pct = bar_spread / entry * 100 if entry > 0 else 0
+        if risk_pct > max_risk:
+            reason = f"risk {risk_pct:.1f}% > {max_risk}% cap (entry ${entry:.2f}, stop ${stop:.2f})"
+            skipped.append((s, reason))
+            print(f"[advisory] {s}: {reason} - skipped", file=sys.stderr)
+            continue
+        # Min bar range: skip if entry-stop spread is too narrow (noise breakout)
+        min_range = float(os.environ.get("OPENING_MIN_BAR_RANGE", "0.05"))
+        if bar_spread < min_range:
+            reason = f"bar-1 range ${bar_spread:.2f} < ${min_range:.2f} min"
             skipped.append((s, reason))
             print(f"[advisory] {s}: {reason} - skipped", file=sys.stderr)
             continue

@@ -56,7 +56,7 @@ _LOGS = os.path.join(os.path.dirname(_HERE), "logs")
 TRACK = os.path.join(_LOGS, "paper_track.jsonl")
 SUMMARY = os.path.join(_LOGS, "paper_track_summary.json")
 OPEN_T = time(9, 30)
-CUTOFF_MIN = int(os.environ.get("OPENING_SESSION_CUTOFF_MIN", "20"))
+CUTOFF_MIN = int(os.environ.get("OPENING_SESSION_CUTOFF_MIN", "30"))
 
 
 def candles_ts(symbol, count=1300):

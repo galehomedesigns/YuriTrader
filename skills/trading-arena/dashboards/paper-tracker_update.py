@@ -57,7 +57,7 @@ def build_data() -> dict:
         "config": {
             "slippage_pct": float(os.environ.get("PAPER_SLIPPAGE_PCT", "0.0010")),
             "position_usd": float(os.environ.get("PAPER_POSITION_USD", "500")),
-            "cutoff_min": int(os.environ.get("OPENING_SESSION_CUTOFF_MIN", "20")),
+            "cutoff_min": int(os.environ.get("OPENING_SESSION_CUTOFF_MIN", "30")),
         },
     }
 
