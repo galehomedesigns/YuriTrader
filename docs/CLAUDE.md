@@ -4,6 +4,8 @@ You are on **`gx10-087b`** (ARM64, NVIDIA GPU, 125 GB unified memory, Tailscale 
 
 If `hostname` doesn't return `gx10-087b`, stop and reorient. These docs assume you are on GX10.
 
+> **Session briefing hook:** a `SessionStart` hook in `.claude/settings.local.json` (machine-local, gitignored) runs [`skills/trading-arena/opening_agent/session_briefing.sh`](../skills/trading-arena/opening_agent/session_briefing.sh) to print the Opening-Power focus + live tunnel/broker/market status at the start of each session.
+
 ## What this stack is (in one paragraph)
 
 A personal agent stack that trades (paper arena of 10 strategy bots + live Kraken concierge + Questrade concierge), monitors health, crawls public-procurement tenders, processes receipts, and reports to Telegram. Most scheduled work runs from the user crontab as plain Python, reading/writing Supabase for shared state. Ollama runs locally on this host and serves every LLM call.
