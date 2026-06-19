@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Opening Power — 5-Day Trial</title>
+<style>
+:root {
+  --bg: #0d1117; --surface: #161b22; --surface-2: #1c222b; --border: #21262d;
+  --text: #e6edf3; --text-dim: #8b95a7; --text-muted: #556677;
+  --accent: #7c8aff; --accent-2: #c77dff; --ok: #00c853; --warn: #ffc107;
+  --fail: #ff1744; --pnl-pos: #69f0ae; --pnl-neg: #ef5350; --radius: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg); color: var(--text); padding: 20px; line-height: 1.5; }
+.container { max-width: 1200px; margin: 0 auto; }
+.dash-header { margin-bottom: 18px; }
+.dash-header h1 { font-size: 1.5rem; }
+.subtitle { color: var(--text-dim); font-size: 0.9rem; }
+.updated { color: var(--text-muted); font-size: 0.8rem; margin-top: 4px; }
+.banner { padding: 10px 14px; border-radius: var(--radius); margin: 14px 0; font-size: 0.9rem; }
+.banner-ok { background: rgba(0,200,83,0.12); border: 1px solid var(--ok); }
+.banner-warn { background: rgba(255,193,7,0.12); border: 1px solid var(--warn); }
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 12px; margin: 16px 0; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; text-align: center; }
+.stat .value { font-size: 1.4rem; font-weight: 600; }
+.stat .label { color: var(--text-dim); font-size: 0.72rem; text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+.pos { color: var(--pnl-pos); } .neg { color: var(--pnl-neg); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin: 16px 0; }
+.card h2 { font-size: 1rem; margin-bottom: 10px; color: var(--text); }
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 0.72rem; }
+.sym { font-weight: 600; }
+.badge { padding: 2px 8px; border-radius: 6px; font-size: 0.72rem; display: inline-block; }
+.badge-stop { background: rgba(255,23,68,0.15); color: var(--pnl-neg); }
+.badge-cutoff { background: rgba(0,200,83,0.15); color: var(--pnl-pos); }
+.badge-muted { background: var(--surface-2); color: var(--text-dim); }
+.note { color: var(--text-muted); font-size: 0.78rem; margin-top: 8px; }
+/* Equity curve */
+.eq-chart { position: relative; height: 160px; margin: 12px 0; display: flex; align-items: flex-end; gap: 2px; }
+.eq-bar { flex: 1; min-width: 20px; border-radius: 4px 4px 0 0; position: relative; transition: all 0.3s; cursor: default; }
+.eq-bar:hover { opacity: 0.85; }
+.eq-bar .tip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+  background: #0d1117; border: 1px solid var(--border); padding: 4px 8px; border-radius: 6px;
+  font-size: 0.72rem; white-space: nowrap; z-index: 10; }
+.eq-bar:hover .tip { display: block; }
+.eq-line { width: 100%; position: absolute; left: 0; border-top: 1px dashed var(--text-muted); }
+.eq-label { position: absolute; right: 0; color: var(--text-muted); font-size: 0.7rem; transform: translateY(-50%); }
+/* Daily breakdown */
+.day-row { display: grid; grid-template-columns: 120px 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.day-row:last-child { border-bottom: none; }
+.day-date { font-weight: 600; font-size: 0.9rem; }
+.day-meta { color: var(--text-dim); font-size: 0.78rem; }
+.trade-chip { display: inline-block; padding: 3px 10px; border-radius: 8px; margin: 2px 4px 2px 0; font-size: 0.8rem; }
+.chip-win { background: rgba(105,240,174,0.12); border: 1px solid rgba(105,240,174,0.3); }
+.chip-loss { background: rgba(239,83,80,0.12); border: 1px solid rgba(239,83,80,0.3); }
+.chip-skip { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim); }
+.config-box { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; font-size: 0.8rem; color: var(--text-dim); }
+.config-box span { background: var(--surface-2); padding: 4px 10px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="dash-header">
+    <h1>Opening Power — 5-Day Trial Results</h1>
+    <div class="subtitle">Real Questrade candle data. Bar-1 breakout on top TIGHT signals.</div>
+    <div class="updated">Generated: <span id="updated-at">&mdash;</span></div>
+  </header>
+  <div id="banner"></div>
+  <div id="stats-row" class="stat-row"></div>
+  <div class="card">
+    <h2>Equity Curve ($1,000 start)</h2>
+    <div id="equity-chart" class="eq-chart"></div>
+  </div>
+  <div class="card">
+    <h2>Daily Breakdown</h2>
+    <div id="daily"></div>
+  </div>
+  <div class="card">
+    <h2>Trade Log</h2>
+    <div id="trades"></div>
+  </div>
+  <div class="card">
+    <h2>All Signals (incl. not triggered)</h2>
+    <div id="signals"></div>
+  </div>
+  <div class="card" style="padding:12px;">
+    <h2 style="margin-bottom:6px;">Model Parameters</h2>
+    <div id="config" class="config-box"></div>
+  </div>
+</div>
+
+<script id="dashboard-data" type="application/json">{"title": "Opening Power \u2014 Market-Replay Backtest", "subtitle": "Top-150 liquid US stocks \u00b7 9 trading days \u00b7 gap 1.0-6.0% + ATR-TIGHT MATCH, top-5/day \u00b7 breakeven engine \u00b7 real Questrade candles", "updated": "2026-06-18 22:02 ET", "config": {"start_capital": 1000.0, "position_usd": 200.0, "slippage_pct": 0.001, "cutoff_min": 30, "max_trades_per_day": 5, "universe_n": 150, "trading_days": 9}, "stats": {"total_trades": 2, "total_signals": 6, "wins": 2, "losses": 0, "win_rate": 100.0, "net_pnl": 2.79, "net_pct": 0.28, "final_equity": 1002.79, "avg_win": 1.4, "avg_loss": 0, "avg_win_pct": 1.39, "avg_loss_pct": 0, "profit_factor": "inf", "gross_win": 2.79, "gross_loss": 0}, "equity_curve": [{"date": "start", "equity": 1000.0, "label": "Starting capital"}, {"date": "2026-06-09", "symbol": "PKE", "pnl": 0.13, "equity": 1000.13}, {"date": "2026-06-12", "symbol": "WBI", "pnl": 2.66, "equity": 1002.79}], "daily": [{"date": "2026-06-08", "candidates": 0, "traded": 0, "not_triggered": 0, "day_pnl": 0, "trades": []}, {"date": "2026-06-09", "candidates": 1, "traded": 1, "not_triggered": 0, "day_pnl": 0.13, "trades": [{"symbol": "PKE", "date": "2026-06-09", "status": "traded", "triggered": true, "reason": "cutoff", "entry": 34.074, "exit": 34.1159, "stop_level": 32.88, "qty": 3, "pct": 0.123, "pnl": 0.13, "half_entry": 2, "adds": 0, "pushes": 0, "final_stop": 33.4, "bar1_high": 33.39, "bar1_low": 32.89, "bar1_open": 33.38, "bar1_close": 33.25, "high_after_entry": 34.36, "max_unrealized_pct": 0.84, "journal": ["SELL 2sh STP @32.88 (protective one-bar stop)", "SELL 2sh STP @33.40 (breakeven stop \u2014 1R profit reached)", "BUY 3sh MKT @34.04 (add: counter-bar removed by takeout)", "SELL 5sh MKT @0.00 (session cutoff flatten)"], "trigger_bar": 4, "scan_tightness": 0.805, "scan_state": "TIGHT", "scan_gap": "+4.6%", "scan_score": 80.5}]}, {"date": "2026-06-10", "candidates": 1, "traded": 0, "not_triggered": 1, "day_pnl": 0, "trades": [{"symbol": "IVT", "date": "2026-06-10", "status": "not_triggered", "entry_level": 35.25, "stop_level": 34.74, "bar1_high": 35.24, "bar1_low": 34.75, "bar1_open": 35.18, "bar1_close": 35.04, "day_high": 35.24, "scan_tightness": 0.883, "scan_state": "TIGHT", "scan_gap": "+1.4%", "scan_score": 88.3}]}, {"date": "2026-06-11", "candidates": 2, "traded": 0, "not_triggered": 2, "day_pnl": 0, "trades": [{"symbol": "FLEX", "date": "2026-06-11", "status": "not_triggered", "entry_level": 142.76, "stop_level": 141.34, "bar1_high": 142.75, "bar1_low": 141.35, "bar1_open": 141.5, "bar1_close": 142.615, "day_high": 146.4, "scan_tightness": 0.992, "scan_state": "TIGHT", "scan_gap": "+4.1%", "scan_score": 99.2}, {"symbol": "AIAI", "date": "2026-06-11", "status": "not_triggered", "entry_level": 16.01, "stop_level": 15.58, "bar1_high": 16.0, "bar1_low": 15.59, "bar1_open": 15.59, "bar1_close": 16.0, "day_high": 16.7, "scan_tightness": 0.775, "scan_state": "TIGHT", "scan_gap": "+2.6%", "scan_score": 77.5}]}, {"date": "2026-06-12", "candidates": 1, "traded": 1, "not_triggered": 0, "day_pnl": 2.66, "trades": [{"symbol": "WBI", "date": "2026-06-12", "status": "traded", "triggered": true, "reason": "cutoff", "entry": 33.3333, "exit": 34.2207, "stop_level": 31.44, "qty": 3, "pct": 2.662, "pnl": 2.66, "half_entry": 3, "adds": 0, "pushes": 3, "final_stop": 33.68, "bar1_high": 32.675, "bar1_low": 31.45, "bar1_open": 31.71, "bar1_close": 32.665, "high_after_entry": 34.79, "max_unrealized_pct": 4.37, "journal": ["SELL 3sh STP @31.44 (protective one-bar stop)", "SELL 3sh STP @32.48 (ratchet stop after push 1)", "BUY 3sh MKT @33.30 (add: counter-bar removed by takeout)", "SELL 6sh STP @32.68 (breakeven stop \u2014 1R profit reached)", "SELL 6sh STP @33.31 (ratchet stop after push 2)", "SELL 6sh LMT @34.22 (push-2: rest profit orders at push-3 area)", "SELL 6sh STP @33.68 (ratchet stop after push 3)", "SELL 6sh MKT @0.00 (session cutoff flatten)"], "trigger_bar": 3, "scan_tightness": 0.523, "scan_state": "TIGHT", "scan_gap": "+4.0%", "scan_score": 52.3}]}, {"date": "2026-06-15", "candidates": 0, "traded": 0, "not_triggered": 0, "day_pnl": 0, "trades": []}, {"date": "2026-06-16", "candidates": 0, "traded": 0, "not_triggered": 0, "day_pnl": 0, "trades": []}, {"date": "2026-06-17", "candidates": 1, "traded": 0, "not_triggered": 1, "day_pnl": 0, "trades": [{"symbol": "AIAI", "date": "2026-06-17", "status": "not_triggered", "entry_level": 15.3, "stop_level": 15.135, "bar1_high": 15.29, "bar1_low": 15.145, "bar1_open": 15.145, "bar1_close": 15.29, "day_high": 15.44, "scan_tightness": 0.436, "scan_state": "TIGHT", "scan_gap": "+1.9%", "scan_score": 43.6}]}, {"date": "2026-06-18", "candidates": 0, "traded": 0, "not_triggered": 0, "day_pnl": 0, "trades": []}], "trades": [{"symbol": "PKE", "date": "2026-06-09", "status": "traded", "triggered": true, "reason": "cutoff", "entry": 34.074, "exit": 34.1159, "stop_level": 32.88, "qty": 3, "pct": 0.123, "pnl": 0.13, "half_entry": 2, "adds": 0, "pushes": 0, "final_stop": 33.4, "bar1_high": 33.39, "bar1_low": 32.89, "bar1_open": 33.38, "bar1_close": 33.25, "high_after_entry": 34.36, "max_unrealized_pct": 0.84, "journal": ["SELL 2sh STP @32.88 (protective one-bar stop)", "SELL 2sh STP @33.40 (breakeven stop \u2014 1R profit reached)", "BUY 3sh MKT @34.04 (add: counter-bar removed by takeout)", "SELL 5sh MKT @0.00 (session cutoff flatten)"], "trigger_bar": 4, "scan_tightness": 0.805, "scan_state": "TIGHT", "scan_gap": "+4.6%", "scan_score": 80.5}, {"symbol": "WBI", "date": "2026-06-12", "status": "traded", "triggered": true, "reason": "cutoff", "entry": 33.3333, "exit": 34.2207, "stop_level": 31.44, "qty": 3, "pct": 2.662, "pnl": 2.66, "half_entry": 3, "adds": 0, "pushes": 3, "final_stop": 33.68, "bar1_high": 32.675, "bar1_low": 31.45, "bar1_open": 31.71, "bar1_close": 32.665, "high_after_entry": 34.79, "max_unrealized_pct": 4.37, "journal": ["SELL 3sh STP @31.44 (protective one-bar stop)", "SELL 3sh STP @32.48 (ratchet stop after push 1)", "BUY 3sh MKT @33.30 (add: counter-bar removed by takeout)", "SELL 6sh STP @32.68 (breakeven stop \u2014 1R profit reached)", "SELL 6sh STP @33.31 (ratchet stop after push 2)", "SELL 6sh LMT @34.22 (push-2: rest profit orders at push-3 area)", "SELL 6sh STP @33.68 (ratchet stop after push 3)", "SELL 6sh MKT @0.00 (session cutoff flatten)"], "trigger_bar": 3, "scan_tightness": 0.523, "scan_state": "TIGHT", "scan_gap": "+4.0%", "scan_score": 52.3}], "all_signals": [{"symbol": "PKE", "date": "2026-06-09", "status": "traded", "triggered": true, "reason": "cutoff", "entry": 34.074, "exit": 34.1159, "stop_level": 32.88, "qty": 3, "pct": 0.123, "pnl": 0.13, "half_entry": 2, "adds": 0, "pushes": 0, "final_stop": 33.4, "bar1_high": 33.39, "bar1_low": 32.89, "bar1_open": 33.38, "bar1_close": 33.25, "high_after_entry": 34.36, "max_unrealized_pct": 0.84, "journal": ["SELL 2sh STP @32.88 (protective one-bar stop)", "SELL 2sh STP @33.40 (breakeven stop \u2014 1R profit reached)", "BUY 3sh MKT @34.04 (add: counter-bar removed by takeout)", "SELL 5sh MKT @0.00 (session cutoff flatten)"], "trigger_bar": 4, "scan_tightness": 0.805, "scan_state": "TIGHT", "scan_gap": "+4.6%", "scan_score": 80.5}, {"symbol": "IVT", "date": "2026-06-10", "status": "not_triggered", "entry_level": 35.25, "stop_level": 34.74, "bar1_high": 35.24, "bar1_low": 34.75, "bar1_open": 35.18, "bar1_close": 35.04, "day_high": 35.24, "scan_tightness": 0.883, "scan_state": "TIGHT", "scan_gap": "+1.4%", "scan_score": 88.3}, {"symbol": "FLEX", "date": "2026-06-11", "status": "not_triggered", "entry_level": 142.76, "stop_level": 141.34, "bar1_high": 142.75, "bar1_low": 141.35, "bar1_open": 141.5, "bar1_close": 142.615, "day_high": 146.4, "scan_tightness": 0.992, "scan_state": "TIGHT", "scan_gap": "+4.1%", "scan_score": 99.2}, {"symbol": "AIAI", "date": "2026-06-11", "status": "not_triggered", "entry_level": 16.01, "stop_level": 15.58, "bar1_high": 16.0, "bar1_low": 15.59, "bar1_open": 15.59, "bar1_close": 16.0, "day_high": 16.7, "scan_tightness": 0.775, "scan_state": "TIGHT", "scan_gap": "+2.6%", "scan_score": 77.5}, {"symbol": "WBI", "date": "2026-06-12", "status": "traded", "triggered": true, "reason": "cutoff", "entry": 33.3333, "exit": 34.2207, "stop_level": 31.44, "qty": 3, "pct": 2.662, "pnl": 2.66, "half_entry": 3, "adds": 0, "pushes": 3, "final_stop": 33.68, "bar1_high": 32.675, "bar1_low": 31.45, "bar1_open": 31.71, "bar1_close": 32.665, "high_after_entry": 34.79, "max_unrealized_pct": 4.37, "journal": ["SELL 3sh STP @31.44 (protective one-bar stop)", "SELL 3sh STP @32.48 (ratchet stop after push 1)", "BUY 3sh MKT @33.30 (add: counter-bar removed by takeout)", "SELL 6sh STP @32.68 (breakeven stop \u2014 1R profit reached)", "SELL 6sh STP @33.31 (ratchet stop after push 2)", "SELL 6sh LMT @34.22 (push-2: rest profit orders at push-3 area)", "SELL 6sh STP @33.68 (ratchet stop after push 3)", "SELL 6sh MKT @0.00 (session cutoff flatten)"], "trigger_bar": 3, "scan_tightness": 0.523, "scan_state": "TIGHT", "scan_gap": "+4.0%", "scan_score": 52.3}, {"symbol": "AIAI", "date": "2026-06-17", "status": "not_triggered", "entry_level": 15.3, "stop_level": 15.135, "bar1_high": 15.29, "bar1_low": 15.145, "bar1_open": 15.145, "bar1_close": 15.29, "day_high": 15.44, "scan_tightness": 0.436, "scan_state": "TIGHT", "scan_gap": "+1.9%", "scan_score": 43.6}]}</script>
+<script>
+(function () {
+  const D = JSON.parse(document.getElementById('dashboard-data').textContent);
+  const $ = id => document.getElementById(id);
+  const money = v => (v >= 0 ? '+$' : '-$') + Math.abs(v).toFixed(2);
+  const pct = v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+  const cls = v => v >= 0 ? 'pos' : 'neg';
+  const dayName = d => { try { return new Date(d+'T12:00').toLocaleDateString('en-US',{weekday:'short'}); } catch { return ''; } };
+
+  $('updated-at').textContent = D.updated || '';
+
+  // Banner
+  const s = D.stats;
+  const bCls = s.net_pnl >= 0 ? 'banner-ok' : 'banner-warn';
+  $('banner').innerHTML = `<div class="banner ${bCls}">
+    ${s.total_trades} trades over 5 trading days (${D.config.start_capital} USD start, $${D.config.position_usd}/trade).
+    Net: <b class="${cls(s.net_pnl)}">${money(s.net_pnl)}</b> (${pct(s.net_pct)}).
+    Profit factor: <b>${s.profit_factor}</b>. Winners avg <b>${pct(s.avg_win_pct)}</b>, losers avg <b>${pct(s.avg_loss_pct)}</b>.
+    <span style="color:var(--text-dim)">Edge = wins are larger than losses.</span>
+  </div>`;
+
+  // Stats
+  const stats = [
+    { value: '$' + s.final_equity.toLocaleString(), label: 'Final Equity', c: cls(s.net_pnl) },
+    { value: money(s.net_pnl), label: 'Net P&L', c: cls(s.net_pnl) },
+    { value: s.win_rate + '%', label: 'Win Rate' },
+    { value: s.profit_factor, label: 'Profit Factor', c: s.profit_factor > 1 ? 'pos' : 'neg' },
+    { value: s.wins + '/' + s.total_trades, label: 'Wins / Total' },
+    { value: money(s.avg_win), label: 'Avg Win', c: 'pos' },
+    { value: money(s.avg_loss), label: 'Avg Loss', c: 'neg' },
+    { value: s.total_signals, label: 'Signals Found' },
+  ];
+  $('stats-row').innerHTML = stats.map(s =>
+    `<div class="stat"><div class="value ${s.c||''}">${s.value}</div><div class="label">${s.label}</div></div>`).join('');
+
+  // Equity chart
+  const eq = D.equity_curve;
+  const eqVals = eq.map(e => e.equity);
+  const eqMin = Math.min(...eqVals) - 2;
+  const eqMax = Math.max(...eqVals) + 2;
+  const eqRange = eqMax - eqMin || 1;
+  const startLine = ((D.config.start_capital - eqMin) / eqRange * 100);
+  let chartHtml = `<div class="eq-line" style="bottom:${startLine}%"></div>` +
+    `<div class="eq-label" style="bottom:${startLine}%">$${D.config.start_capital}</div>`;
+  eq.forEach((e, i) => {
+    const h = Math.max(4, (e.equity - eqMin) / eqRange * 100);
+    const color = e.equity >= D.config.start_capital ? 'var(--pnl-pos)' : 'var(--pnl-neg)';
+    const label = e.symbol ? `${e.symbol} ${e.date}` : e.label || e.date;
+    const pnlTxt = e.pnl != null ? ` (${money(e.pnl)})` : '';
+    chartHtml += `<div class="eq-bar" style="height:${h}%;background:${color}">` +
+      `<div class="tip">${label}: $${e.equity.toFixed(2)}${pnlTxt}</div></div>`;
+  });
+  $('equity-chart').innerHTML = chartHtml;
+
+  // Daily breakdown
+  let dailyHtml = '';
+  (D.daily || []).forEach(day => {
+    const traded = (day.trades || []).filter(t => t.status === 'traded');
+    const notTriggered = (day.trades || []).filter(t => t.status === 'not_triggered');
+    const skipped = (day.trades || []).filter(t => !['traded','not_triggered'].includes(t.status));
+    let chips = '';
+    traded.forEach(t => {
+      const w = t.pnl >= 0;
+      chips += `<span class="trade-chip ${w?'chip-win':'chip-loss'}">${t.symbol} ${money(t.pnl)} (${t.reason})</span>`;
+    });
+    notTriggered.forEach(t => {
+      chips += `<span class="trade-chip chip-skip">${t.symbol} no trigger</span>`;
+    });
+    skipped.forEach(t => {
+      chips += `<span class="trade-chip chip-skip">${t.symbol} ${t.status}</span>`;
+    });
+    if (!day.candidates) chips = '<span style="color:var(--text-muted)">No TIGHT signals in scan</span>';
+    dailyHtml += `<div class="day-row">
+      <div><div class="day-date">${dayName(day.date)} ${day.date.slice(5)}</div>
+        <div class="day-meta">${day.candidates} scanned, ${day.traded} traded</div>
+        <div class="day-meta ${cls(day.day_pnl)}">${money(day.day_pnl)}</div>
+      </div>
+      <div>${chips}</div>
+    </div>`;
+  });
+  $('daily').innerHTML = dailyHtml;
+
+  // Trade log
+  const trades = D.trades || [];
+  $('trades').innerHTML = trades.length ? (
+    '<table><thead><tr><th>Date</th><th>Symbol</th><th>Exit</th><th>Entry</th><th>Exit Px</th><th>Stop</th><th>Qty</th><th>%</th><th>P&L</th><th>Max Unrl</th></tr></thead><tbody>' +
+    trades.map(t => {
+      const rc = cls(t.pnl);
+      return `<tr><td>${t.date}</td><td class="sym">${t.symbol}</td>` +
+        `<td><span class="badge badge-${t.reason}">${t.reason}</span></td>` +
+        `<td>$${t.entry.toFixed(2)}</td><td>$${t.exit.toFixed(2)}</td>` +
+        `<td>$${t.stop_level.toFixed(2)}</td><td>${t.qty}</td>` +
+        `<td class="${rc}">${pct(t.pct)}</td><td class="${rc}">${money(t.pnl)}</td>` +
+        `<td class="${cls(t.max_unrealized_pct||0)}">${t.max_unrealized_pct!=null?pct(t.max_unrealized_pct):'-'}</td></tr>`;
+    }).join('') + '</tbody></table>'
+  ) : '<div style="color:var(--text-muted)">No trades</div>';
+
+  // All signals
+  const sigs = D.all_signals || [];
+  $('signals').innerHTML = sigs.length ? (
+    '<table><thead><tr><th>Date</th><th>Symbol</th><th>Score</th><th>Tight</th><th>State</th><th>Gap</th><th>Status</th><th>Result</th></tr></thead><tbody>' +
+    sigs.map(t => {
+      let statusBadge, result;
+      if (t.status === 'traded') {
+        statusBadge = `<span class="badge badge-${t.reason}">${t.reason}</span>`;
+        result = `<span class="${cls(t.pnl)}">${money(t.pnl)}</span>`;
+      } else if (t.status === 'not_triggered') {
+        statusBadge = '<span class="badge badge-muted">no trigger</span>';
+        result = `high ${t.day_high || '-'}`;
+      } else {
+        statusBadge = `<span class="badge badge-muted">${t.status}</span>`;
+        result = t.price ? `$${t.price}` : '-';
+      }
+      return `<tr><td>${t.date}</td><td class="sym">${t.symbol}</td>` +
+        `<td>${t.scan_score||'-'}</td><td>${t.scan_tightness||'-'}</td>` +
+        `<td>${t.scan_state||'-'}</td><td>${t.scan_gap||'-'}</td>` +
+        `<td>${statusBadge}</td><td>${result}</td></tr>`;
+    }).join('') + '</tbody></table>'
+  ) : '';
+
+  // Config
+  const cfg = D.config;
+  $('config').innerHTML = [
+    `Start: $${cfg.start_capital}`, `Per trade: $${cfg.position_usd}`,
+    `Max trades/day: ${cfg.max_trades_per_day}`, `Slippage: ${(cfg.slippage_pct*100).toFixed(2)}%`,
+    `Cutoff: ${cfg.cutoff_min} min`, `Commission: $0 (Questrade)`,
+    `Entry: bar-1 high (buy-stop)`, `Stop: bar-1 low`,
+    `Data: Questrade 2-min candles`, `Long only, whole shares`,
+  ].map(s => `<span>${s}</span>`).join('');
+})();
+</script>
+</body>
+</html>
