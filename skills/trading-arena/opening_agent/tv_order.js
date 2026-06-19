@@ -43,6 +43,32 @@ const PAGE_FN = `async (opts) => {
   const log = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const vis = el => !!(el && el.offsetParent !== null && el.getClientRects().length > 0);
+  // Char-drop-tolerant matching: the Windows Chrome intermittently drops chars
+  // from innerText via CDP (e.g. "Stop loss"->"Stop lo", "Session"->"Se ion").
+  // These check if text's chars appear as a subsequence of target (dropped chars
+  // = chars present in target but missing from rendered text).
+  const _isSubseq = (short, long) => {
+    let li = 0;
+    for (let si = 0; si < short.length; si++) {
+      while (li < long.length && long[li] !== short[si]) li++;
+      if (li >= long.length) return false;
+      li++;
+    }
+    return true;
+  };
+  const fuzzyStartsWith = (text, target) => {
+    const t = (text || '').trim().toLowerCase();
+    const g = target.toLowerCase();
+    if (t.startsWith(g)) return true;
+    const prefix = t.slice(0, Math.ceil(g.length * 1.5));
+    return prefix.length >= g.length * 0.5 && _isSubseq(prefix, g);
+  };
+  const fuzzyEquals = (text, target) => {
+    const t = (text || '').trim().toLowerCase();
+    const g = target.toLowerCase();
+    if (t === g) return true;
+    return t.length >= g.length * 0.5 && t.length <= g.length * 1.5 && _isSubseq(t, g);
+  };
   // HARD GUARD: never stage on a DATA tab. An orphaned data tab (our nonce in
   // window, tracking file lost) can be mis-picked as the trading tab; an order
   // staged there never reaches the broker. The real trading tab never carries
@@ -79,7 +105,7 @@ const PAGE_FN = `async (opts) => {
   }
   // Find a bracket section (e.g. "Stop loss") = the row holding its switch + price.
   function findSection(word) {
-    let cands = Array.from(document.querySelectorAll('*')).filter(e => vis(e) && (e.innerText || '').trim().toLowerCase().startsWith(word.toLowerCase()) && (e.innerText || '').length < 60);
+    let cands = Array.from(document.querySelectorAll('*')).filter(e => vis(e) && fuzzyStartsWith(e.innerText, word) && (e.innerText || '').length < 60);
     cands.sort((a, b) => (a.innerText || '').length - (b.innerText || '').length);
     let lab = cands[0]; if (!lab) return null;
     let row = lab, h = 0;
@@ -180,7 +206,7 @@ const PAGE_FN = `async (opts) => {
     const up = () => !!(document.querySelector('[data-name=place-and-modify-button]') || document.querySelector('[data-name^=side-control]'));
     if (up()) return true;
     for (let attempt = 0; attempt < 3 && !up(); attempt++) {
-      const trade = Array.from(document.querySelectorAll('button,[role=button]')).find(b => vis(b) && /^trade$/i.test((b.innerText || '').trim()));
+      const trade = Array.from(document.querySelectorAll('button,[role=button]')).find(b => vis(b) && fuzzyEquals(b.innerText, 'trade'));
       if (trade) trade.click();
       for (let k = 0; k < 12 && !up(); k++) await sleep(300);   // ~3.6s
     }
@@ -255,7 +281,7 @@ const PAGE_FN = `async (opts) => {
   if (opts.stop != null) {
     let sl = findSection('Stop loss');
     if (!sl) {
-      const findExits = () => Array.from(document.querySelectorAll('*')).filter(e => vis(e) && (e.innerText || '').trim().toLowerCase() === 'exits' && (e.innerText || '').length < 12)[0];
+      const findExits = () => Array.from(document.querySelectorAll('*')).filter(e => vis(e) && fuzzyEquals(e.innerText, 'exits') && (e.innerText || '').length < 12)[0];
       for (let attempt = 0; attempt < 2 && !sl; attempt++) {
         const hdr = findExits();
         if (!hdr) break;

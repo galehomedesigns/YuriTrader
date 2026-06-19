@@ -38,9 +38,15 @@ const STAGE_FN = `async (o) => {
   }
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const vis = el => !!(el && el.offsetParent !== null && el.getClientRects().length > 0);
+  // Char-drop-tolerant matching: Windows Chrome intermittently drops chars from
+  // innerText via CDP (e.g. "Stop loss"->"Stop lo"). Checks if text's chars are
+  // a subsequence of target (dropped chars = skipped in target).
+  const _isSubseq = (short, long) => { let li=0; for(let si=0;si<short.length;si++){while(li<long.length&&long[li]!==short[si])li++;if(li>=long.length)return false;li++;} return true; };
+  const fuzzyStartsWith = (text, target) => { const t=(text||'').trim().toLowerCase(),g=target.toLowerCase(); if(t.startsWith(g))return true; const prefix=t.slice(0,Math.ceil(g.length*1.5)); return prefix.length>=g.length*0.5&&_isSubseq(prefix,g); };
+  const fuzzyEquals = (text, target) => { const t=(text||'').trim().toLowerCase(),g=target.toLowerCase(); if(t===g)return true; return t.length>=g.length*0.5&&t.length<=g.length*1.5&&_isSubseq(t,g); };
   function setInput(el, val){ const proto = el.tagName==='TEXTAREA'?HTMLTextAreaElement:HTMLInputElement; const s=Object.getOwnPropertyDescriptor(proto.prototype,'value').set; el.focus(); s.call(el,String(val)); el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); if(el.blur)el.blur(); }
   function labelFor(inp){ let lab=inp.getAttribute('aria-label')||inp.placeholder||''; let n=inp,h=0; while(n&&h<4&&!lab){n=n.parentElement;h++;if(!n)break;const t=Array.from(n.childNodes).filter(c=>c.nodeType===3).map(c=>c.textContent.trim()).filter(Boolean).join(' ');const le=n.querySelector('label,[class*=label],[class*=Label]');lab=((le?(le.innerText||''):'')+' '+t).replace(/\\s+/g,' ').trim();} return lab; }
-  function findSection(word){ let c=Array.from(document.querySelectorAll('*')).filter(e=>vis(e)&&(e.innerText||'').trim().toLowerCase().startsWith(word.toLowerCase())&&(e.innerText||'').length<60); c.sort((a,b)=>(a.innerText||'').length-(b.innerText||'').length); let lab=c[0]; if(!lab)return null; let row=lab,h=0; while(row&&h<6){const t=row.querySelector('[class*=switchContainer],input[type=checkbox],[role=switch]');const p=Array.from(row.querySelectorAll('input')).find(i=>i.getAttribute('inputmode')==='decimal'); if(t&&p)return{toggle:t,price:p}; row=row.parentElement;h++;} return null; }
+  function findSection(word){ let c=Array.from(document.querySelectorAll('*')).filter(e=>vis(e)&&fuzzyStartsWith(e.innerText,word)&&(e.innerText||'').length<60); c.sort((a,b)=>(a.innerText||'').length-(b.innerText||'').length); let lab=c[0]; if(!lab)return null; let row=lab,h=0; while(row&&h<6){const t=row.querySelector('[class*=switchContainer],input[type=checkbox],[role=switch]');const p=Array.from(row.querySelectorAll('input')).find(i=>i.getAttribute('inputmode')==='decimal'); if(t&&p)return{toggle:t,price:p}; row=row.parentElement;h++;} return null; }
 
   // Resilient order-type tab finder with fuzzy matching and retries.
   async function findOrderTypeTab(targetType) {
@@ -88,7 +94,7 @@ const STAGE_FN = `async (o) => {
     const up = () => !!(document.querySelector('[data-name=place-and-modify-button]') || document.querySelector('[data-name^=side-control]'));
     if (up()) return true;
     for (let attempt = 0; attempt < 3 && !up(); attempt++) {
-      const trade = Array.from(document.querySelectorAll('button,[role=button]')).find(b => vis(b) && /^trade$/i.test((b.innerText || '').trim()));
+      const trade = Array.from(document.querySelectorAll('button,[role=button]')).find(b => vis(b) && fuzzyEquals(b.innerText, 'trade'));
       if (trade) trade.click();
       for (let k = 0; k < 12 && !up(); k++) await sleep(300);
     }
@@ -97,7 +103,7 @@ const STAGE_FN = `async (o) => {
 
   // ── modify-stop: reprice an existing resting stop IN PLACE (no cancel/gap) ──
   if (o.action === 'modify-stop' || o.action === 'modify-tp') {
-    const otab = Array.from(document.querySelectorAll('button,[role=button],[role=tab]')).find(b=>vis(b)&&/^orders\\b/i.test((b.innerText||'').trim()));
+    const otab = Array.from(document.querySelectorAll('button,[role=button],[role=tab]')).find(b=>vis(b)&&fuzzyEquals(b.innerText,'orders'));
     if (otab) { otab.click(); await sleep(700); }
     const t = document.querySelector('[data-name=\\"QUESTRADE.orders-table\\"]');
     if (!t) return {ok:false, log:['no orders table']};
@@ -117,7 +123,7 @@ const STAGE_FN = `async (o) => {
     }
     if (o.take_profit != null) {
       let tp = findSection('Take profit');
-      if (!tp) { const fe=()=>Array.from(document.querySelectorAll('*')).filter(e=>vis(e)&&(e.innerText||'').trim().toLowerCase()==='exits'&&(e.innerText||'').length<12)[0]; for(let a=0;a<2&&!tp;a++){const hdr=fe(); if(!hdr)break; (hdr.closest('[role=button]')||hdr.parentElement||hdr).click(); await sleep(650); tp=findSection('Take profit');} }
+      if (!tp) { const fe=()=>Array.from(document.querySelectorAll('*')).filter(e=>vis(e)&&fuzzyEquals(e.innerText,'exits')&&(e.innerText||'').length<12)[0]; for(let a=0;a<2&&!tp;a++){const hdr=fe(); if(!hdr)break; (hdr.closest('[role=button]')||hdr.parentElement||hdr).click(); await sleep(650); tp=findSection('Take profit');} }
       if (!tp) return {ok:false, log:['no Take profit section in Modify dialog']};
       const cb = tp.toggle.querySelector('input[type=checkbox]') || (tp.toggle.tagName==='INPUT'?tp.toggle:null);
       if (!cb) return {ok:false, log:['no Take profit checkbox']};
@@ -210,7 +216,7 @@ const STAGE_FN = `async (o) => {
   // 5b) attach protective stop-loss (expand Exits if needed; click inner checkbox)
   if(o.stop!=null){
     let sl=findSection('Stop loss');
-    if(!sl){ const fe=()=>Array.from(document.querySelectorAll('*')).filter(e=>vis(e)&&(e.innerText||'').trim().toLowerCase()==='exits'&&(e.innerText||'').length<12)[0]; for(let a=0;a<2&&!sl;a++){const hdr=fe(); if(!hdr)break; (hdr.closest('[role=button]')||hdr.parentElement||hdr).click(); await sleep(650); sl=findSection('Stop loss');} }
+    if(!sl){ const fe=()=>Array.from(document.querySelectorAll('*')).filter(e=>vis(e)&&fuzzyEquals(e.innerText,'exits')&&(e.innerText||'').length<12)[0]; for(let a=0;a<2&&!sl;a++){const hdr=fe(); if(!hdr)break; (hdr.closest('[role=button]')||hdr.parentElement||hdr).click(); await sleep(650); sl=findSection('Stop loss');} }
     if(!sl) return {ok:false,chartSymbol,log:[...log,'STOP-LOSS SECTION NOT FOUND']};
     const cb=sl.toggle.querySelector('input[type=checkbox]')||(sl.toggle.tagName==='INPUT'?sl.toggle:null);
     if(!cb) return {ok:false,chartSymbol,log:[...log,'STOP-LOSS CHECKBOX NOT FOUND']};
