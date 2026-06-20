@@ -41,10 +41,17 @@ confirmation. You always click; it never sends.
 
 ## B. IF THE LAPTOP REBOOTS / CRASHES
 - Reboot it, log in.
-- Open one PowerShell → run `powershell -ExecutionPolicy Bypass -File $HOME\start_trading_browser.ps1`
+- **If auto-start is installed (see D):** nothing to do — the `OpeningPowerTradingBrowser`
+  scheduled task relaunches the trading Chrome + tunnel ~30s after logon. Just confirm
+  the profile is still logged in to TradingView/Questrade.
+- **If not:** open one PowerShell → run `powershell -ExecutionPolicy Bypass -File $HOME\start_trading_browser.ps1`
 - The trading Chrome relaunches with its saved profile (usually still logged in). If it shows logged out / "another session": log into TradingView again + reconnect Questrade.
 - On the GX10: `node skills/trading-arena/opening_agent/tv_session_sync.js --port 9225` (re-verifies + re-syncs the cookie).
 - Done — nothing on the GX10 needs restarting.
+
+> **Windows reload wipes auto-start.** Task Scheduler entries live on the machine, not
+> in this repo. After any Windows reinstall/reset, re-run `install_autostart.ps1` (D) or
+> the tunnel will NOT come up on its own — symptom: briefing shows `CDP tunnel : DOWN`.
 
 ---
 
@@ -72,6 +79,18 @@ confirmation. You always click; it never sends.
 - Verify it: `Select-String -Path $HOME\start_trading_browser.ps1 -Pattern "REMOTE_PORT ="` → should show `9225`.
 - Run it: `powershell -ExecutionPolicy Bypass -File $HOME\start_trading_browser.ps1`
 - In the new Chrome (a fresh `tv-trading-profile`, logged out): **log into TradingView** and **connect Questrade** in the Trading panel. (Persists in this profile after.)
+
+**Auto-start at logon (so a reboot/Windows-reload picks up on its own):**
+- Confirm passwordless SSH first: `ssh -o BatchMode=yes tonygale@gx10-087b true` → exit 0, no prompt.
+  If it asks for a password, set up an SSH key or auto-start will hang at the prompt.
+- Grab both laptop files into the same folder, then register the task:
+  ```
+  scp tonygale@gx10-087b:/home/tonygale/openclaw/skills/trading-arena/opening_agent/laptop/install_autostart.ps1 $HOME\install_autostart.ps1
+  powershell -ExecutionPolicy Bypass -File $HOME\install_autostart.ps1
+  ```
+- Test without rebooting: `Start-ScheduledTask -TaskName OpeningPowerTradingBrowser`, then on the
+  GX10 `curl -s http://127.0.0.1:9225/json/version`.
+- Remove: `powershell -ExecutionPolicy Bypass -File $HOME\install_autostart.ps1 -Uninstall`.
 
 **Link + cookie (one-time + whenever it expires):**
 - On the GX10: `node skills/trading-arena/opening_agent/tv_session_sync.js --port 9225`

@@ -55,4 +55,26 @@ Write-Host ""
 Write-Host "Opening reverse SSH tunnel to ${GX10_USER}@${GX10_HOST}  (GX10:$REMOTE_PORT -> laptop:$CDP_PORT)"
 Write-Host "Keep THIS window open while trading. Press Ctrl+C to stop the tunnel."
 Write-Host ""
-ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=20 -o ServerAliveCountMax=3 -R "${REMOTE_PORT}:127.0.0.1:${CDP_PORT}" "${GX10_USER}@${GX10_HOST}"
+# Unattended-safe options (matter when this runs from Task Scheduler at logon):
+#   StrictHostKeyChecking=accept-new - trust the GX10 host key on first connect
+#     instead of blocking on an interactive yes/no prompt (e.g. after a Windows
+#     reinstall wiped known_hosts).
+#   BatchMode=yes - never prompt for a password; fail fast if key auth is missing
+#     so the scheduled task can retry rather than hang forever at a prompt.
+#     NOTE: this REQUIRES passwordless key auth to the GX10. Verify with:
+#       ssh -o BatchMode=yes ${GX10_USER}@${GX10_HOST} true
+#     If that errors with "Permission denied", set up an SSH key first
+#     (ssh-keygen; ssh-copy-id / append your pubkey to ~/.ssh/authorized_keys on
+#     the GX10) or the auto-start will not establish the tunnel.
+# Loop so a transient drop (GX10 reboot, Wi-Fi blip) reconnects on its own.
+while ($true) {
+  ssh -N `
+    -o ExitOnForwardFailure=yes `
+    -o ServerAliveInterval=20 `
+    -o ServerAliveCountMax=3 `
+    -o StrictHostKeyChecking=accept-new `
+    -o BatchMode=yes `
+    -R "${REMOTE_PORT}:127.0.0.1:${CDP_PORT}" "${GX10_USER}@${GX10_HOST}"
+  Write-Warning ("Tunnel dropped (exit {0}). Reconnecting in 10s... (Ctrl+C to stop)" -f $LASTEXITCODE)
+  Start-Sleep -Seconds 10
+}
