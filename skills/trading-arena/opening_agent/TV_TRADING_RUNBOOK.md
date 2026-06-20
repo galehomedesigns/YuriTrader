@@ -1,7 +1,8 @@
 # TradingView → Questrade CDP Trading — Runbook
 
 ## How it's wired (mental model)
-- **GX10** (always-on server): runs the opening agent, cron, `advisory_monitor.py`, and the order **queue runner**. Also runs `tv-chrome.service` (a headless Chrome, logged OUT/Guest, only for chart-switching).
+- **GX10** (always-on server): runs the opening agent, cron, `advisory_monitor.py`, and the order **queue runner**.
+- ⚠️ **`tv-chrome.service` is RETIRED — leave it OFF.** It was a GX10 headless Chrome on :9222 for chart-switching, but running it concurrently held a second TradingView session that interfered with the laptop's live broker tab and dropped the Questrade link around the 9:30 open. It was deliberately disabled/removed; `inactive`/not-installed is the **correct** state. Do not reinstall it (violates the golden rule below).
 - **Laptop** (Windows): runs the **dedicated trading Chrome** (logged into TradingView + Questrade) with remote-control on, plus a **reverse SSH tunnel** so the GX10 can drive it.
 - **Tunnel:** GX10 port **9225** → laptop Chrome port **9222**.
 - **Golden rule:** only **ONE** TradingView session at a time → the **trading Chrome must be the sole login**.
@@ -56,18 +57,17 @@ confirmation. You always click; it never sends.
 ---
 
 ## C. IF THE GX10 REBOOTS
-- `tv-chrome.service` auto-starts on boot (it's enabled) and cron jobs persist — nothing to do there.
+- Cron jobs persist — nothing to start on the GX10. (`tv-chrome.service` is **retired** — see the mental-model note above; do **not** reinstate it.)
 - The **tunnel is initiated by the laptop**, so it dropped when the GX10 went down. On the laptop: press **Ctrl+C** in the tunnel PowerShell (if still open), then re-run `start_trading_browser.ps1` to re-establish it.
 - On the GX10, confirm: `curl -s http://127.0.0.1:9225/json/version` → should print a `Chrome/...` version.
 - Then: `node skills/trading-arena/opening_agent/tv_session_sync.js --port 9225`
-- (Optional sanity) `systemctl status tv-chrome.service` → should be `active (running)`.
 
 ---
 
 ## D. FIRST-TIME / FROM-SCRATCH SETUP
 **GX10 side (one-time, already done — only if rebuilding):**
 - Repo at `/home/tonygale/openclaw`; `.env` present.
-- `tv-chrome.service` installed + enabled (system service, runs as `tonygale`).
+- ~~`tv-chrome.service`~~ **retired** — do not install it (competing TV session dropped the live broker at 9:30; the laptop must be the sole TV login).
 - `.env` contains: `TRADINGVIEW_SESSIONID=...`, `OPENING_TV_CDP_PORT=9225`, and (to arm) `OPENING_TV_AUTO_STAGE=true`, `OPENING_TRADE_BUDGET_USD=<amount>`.
 - cron runs `run_opening_scan.py` (pre-market) and `advisory_monitor.py` (9:32 ET).
 

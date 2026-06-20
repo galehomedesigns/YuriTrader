@@ -136,7 +136,7 @@ This is the original manual mode; the automation just does the clicking-prep for
   - `tv_order_queue.js` — stage a list from a JSON file (entries/closes/modify-stops). Used by the agent.
   - `advisory_monitor.py` — the 9:32 driver (cron). `run_opening_scan.py` — pre-market scan (cron).
 - Cron (GX10, `crontab -l`): `run_opening_scan.py` at pre-market times, `advisory_monitor.py` at 9:32 ET (server-local 07:32 if GX10 is MDT). Mon–Fri.
-- systemd: `tv-chrome.service` (GX10 headless Guest Chrome for chart/watchlist) — `systemctl status tv-chrome.service`.
+- systemd: `tv-chrome.service` is **RETIRED — leave it off/uninstalled.** The GX10 headless Chrome on :9222 held a second TradingView session that dropped the live Questrade broker link around 9:30; only the laptop trading Chrome may be logged in. `inactive`/not-installed is correct — do not reinstate it.
 - Cancel a stray order / close a position: TradingView Orders/Positions tab → the per-row Cancel/Close button (you confirm).
 
 ---
