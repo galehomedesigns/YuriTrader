@@ -124,6 +124,9 @@ def _stage_entries(subset, tag):
     OPENING_MAX_TRADES, so per-trade size is identical whether a name arms on the
     first bar or a later one (names arm across the 9:30-9:45 window, so the final
     match count isn't known up front — a fixed slot is the only consistent size).
+    Entry stages only HALF the slot; the G9 add (first pullback-takeout) completes
+    it to the full slot, so total exposure never exceeds one slot (the full-slot
+    target is stashed on the book record as `slot_shares` for the add to read).
     Stages only - the human clicks Send Order on every one. `tag` keeps the order
     file unique so overlapping batches don't clobber each other."""
     budget = float(os.environ.get("OPENING_TRADE_BUDGET_USD", "0") or 0)
@@ -140,12 +143,16 @@ def _stage_entries(subset, tag):
             skipped.append((s, "no entry level"))
             print(f"[advisory] {s}: no entry level - skipped", file=sys.stderr)
             continue
-        qty = int(per // entry)                       # whole shares affordable per slot
-        if qty < 1:
+        slot_qty = int(per // entry)                  # whole shares affordable per slot
+        if slot_qty < 1:
             reason = f"${per:.2f}/slot < 1 share @ ${entry:.2f}"
             skipped.append((s, reason))
             print(f"[advisory] {s}: {reason} - skipped", file=sys.stderr)
             continue
+        # Half-entry → add-to-full: enter HALF the slot now; the G9 add (first
+        # pullback-takeout) completes it to the full slot, so total exposure never
+        # exceeds one slot. A 1-share slot can't be halved -> enter the whole 1.
+        qty = max(1, slot_qty // 2)
         # Risk cap: skip if bar-1 risk exceeds the max allowed %
         bar_spread = entry - stop
         max_risk = float(os.environ.get("OPENING_MAX_RISK_PCT", "3.0"))
@@ -164,6 +171,9 @@ def _stage_entries(subset, tag):
             continue
         orders.append({"symbol": s, "side": "buy", "type": "stop",
                        "price": round(entry, 2), "qty": qty, "stop": round(stop, 2)})
+        # Remember the full-slot target so the G9 add can complete this half to full.
+        # subset[s] IS book[s] (same dict), so the live loop sees this.
+        subset[s]["slot_shares"] = slot_qty
     skip_line = ("\n\n<b>Skipped ({}):</b>\n".format(len(skipped))
                  + "\n".join(f"  • {s} — {r}" for s, r in skipped)) if skipped else ""
     if not orders:
@@ -286,6 +296,42 @@ def _stage_take_profit(sym, tp_price):
     send_message(f"💰 <b>Take-profit staged: {sym} → {tp_price:.2f}</b> — click Confirm on your laptop.")
     subprocess.Popen(["node", qjs, "--port", str(port), "--orders-file", of])
     print(f"[advisory] spawned take-profit for {sym} -> {tp_price}")
+
+
+def _stage_add(sym, slot_shares):
+    """Stage the G9 add: complete the half-entry up to the FULL budget slot with a
+    marketable BUY. Cross-checks the real Questrade position first (like the close
+    path, P4): only adds shares we're actually missing on a held long, so a base
+    entry that never filled (gap / un-triggered stop) gets NO naked add. Sizes the
+    add to (slot_shares - held_qty) so total exposure lands at exactly one slot.
+    Stages only — the user clicks Send Order. Non-blocking."""
+    if not slot_shares or slot_shares <= 0:
+        print(f"[advisory] {sym}: no slot target recorded - skip add", file=sys.stderr); return
+    here = os.path.dirname(os.path.abspath(__file__))
+    port = os.environ.get("OPENING_TV_CDP_PORT", "9225")
+    try:
+        out = subprocess.run(["node", os.path.join(here, "tv_positions.js"), "--port", str(port)],
+                             capture_output=True, text=True, timeout=30)
+        positions = {p["symbol"].upper(): p for p in json.loads(out.stdout or "[]")}
+    except Exception as e:                                       # noqa: BLE001
+        print(f"[advisory] could not read positions - NOT staging add: {e}", file=sys.stderr); return
+    pos = positions.get(sym.upper())
+    if not pos or pos.get("side") != "long" or not (pos.get("qty", 0) > 0):
+        send_message(f"➕ <b>{sym}</b> add signalled but <b>NOT staged</b> — no held long position "
+                     "(base entry didn't fill). Add it by hand if you took the entry.")
+        print(f"[advisory] {sym}: no held long - skip add", file=sys.stderr); return
+    add_qty = int(slot_shares) - int(pos["qty"])
+    if add_qty < 1:
+        print(f"[advisory] {sym}: already at/above slot ({pos['qty']}/{slot_shares}) - skip add", file=sys.stderr)
+        return
+    of = os.path.join(os.path.dirname(here), "logs", f"opening_add_{sym}.json")
+    with open(of, "w") as f:
+        json.dump([{"symbol": sym, "side": "buy", "marketable": True, "qty": add_qty}], f)
+    qjs = os.path.join(here, "tv_order_queue.js")
+    send_message(f"➕ <b>Add staged: BUY {add_qty} {sym}</b> (completes to full slot, "
+                 f"{pos['qty']}→{slot_shares}) — click Send Order on your laptop.")
+    subprocess.Popen(["node", qjs, "--port", str(port), "--orders-file", of])
+    print(f"[advisory] spawned add for {sym}: +{add_qty} ({pos['qty']}->{slot_shares})")
 
 
 # ── Broker-link health (P0) ──────────────────────────────────────────────────
@@ -513,8 +559,8 @@ def main():
             for t in book[sym]["eng"].on_bar(newest, complete=True):
                 send_message(advice(t))
                 rule = getattr(t, "rule", None)
-                # G16 = trailing stop-move; G10 = take-profit (push 2). Both staged
-                # as one-click bracket modifies (same arming gate; non-fatal).
+                # G16 = trailing stop-move; G10 = take-profit (push 2); G9 = the add.
+                # All staged for one-click confirm (same arming gate; non-fatal).
                 # Skip the CDP stage if the broker link is down — the coaching
                 # message still goes out so the user can act by hand.
                 if auto_stage and broker["ok"] is not False and rule == "G16":
@@ -527,6 +573,15 @@ def main():
                         _stage_take_profit(sym, t.price)
                     except Exception as e:                       # noqa: BLE001
                         print(f"[advisory] take-profit staging skipped: {e}", file=sys.stderr)
+                # G9 = the add (first pullback-takeout). Complete the half-entry to a
+                # full slot with a marketable buy, cross-checked against the real
+                # held position. Skipped if the broker link is down (coaching still
+                # fired above so the user can add by hand).
+                elif auto_stage and broker["ok"] is not False and rule == "G9":
+                    try:
+                        _stage_add(sym, book[sym].get("slot_shares"))
+                    except Exception as e:                       # noqa: BLE001
+                        print(f"[advisory] add staging skipped: {e}", file=sys.stderr)
 
         # (b) try to arm NEW names on their newly-completed bars (P2 core).
         if arming_open:

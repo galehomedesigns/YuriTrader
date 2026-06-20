@@ -36,7 +36,12 @@ confirmation. You always click; it never sends.
   confirmation pops up (a "marketable limit" priced through the market so it fills
   like a market order but works on order-type-restricted securities). Click **Send
   Order** on each to flatten.
-- **Adds / take-profits:** Telegram coaching only — you place those manually.
+- **9:32-9:50 — adds (G9):** when the first pullback bar gets taken out, a marketable
+  **Buy** confirmation pops up that **completes your half-entry to the full slot**
+  (sized to what you actually hold, cross-checked against Questrade — no add if the
+  base entry never filled). Click **Send Order**. Total exposure stays one slot:
+  entries deploy half up front, the add fills the rest.
+- **Take-profits:** Telegram coaching only — you place those manually.
 - If a stock is too thin/volatile, an attached stop or order may be **rejected**
   ("both marketable" / "change to limit"); the queue logs it and moves on.
 

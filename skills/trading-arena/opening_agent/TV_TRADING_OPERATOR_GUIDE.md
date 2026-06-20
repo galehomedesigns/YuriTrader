@@ -58,13 +58,18 @@ Armed = `OPENING_TV_AUTO_STAGE=true` and `OPENING_TRADE_BUDGET_USD=<amt>` in
   watchlist updates. No orders.
 - **9:32 ET — entries:** for each stock that passed the first-bar rule, a ticket pops
   up: `Buy N SYM @ <stop> STOP` **+ a Stop loss row**. Click **Send Order**. Next one
-  appears ~1–2s later. Qty = floor((budget ÷ #matches) ÷ entry price).
+  appears ~1–2s later. Qty = **HALF** the slot = floor((budget ÷ OPENING_MAX_TRADES)
+  ÷ entry price ÷ 2); the add (below) completes it to the full slot.
 - **9:32–9:50 — stop-moves:** when coached "move stop up," a **Modify Order** dialog
   opens with the new stop. Its **Confirm** button is **grayed ~1–2s while it validates,
   then enables** — wait for it to light up, then click Confirm.
+- **9:32–9:50 — adds:** when a stock's first pullback bar gets taken out, a marketable
+  `Buy N SYM` ticket pops up that **completes the half-entry to the full slot** (sized
+  to your real held shares; nothing stages if the base entry never filled). Click
+  **Send Order**. Net exposure stays one slot.
 - **9:50 ET — cutoff close:** for each position you actually hold, a `Sell N SYM @ <px>
   LIMIT` ticket pops up (a marketable limit). Click **Send Order** to flatten.
-- Adds / take-profits = Telegram coaching only (place manually if you want them).
+- Take-profits = Telegram coaching only (place manually if you want them).
 
 ---
 
