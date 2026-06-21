@@ -38,6 +38,12 @@ DEFAULTS["tight_mode"] = os.environ.get("OPENING_TIGHT_MODE", "pct").lower()
 DEFAULTS["tight_atr_mult"] = float(os.environ.get("OPENING_TIGHT_ATR_MULT", "1.0"))
 DEFAULTS["atr_len"] = int(os.environ.get("OPENING_ATR_LEN", "14"))
 
+# Whether MATCH requires the TIGHT/coil state (G3). Default TRUE = live behaviour
+# (live is unaffected). Set OPENING_REQUIRE_TIGHT=false ONLY to run the backtest's
+# gate on/off A/B — it keeps the power-bar + location logic but drops the coil
+# requirement, isolating exactly what the coil gate contributes.
+DEFAULTS["require_tight"] = os.environ.get("OPENING_REQUIRE_TIGHT", "true").lower() == "true"
+
 
 # ── Primitive bar geometry ────────────────────────────────────────────────────
 def body(bar):
@@ -255,7 +261,7 @@ def classify_opening(symbol, bar1, prior_bars, sma_fast, sma_slow, cfg=None):
     tags = classify_bar(bar1, prior_bars, cfg)
     sig = bar_signal(bar1, prior_bars, cfg)
 
-    if state != "TIGHT":
+    if cfg.get("require_tight", True) and state != "TIGHT":
         return Verdict(symbol, "NO_PLAY", tags, loc, state,
                        "state not TIGHT (G3)")
     if loc == "inside" or loc == "unknown":
