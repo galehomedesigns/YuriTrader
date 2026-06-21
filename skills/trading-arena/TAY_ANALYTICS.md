@@ -1,4 +1,4 @@
-<!-- Generated 2026-06-19T02:33:02.734207+00:00 -->
+<!-- Generated 2026-06-20T02:34:15.025923+00:00 -->
 # TAY Component Analytics
 
 Analyzed 500 closed trades with TAY tagging.
@@ -12,38 +12,38 @@ see how the YouTube research holds up against real performance.
 
 | Component | Trades | Wins | Win % | Total P&L | Avg P&L |
 |-----------|--------|------|-------|-----------|---------|
-| bb_squeeze | 132 | 62 | 47.0% | $+15.36 | $+0.12 |
-| weakening_trend | 69 | 19 | 27.5% | $+5.26 | $+0.08 |
-| ranging | 4 | 4 | 100.0% | $+1.34 | $+0.34 |
+| bb_squeeze | 155 | 70 | 45.2% | $+14.91 | $+0.10 |
+| weakening_trend | 60 | 15 | 25.0% | $+4.64 | $+0.08 |
+| ranging | 3 | 3 | 100.0% | $+1.06 | $+0.35 |
 | impulse_pole | 24 | 5 | 20.8% | $-1.26 | $-0.05 |
-| obv_accumulation | 121 | 53 | 43.8% | $-1.32 | $-0.01 |
-| other | 49 | 16 | 32.7% | $-5.48 | $-0.11 |
-| trending | 101 | 32 | 31.7% | $-22.78 | $-0.23 |
+| obv_accumulation | 121 | 55 | 45.5% | $-1.44 | $-0.01 |
+| other | 37 | 12 | 32.4% | $-4.08 | $-0.11 |
+| trending | 100 | 32 | 32.0% | $-10.35 | $-0.10 |
 
 ## Area of Value (A) Performance
 
 | Component | Trades | Wins | Win % | Total P&L | Avg P&L |
 |-----------|--------|------|-------|-----------|---------|
-| horizontal_resistance | 115 | 53 | 46.1% | $+14.65 | $+0.13 |
-| rsi_signal | 69 | 19 | 27.5% | $+5.26 | $+0.08 |
-| horizontal_support | 3 | 3 | 100.0% | $+1.27 | $+0.42 |
-| bb_band | 18 | 10 | 55.6% | $+0.78 | $+0.04 |
+| horizontal_resistance | 136 | 60 | 44.1% | $+14.20 | $+0.10 |
+| rsi_signal | 60 | 15 | 25.0% | $+4.64 | $+0.08 |
+| horizontal_support | 2 | 2 | 100.0% | $+0.99 | $+0.49 |
+| bb_band | 20 | 11 | 55.0% | $+0.79 | $+0.04 |
 | consolidation | 24 | 5 | 20.8% | $-1.26 | $-0.05 |
-| vwap_zone | 121 | 53 | 43.8% | $-1.32 | $-0.01 |
-| volume_spike | 35 | 15 | 42.9% | $-2.77 | $-0.08 |
-| other | 115 | 33 | 28.7% | $-25.49 | $-0.22 |
+| volume_spike | 23 | 11 | 47.8% | $-1.37 | $-0.06 |
+| vwap_zone | 121 | 55 | 45.5% | $-1.44 | $-0.01 |
+| other | 114 | 33 | 28.9% | $-13.06 | $-0.11 |
 
 ## Trigger (Y) Performance
 
 | Component | Trades | Wins | Win % | Total P&L | Avg P&L |
 |-----------|--------|------|-------|-----------|---------|
-| volume_spike | 315 | 133 | 42.2% | $+8.41 | $+0.03 |
-| macd_cross | 69 | 19 | 27.5% | $+5.26 | $+0.08 |
-| hammer_candle | 4 | 4 | 100.0% | $+1.34 | $+0.34 |
-| vwap_zone | 59 | 20 | 33.9% | $-4.02 | $-0.07 |
-| other | 53 | 15 | 28.3% | $-19.87 | $-0.37 |
+| volume_spike | 338 | 143 | 42.3% | $+7.86 | $+0.02 |
+| macd_cross | 60 | 15 | 25.0% | $+4.64 | $+0.08 |
+| hammer_candle | 3 | 3 | 100.0% | $+1.06 | $+0.35 |
+| vwap_zone | 47 | 16 | 34.0% | $-2.62 | $-0.06 |
+| other | 52 | 15 | 28.8% | $-7.45 | $-0.14 |
 
 ## Recommendations
-- **Best trend**: `bb_squeeze` (132 trades, 47% win, $+15.36)
-- **Best value**: `horizontal_resistance` (115 trades, 46% win, $+14.65)
-- **Best trigger**: `volume_spike` (315 trades, 42% win, $+8.41)
+- **Best trend**: `bb_squeeze` (155 trades, 45% win, $+14.91)
+- **Best value**: `horizontal_resistance` (136 trades, 44% win, $+14.20)
+- **Best trigger**: `volume_spike` (338 trades, 42% win, $+7.86)
