@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Stock Opening-Arena — Bots + Indicator Edge</title>
+<style>
+:root {
+  --bg: #0d1117; --surface: #161b22; --surface-2: #1c222b; --border: #21262d;
+  --text: #e6edf3; --text-dim: #8b95a7; --text-muted: #556677;
+  --accent: #7c8aff; --accent-2: #c77dff; --ok: #00c853; --warn: #ffc107;
+  --fail: #ff1744; --pnl-pos: #69f0ae; --pnl-neg: #ef5350; --radius: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg); color: var(--text); padding: 20px; line-height: 1.5; }
+.container { max-width: 1180px; margin: 0 auto; }
+.dash-header { margin-bottom: 18px; }
+.dash-header h1 { font-size: 1.5rem; }
+.subtitle { color: var(--text-dim); font-size: 0.9rem; }
+.updated { color: var(--text-muted); font-size: 0.8rem; margin-top: 4px; }
+.banner { padding: 10px 14px; border-radius: var(--radius); margin: 14px 0; font-size: 0.9rem; }
+.banner-warn { background: rgba(255,193,7,0.12); border: 1px solid var(--warn); }
+.banner b { color: var(--text); }
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; margin: 16px 0; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.stat .value { font-size: 1.3rem; font-weight: 600; }
+.stat .label { color: var(--text-dim); font-size: 0.74rem; text-transform: uppercase; letter-spacing: .04em; }
+.pos { color: var(--pnl-pos); } .neg { color: var(--pnl-neg); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin: 16px 0; }
+.card h2 { font-size: 1rem; margin-bottom: 4px; }
+.card .hint { color: var(--text-muted); font-size: 0.78rem; margin-bottom: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+th, td { text-align: left; padding: 6px 9px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 0.7rem; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.sym { font-weight: 600; }
+.badge { padding: 2px 7px; border-radius: 6px; font-size: 0.7rem; }
+.badge-ok { background: rgba(0,200,83,0.15); color: var(--pnl-pos); }
+.badge-muted { background: var(--surface-2); color: var(--text-dim); }
+.top { background: rgba(124,138,255,0.10); }
+.note { color: var(--text-muted); font-size: 0.78rem; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="dash-header">
+    <h1>Stock Opening-Arena — Bots + Indicator Edge</h1>
+    <div class="subtitle">12 crypto-arena bots + an indicator search on the 60-day equity opening window, gated to the pre-market gap universe. $1,000 each, no money at risk.</div>
+    <div class="updated">Generated: <span id="updated-at">&mdash;</span></div>
+  </header>
+
+  <div class="banner banner-warn" id="regime"></div>
+  <div id="cov" class="stat-row"></div>
+
+  <div class="card">
+    <h2>1 · Bot survivorship — $1,000 each, compounding</h2>
+    <div class="hint">Variant A = bot's native exits (flattened at cutoff). Variant B = bot entry + standard opening stop/cutoff. min(5%·bal, $50)/trade, max 3 concurrent, −$30 daily loss limit.</div>
+    <div id="bots"></div>
+  </div>
+
+  <div class="card">
+    <h2>2 · Indicator edge — which opening-bar feature predicts the 20-min move</h2>
+    <div class="hint">Best bucket per indicator. <b>robust</b> = beats baseline in BOTH the in-sample and out-of-sample halves (the only honest bar). OOS lift alone usually just rides the second-half regime.</div>
+    <div id="ind"></div>
+    <div class="note" id="ind-base"></div>
+  </div>
+
+  <div class="card">
+    <h2>3 · Filter combinations — in-sample vs out-of-sample</h2>
+    <div class="hint">Mean 20-min return % and win% of gap-qualified setups passing each filter. Watch the IS column: if it's negative while OOS is positive, the "edge" is regime, not signal.</div>
+    <div id="combo"></div>
+  </div>
+</div>
+
+<script id="dashboard-data" type="application/json">{{DATA}}</script>
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('dashboard-data').textContent);
+  const cls = (v) => (+v || 0) >= 0 ? 'pos' : 'neg';
+  const pc = (v) => v == null ? '—' : ((+v >= 0 ? '+' : '') + (+v).toFixed(3) + '%');
+  document.getElementById('updated-at').textContent = data.updated || '—';
+
+  document.getElementById('regime').innerHTML = data.regime_note ||
+    '<b>One regime, ~2 months.</b> The baseline itself is in-sample-negative and out-of-sample-positive — most apparent edges just ride the favorable second half. Suggestive, not proven.';
+
+  const cov = data.coverage || {};
+  document.getElementById('cov').innerHTML = [
+    {v: cov.sessions ?? '—', l: 'Sessions'},
+    {v: cov.gap_symbol_days ?? '—', l: 'Gap-qualified setups'},
+    {v: cov.gap_band ?? '—', l: 'Gap band'},
+    {v: (cov.best_bot || '—'), l: 'Top bot (end $)'},
+  ].map(s => `<div class="stat"><div class="value">${s.v}</div><div class="label">${s.l}</div></div>`).join('');
+
+  // bots
+  const br = data.bots || [];
+  document.getElementById('bots').innerHTML = br.length ? (
+    `<table><thead><tr><th>Bot</th><th>Exit</th><th class="num">Trades</th><th class="num">End $</th>
+     <th class="num">Return</th><th class="num">Win%</th><th class="num">Max DD</th><th>Survived</th></tr></thead><tbody>` +
+    br.map((r, i) => `<tr class="${i===0?'top':''}">
+       <td class="sym">${r.bot}</td><td><span class="badge badge-muted">${r.variant}</span></td>
+       <td class="num">${r.trades}</td><td class="num ${cls(r.net)}">$${(+r.end_balance).toFixed(2)}</td>
+       <td class="num ${cls(r.return_pct)}">${(+r.return_pct>=0?'+':'')+(+r.return_pct).toFixed(2)}%</td>
+       <td class="num">${(+r.win_rate).toFixed(1)}%</td><td class="num">${(+r.max_dd_pct).toFixed(2)}%</td>
+       <td>${r.survived?'<span class="badge badge-ok">survived</span>':'<span class="badge" style="color:var(--fail)">ruined</span>'}</td></tr>`).join('') +
+    `</tbody></table>`) : '<div class="note">No bot results.</div>';
+
+  // indicators
+  const ir = data.indicators || [];
+  document.getElementById('ind').innerHTML = ir.length ? (
+    `<table><thead><tr><th>Indicator</th><th>Best bucket</th><th class="num">n</th>
+     <th class="num">Mean</th><th class="num">IS lift</th><th class="num">OOS lift</th><th>Robust</th></tr></thead><tbody>` +
+    ir.map(f => `<tr class="${f.robust?'top':''}">
+       <td>${f.indicator}</td><td><span class="badge badge-muted">${f.best_bucket}</span></td>
+       <td class="num">${f.n}</td><td class="num ${cls(f.mean_all)}">${pc(f.mean_all)}</td>
+       <td class="num ${cls(f.is_lift)}">${pc(f.is_lift)}</td><td class="num ${cls(f.oos_lift)}">${pc(f.oos_lift)}</td>
+       <td>${f.robust?'<span class="badge badge-ok">YES</span>':'<span class="badge badge-muted">no</span>'}</td></tr>`).join('') +
+    `</tbody></table>`) : '<div class="note">No indicator results.</div>';
+  const b = data.ind_baseline || {};
+  document.getElementById('ind-base').innerHTML =
+    `Baseline (all gap setups): all <b>${pc(b.all)}</b> · in-sample <b class="${cls(b.is)}">${pc(b.is)}</b> · out-of-sample <b class="${cls(b.oos)}">${pc(b.oos)}</b> — note the IS/OOS flip.`;
+
+  // combos
+  const cr = data.combos || [];
+  document.getElementById('combo').innerHTML = cr.length ? (
+    `<table><thead><tr><th>Filter</th><th class="num">IS n</th><th class="num">IS mean</th><th class="num">IS win</th>
+     <th class="num">OOS n</th><th class="num">OOS mean</th><th class="num">OOS win</th></tr></thead><tbody>` +
+    cr.map(c => `<tr><td>${c.filter}</td>
+       <td class="num">${c.is.n}</td><td class="num ${cls(c.is.mean)}">${pc(c.is.mean)}</td><td class="num">${(+c.is.win).toFixed(0)}%</td>
+       <td class="num">${c.oos.n}</td><td class="num ${cls(c.oos.mean)}">${pc(c.oos.mean)}</td><td class="num">${(+c.oos.win).toFixed(0)}%</td></tr>`).join('') +
+    `</tbody></table>`) : '<div class="note">No combo results.</div>';
+})();
+</script>
+</body>
+</html>

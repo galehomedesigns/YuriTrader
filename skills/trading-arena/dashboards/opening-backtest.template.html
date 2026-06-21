@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Opening Power — Full-Strategy Backtest</title>
+<style>
+:root {
+  --bg: #0d1117; --surface: #161b22; --surface-2: #1c222b; --border: #21262d;
+  --text: #e6edf3; --text-dim: #8b95a7; --text-muted: #556677;
+  --accent: #7c8aff; --accent-2: #c77dff; --ok: #00c853; --warn: #ffc107;
+  --fail: #ff1744; --pnl-pos: #69f0ae; --pnl-neg: #ef5350; --radius: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg); color: var(--text); padding: 20px; line-height: 1.5; }
+.container { max-width: 1100px; margin: 0 auto; }
+.dash-header { margin-bottom: 18px; }
+.dash-header h1 { font-size: 1.5rem; }
+.subtitle { color: var(--text-dim); font-size: 0.9rem; }
+.updated { color: var(--text-muted); font-size: 0.8rem; margin-top: 4px; }
+.banner { padding: 10px 14px; border-radius: var(--radius); margin: 14px 0; font-size: 0.9rem; }
+.banner-ok { background: rgba(0,200,83,0.12); border: 1px solid var(--ok); }
+.banner-warn { background: rgba(255,193,7,0.12); border: 1px solid var(--warn); }
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; margin: 16px 0; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.stat .value { font-size: 1.5rem; font-weight: 600; }
+.stat .label { color: var(--text-dim); font-size: 0.78rem; text-transform: uppercase; letter-spacing: .04em; }
+.pos { color: var(--pnl-pos); } .neg { color: var(--pnl-neg); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin: 16px 0; }
+.card h2 { font-size: 1rem; margin-bottom: 10px; color: var(--text); }
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 0.72rem; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.sym { font-weight: 600; }
+.badge { padding: 2px 8px; border-radius: 6px; font-size: 0.72rem; }
+.badge-muted { background: var(--surface-2); color: var(--text-dim); }
+.badge-ok { background: rgba(0,200,83,0.15); color: var(--pnl-pos); }
+.win { background: rgba(124,138,255,0.14); }
+.empty { color: var(--text-muted); padding: 12px; font-style: italic; }
+.note { color: var(--text-muted); font-size: 0.78rem; margin-top: 8px; }
+.note b { color: var(--text-dim); }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="dash-header">
+    <h1>Opening Power — Full-Strategy Backtest</h1>
+    <div class="subtitle">Real <code>OpeningEngine</code> driven bar-by-bar over historical 2-min sessions — entry → breakeven → push-trail → add → cutoff/ride. No orders, no money at risk.</div>
+    <div class="updated">Generated: <span id="updated-at">&mdash;</span></div>
+  </header>
+
+  <div class="banner banner-warn" id="limits">
+    <b>What this proves — and what it doesn't.</b>
+    Tests the <b>entry/exit rules + classifier gate</b> over a broad universe. <span id="pm-line"></span>
+    The pre-market <b>volume floor, relative-volume ranking, and news nudge still aren't reconstructable</b>
+    offline, so selection is only partially modelled. Window is <b>~2 months</b> (Questrade caps 2-min
+    history ~60–65 days), not 3. Fills are modelled at the engine's trigger prices ± slippage.
+  </div>
+
+  <div id="coverage" class="stat-row"></div>
+
+  <div class="card">
+    <h2>Exit-mode comparison</h2>
+    <div id="variants"></div>
+    <div class="note" id="verdict"></div>
+  </div>
+
+  <div class="card">
+    <h2>Per-trade results <span id="trades-sub" class="subtitle"></span></h2>
+    <div id="trades"></div>
+  </div>
+
+  <div class="card">
+    <h2>Run configuration</h2>
+    <div class="note" id="config-note"></div>
+  </div>
+</div>
+
+<script id="dashboard-data" type="application/json">{{DATA}}</script>
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('dashboard-data').textContent);
+  const money = (v) => (v >= 0 ? '+$' : '-$') + Math.abs(+v || 0).toFixed(2);
+  const pct = (v) => ((+v || 0) >= 0 ? '+' : '') + (+v || 0).toFixed(2) + '%';
+  const cls = (v) => (+v || 0) >= 0 ? 'pos' : 'neg';
+  document.getElementById('updated-at').textContent = data.updated || '—';
+
+  // coverage stats
+  const cov = data.coverage || {}, cfg = data.config || {}, win = data.window || {};
+  document.getElementById('pm-line').innerHTML = cfg.premarket_filter
+    ? `A <b>pre-market gap proxy is applied</b> (${cfg.premarket_filter}, the live scan's band).`
+    : `<b>No pre-market selection is applied</b> — every name runs every session.`;
+  const stats = [
+    { value: (win.start || '?') + ' → ' + (win.end || '?'), label: `Window (${win.days || '?'}d)` },
+    { value: cfg.universe_size ?? '—', label: 'Universe symbols' },
+    { value: cov.long_matches ?? 0, label: 'Long matches' },
+    { value: cov.sessions_scored ?? 0, label: 'Sessions scored' },
+  ];
+  document.getElementById('coverage').innerHTML = stats.map(s =>
+    `<div class="stat"><div class="value">${s.value}</div><div class="label">${s.label}</div></div>`).join('');
+
+  // variant comparison table
+  const V = data.variants || {};
+  const order = [['naive','Naive (entry → initial stop/cutoff)'],
+                 ['flatten','Flatten (full engine, cut at clock)'],
+                 ['ride','Ride (trail protected winners past clock)']];
+  const best = order.reduce((b, [k]) => (V[k] && (!b || V[k].net_pnl > V[b].net_pnl)) ? k : b, null);
+  const rows = order.map(([k, label]) => {
+    const v = V[k] || {};
+    return `<tr class="${k===best?'win':''}">
+      <td>${label}${k===best?' <span class="badge badge-ok">best net</span>':''}</td>
+      <td class="num">${v.triggered ?? 0}</td>
+      <td class="num">${(v.win_rate ?? 0)}%</td>
+      <td class="num ${cls(v.net_pnl)}">${money(v.net_pnl)}</td>
+      <td class="num ${cls(v.avg_pnl)}">${money(v.avg_pnl)}</td>
+      <td class="num ${cls(v.avg_pct)}">${pct(v.avg_pct)}</td>
+      <td class="num">${v.rides_past_cutoff ?? 0}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('variants').innerHTML =
+    `<table><thead><tr><th>Exit variant</th><th class="num">Trades</th><th class="num">Win%</th>
+     <th class="num">Net P&amp;L</th><th class="num">Avg/trade</th><th class="num">Avg%</th>
+     <th class="num">Rode past cutoff</th></tr></thead><tbody>${rows}</tbody></table>`;
+
+  // verdict line: ride vs flatten delta
+  if (V.ride && V.flatten) {
+    const d = (V.ride.net_pnl || 0) - (V.flatten.net_pnl || 0);
+    const w = d > 0 ? 'adds' : (d < 0 ? 'costs' : 'is neutral vs');
+    document.getElementById('verdict').innerHTML =
+      `<b>Ride vs Flatten:</b> riding ${w} <span class="${cls(d)}">${money(Math.abs(d))}</span> ` +
+      `over ${V.ride.triggered || 0} trades (${V.ride.rides_past_cutoff || 0} actually rode past the cutoff). ` +
+      `On $${(cfg.pos_usd||0).toFixed(0)}/slot, ${cfg.slippage_pct!=null?(cfg.slippage_pct*100).toFixed(2)+'% slip':''}.`;
+  }
+
+  // per-trade table
+  const t = data.trades || [];
+  document.getElementById('trades-sub').textContent = t.length ? `(${t.length} triggered)` : '';
+  document.getElementById('trades').innerHTML = t.length ? (
+    `<table><thead><tr><th>Symbol</th><th>Date</th>
+       <th class="num">Naive</th><th class="num">Flatten</th><th class="num">Ride</th>
+       <th>Ride exit</th><th class="num">Adds</th></tr></thead><tbody>` +
+    t.map(r => `<tr>
+        <td class="sym">${r.symbol}</td><td>${r.date}</td>
+        <td class="num ${cls(r.naive_pnl)}">${r.naive_pnl!=null?money(r.naive_pnl):'—'}</td>
+        <td class="num ${cls(r.flatten_pnl)}">${r.flatten_pnl!=null?money(r.flatten_pnl):'—'}</td>
+        <td class="num ${cls(r.ride_pnl)}">${r.ride_pnl!=null?money(r.ride_pnl):'—'}</td>
+        <td><span class="badge badge-muted">${r.ride_reason||'—'}</span></td>
+        <td class="num">${r.adds||0}</td>
+      </tr>`).join('') + `</tbody></table>`
+  ) : '<div class="empty">No triggered trades in this window.</div>';
+
+  // config
+  document.getElementById('config-note').innerHTML =
+    `Position <b>$${(cfg.pos_usd||0).toFixed(0)}</b>/slot (half at entry, add completes to full) · ` +
+    `slippage <b>${cfg.slippage_pct!=null?(cfg.slippage_pct*100).toFixed(2):'?'}%</b>/side · $0 commission · ` +
+    `cutoff <b>${cfg.cutoff_min||'?'} min</b> · ride backstop <b>${cfg.ride_max_min||'?'} min</b> · ` +
+    `universe <b>${cfg.universe_size||'?'}</b> symbols · symbols fetched <b>${cov.symbols_fetched||'?'}</b>. ` +
+    `Model: real OpeningEngine, long-only. <b>Selection edge (pre-market scan) not included.</b>`;
+})();
+</script>
+</body>
+</html>
