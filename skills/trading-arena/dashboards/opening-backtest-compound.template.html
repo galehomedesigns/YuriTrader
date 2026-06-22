@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Opening Power — Compounding (4 weeks)</title>
+<style>
+:root {
+  --bg: #0d1117; --surface: #161b22; --surface-2: #1c222b; --border: #21262d;
+  --text: #e6edf3; --text-dim: #8b95a7; --text-muted: #556677;
+  --accent: #7c8aff; --accent-2: #c77dff; --ok: #00c853; --warn: #ffc107;
+  --fail: #ff1744; --pnl-pos: #69f0ae; --pnl-neg: #ef5350; --radius: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg); color: var(--text); padding: 20px; line-height: 1.5; }
+.container { max-width: 1100px; margin: 0 auto; }
+.dash-header { margin-bottom: 18px; }
+.dash-header h1 { font-size: 1.5rem; }
+.subtitle { color: var(--text-dim); font-size: 0.9rem; }
+.updated { color: var(--text-muted); font-size: 0.8rem; margin-top: 4px; }
+.banner { padding: 10px 14px; border-radius: var(--radius); margin: 14px 0; font-size: 0.9rem; }
+.banner-warn { background: rgba(255,193,7,0.12); border: 1px solid var(--warn); }
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; margin: 16px 0; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.stat .value { font-size: 1.5rem; font-weight: 600; }
+.stat .label { color: var(--text-dim); font-size: 0.78rem; text-transform: uppercase; letter-spacing: .04em; }
+.pos { color: var(--pnl-pos); } .neg { color: var(--pnl-neg); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin: 16px 0; }
+.card h2 { font-size: 1rem; margin-bottom: 10px; color: var(--text); }
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 0.72rem; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.badge { padding: 2px 8px; border-radius: 6px; font-size: 0.72rem; }
+.badge-muted { background: var(--surface-2); color: var(--text-dim); }
+.empty { color: var(--text-muted); padding: 12px; font-style: italic; }
+.note { color: var(--text-muted); font-size: 0.78rem; margin-top: 8px; }
+.note b { color: var(--text-dim); }
+.chart-wrap { width: 100%; overflow-x: auto; }
+svg { display: block; width: 100%; height: 280px; }
+.axis { stroke: var(--border); stroke-width: 1; }
+.grid { stroke: var(--border); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0.5; }
+.curve { fill: none; stroke: var(--accent); stroke-width: 2; }
+.base { stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 4 4; }
+.axlabel { fill: var(--text-muted); font-size: 11px; }
+.dot { fill: var(--accent-2); }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="dash-header">
+    <h1>Opening Power — Compounding Equity Curve</h1>
+    <div class="subtitle">Reinvesting each day's profit over the most recent <span id="weeks">4</span> weeks — daily returns compound. Backtest only; no money at risk.</div>
+    <div class="updated">Generated: <span id="updated-at">&mdash;</span></div>
+  </header>
+
+  <div class="banner banner-warn" id="limits">
+    <b>Read this before trusting the number.</b>
+    <span id="model-line"></span>
+    The window is the <b>most recent <span id="weeks2">4</span> weeks</b> — the <b>back-loaded, strong</b> stretch of the
+    2-month sample, so this flatters the strategy vs a typical month. Returns are net of modelled slippage,
+    use the live <b>flatten</b> exit, and assume the live composite+news top-<span id="cap">5</span> selection.
+    Past sim returns ≠ future results.
+  </div>
+
+  <div id="cards" class="stat-row"></div>
+
+  <div class="card">
+    <h2>Equity curve <span id="curve-sub" class="subtitle"></span></h2>
+    <div class="chart-wrap"><svg id="chart" viewBox="0 0 1000 280" preserveAspectRatio="none"></svg></div>
+    <div class="note" id="curve-note"></div>
+  </div>
+
+  <div class="card">
+    <h2>Day by day</h2>
+    <div id="series"></div>
+  </div>
+
+  <div class="card">
+    <h2>How this is computed</h2>
+    <div class="note" id="config-note"></div>
+  </div>
+</div>
+
+<script id="dashboard-data" type="application/json">{{DATA}}</script>
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('dashboard-data').textContent);
+  const money = (v) => '$' + (+v || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  const pct = (v) => ((+v || 0) >= 0 ? '+' : '') + (+v || 0).toFixed(2) + '%';
+  const cls = (v) => (+v || 0) >= 0 ? 'pos' : 'neg';
+  document.getElementById('updated-at').textContent = data.updated || '—';
+
+  const cfg = data.config || {}, win = data.window || {}, sm = data.summary || {}, series = data.series || [];
+  [['weeks',cfg.weeks],['weeks2',cfg.weeks],['cap',cfg.max_trades]].forEach(([id,v]) =>
+    { const el = document.getElementById(id); if (el) el.textContent = v ?? '—'; });
+  document.getElementById('model-line').innerHTML =
+    `Sizing is <b>${cfg.max_trades || 5} fixed slots</b> (slot = balance / ${cfg.max_trades || 5}); on days with fewer than ` +
+    `${cfg.max_trades || 5} trades the unused slots sit in cash, exactly as the live agent sizes — <b>not</b> full deployment.`;
+
+  if (!series.length) {
+    document.getElementById('cards').innerHTML =
+      `<div class="stat"><div class="value">—</div><div class="label">${data.empty_reason || 'no data'}</div></div>`;
+    document.getElementById('series').innerHTML = '<div class="empty">No trades in this window.</div>';
+    return;
+  }
+
+  // stat cards
+  const totRet = sm.total_return_pct || 0;
+  const cards = [
+    { value: money(sm.start_balance), label: 'Starting capital' },
+    { value: money(sm.end_balance), label: 'Ending capital', cls: cls(totRet) },
+    { value: pct(totRet), label: `Total return (${win.trading_days}d)`, cls: cls(totRet) },
+    { value: `${sm.win_days}/${sm.total_days}`, label: 'Winning days' },
+    { value: pct(sm.best_day ? sm.best_day.ret : 0), label: `Best day (${sm.best_day ? sm.best_day.date : '—'})`, cls: 'pos' },
+    { value: '-' + (sm.max_drawdown_pct || 0).toFixed(2) + '%', label: 'Max drawdown', cls: 'neg' },
+  ];
+  document.getElementById('cards').innerHTML = cards.map(c =>
+    `<div class="stat"><div class="value ${c.cls||''}">${c.value}</div><div class="label">${c.label}</div></div>`).join('');
+
+  // ── inline SVG equity curve (self-contained, no external lib) ──
+  const W = 1000, H = 280, padL = 64, padR = 16, padT = 16, padB = 28;
+  const pts = [{balance: sm.start_balance, date: 'start'}].concat(series);
+  const bals = pts.map(p => p.balance);
+  const lo = Math.min(...bals, sm.start_balance), hi = Math.max(...bals, sm.start_balance);
+  const span = (hi - lo) || 1;
+  const x = (i) => padL + (W - padL - padR) * (i / (pts.length - 1));
+  const y = (v) => padT + (H - padT - padB) * (1 - (v - lo) / span);
+  const yBase = y(sm.start_balance);
+  let svg = '';
+  // horizontal gridlines + y labels (start, hi, lo)
+  [lo, sm.start_balance, hi].forEach(v => {
+    svg += `<line class="grid" x1="${padL}" y1="${y(v).toFixed(1)}" x2="${W-padR}" y2="${y(v).toFixed(1)}"/>`;
+    svg += `<text class="axlabel" x="${padL-8}" y="${(y(v)+3).toFixed(1)}" text-anchor="end">$${v.toFixed(0)}</text>`;
+  });
+  svg += `<line class="base" x1="${padL}" y1="${yBase.toFixed(1)}" x2="${W-padR}" y2="${yBase.toFixed(1)}"/>`;
+  const path = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.balance).toFixed(1)}`).join(' ');
+  svg += `<path class="curve" d="${path}"/>`;
+  svg += `<circle class="dot" cx="${x(pts.length-1).toFixed(1)}" cy="${y(bals[bals.length-1]).toFixed(1)}" r="3.5"/>`;
+  // x labels: first and last trading day
+  svg += `<text class="axlabel" x="${padL}" y="${H-8}" text-anchor="start">${win.start}</text>`;
+  svg += `<text class="axlabel" x="${W-padR}" y="${H-8}" text-anchor="end">${win.end}</text>`;
+  document.getElementById('chart').innerHTML = svg;
+  document.getElementById('curve-sub').textContent = `(${win.start} → ${win.end})`;
+  const bonus = sm.compounding_bonus || 0;
+  document.getElementById('curve-note').innerHTML =
+    `Dashed line = starting capital (${money(sm.start_balance)}). ` +
+    `Compounding added <b class="${cls(bonus)}">${money(bonus)}</b> over simply summing the daily returns ` +
+    `(linear end would be ${money(sm.additive_end)}).`;
+
+  // day-by-day table
+  document.getElementById('series').innerHTML =
+    `<table><thead><tr><th>Date</th><th class="num">Trades</th><th class="num">Deployed</th>
+       <th class="num">Day return</th><th class="num">Balance</th></tr></thead><tbody>` +
+    series.map(s => `<tr>
+        <td>${s.date}</td>
+        <td class="num">${s.n}</td>
+        <td class="num">${s.deployed_pct}%</td>
+        <td class="num ${cls(s.day_ret_pct)}">${pct(s.day_ret_pct)}</td>
+        <td class="num">${money(s.balance)}</td>
+      </tr>`).join('') + `</tbody></table>`;
+
+  // config note
+  document.getElementById('config-note').innerHTML =
+    `Start <b>${money(sm.start_balance)}</b> (the live budget) · <b>${cfg.max_trades} fixed slots</b> of balance/${cfg.max_trades}, ` +
+    `idle slots earn 0% · day return = <b>Σ(trade %) / ${cfg.max_trades}</b> · balance compounds daily · ` +
+    `exit = <b>${cfg.eod_mode || 'flatten'}</b> (live EOD mode) · slippage <b>${cfg.slippage_pct!=null?(cfg.slippage_pct*100).toFixed(2):'?'}%</b>/side · ` +
+    `selection = <b>${cfg.selection || 'live top-N'}</b>. Source: opening_backtest_summary.json (no re-run). ` +
+    `Pre-market scan selection edge still only partially modelled.`;
+})();
+</script>
+</body>
+</html>
