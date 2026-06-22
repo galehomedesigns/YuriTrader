@@ -85,7 +85,13 @@ FINNHUB_KEY = os.environ.get("FINNHUB_KEY", "")
 
 ET = ZoneInfo("America/New_York")
 LOGS = os.path.join(os.path.dirname(_HERE), "logs")
-CACHE_DIR = os.path.join(LOGS, "backtest_cache")
+# Default Questrade cache; OPENING_BT_CACHE_DIR points it at an alternate source
+# (e.g. the isolated IBKR backfill in logs/backtest_cache_ibkr) without touching
+# the live data path. OPENING_BT_CACHE_ANY=1 reuses whatever bars are cached for a
+# symbol regardless of the requested from/through window (for pre-built backfills
+# whose span is wider than any single run's --days/--end).
+CACHE_DIR = os.environ.get("OPENING_BT_CACHE_DIR") or os.path.join(LOGS, "backtest_cache")
+CACHE_ANY = os.environ.get("OPENING_BT_CACHE_ANY", "").lower() in ("1", "true", "yes")
 SUMMARY = os.path.join(LOGS, "opening_backtest_summary.json")
 SIDCACHE = os.path.join(CACHE_DIR, "_symbol_ids.json")
 
@@ -175,8 +181,11 @@ def fetch_series(sym, start_dt, end_dt, qe, sid_cache, cache_only=False):
     if os.path.exists(cpath):
         try:
             cached = json.load(open(cpath))
-            # reuse only if BOTH ends of the window match (else a shorter cached
-            # window would be silently reused for a longer request).
+            # CACHE_ANY: a pre-built backfill (e.g. IBKR) — reuse its bars as-is.
+            # Otherwise reuse only if BOTH ends of the window match (else a shorter
+            # cached window would be silently reused for a longer request).
+            if CACHE_ANY and cached.get("bars"):
+                return [_rehydrate(b) for b in cached["bars"]]
             if (cached.get("through") == want_through and cached.get("from") == want_from
                     and cached.get("bars")):
                 return [_rehydrate(b) for b in cached["bars"]]
