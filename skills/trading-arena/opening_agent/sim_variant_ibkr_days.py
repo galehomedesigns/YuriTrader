@@ -70,7 +70,7 @@ def load(path):
     for i,x in enumerate(bars): byday[x["dt"].date()].append(i)
     return bars,s20,s200,byday
 
-def sim_one(bars,s20,s200,idxs,day,sym,mode):
+def sim_one(bars,s20,s200,idxs,day,sym,mode,be_abs=None,be_r=1.0,lock_abs=0.0,mae_stop=None,noprog=None,req20=False):
     """Full sim producing row+timeline for one candidate, in 'sweet' or 'baseline' mode.
     sweet:    arm power+close>SMA200 (no TIGHT), wick stop, 3R target, breakeven@1R, 30-min.
     baseline: arm classifier MATCH_LONG (TIGHT on, loc by open), wick stop, breakeven@1R +
@@ -89,7 +89,8 @@ def sim_one(bars,s20,s200,idxs,day,sym,mode):
             if s200[i] is None: continue
             prior=bars[max(0,i-30):i]
             if mode in ("sweet","base_simarm"):    # sim arm gate: power bar + close>SMA200 (no TIGHT)
-                ok=(C.bar_signal(bars[i],prior)>0 and bars[i]["close"]>s200[i])
+                ok=(C.bar_signal(bars[i],prior)>0 and bars[i]["close"]>s200[i]
+                    and (not req20 or (s20[i] is not None and bars[i]["close"]>s20[i])))
             else:                                  # baseline: full classifier (TIGHT on + loc-by-open)
                 ok=(C.classify_opening("S",bars[i],prior,s20[i],s200[i]).decision=="MATCH_LONG")
             if ok: arm=i; break
@@ -100,7 +101,7 @@ def sim_one(bars,s20,s200,idxs,day,sym,mode):
     target=round(entry+RR*risk,4) if mode=="sweet" else None
     loc=("above-both" if bars[arm]["close"]>max(s20[arm],s200[arm]) else "above-200/below-20")
     selloff=datetime.combine(day,OPEN_T,ET)+timedelta(minutes=SELLOFF_MIN)
-    tl=[]; in_pos=False; cur=stop; be=False; exitrec=None; ent_dt=None; sesshi=None; prev_low=None
+    tl=[]; in_pos=False; cur=stop; be=False; exitrec=None; ent_dt=None; sesshi=None; prev_low=None; nb=0
     for i in idxs:
         b=bars[i]; t=b["dt"]
         if t.time()>WIN_END: break
@@ -108,16 +109,22 @@ def sim_one(bars,s20,s200,idxs,day,sym,mode):
         if t.time()==bars[arm]["dt"].time():
             ev.append(f"ARMED ${entry:.2f}, stop ${stop:.2f}"+(f", target ${target:.2f} (3R)" if target else " (trail)"))
         if not in_pos and exitrec is None and i>arm and b["high"]>=entry:
-            in_pos=True; ent_dt=t; prev_low=b["low"]; ev.append(f"ENTRY {shares} @ ${entry:.2f}")
+            in_pos=True; ent_dt=t; prev_low=b["low"]; nb=0
+            if mae_stop is not None: cur=max(cur,round(entry*(1-mae_stop/100),4))   # cap the loss tighter than the wick stop
+            ev.append(f"ENTRY {shares} @ ${entry:.2f}")
         if in_pos:
+            nb+=1
             sesshi=b["high"] if sesshi is None else max(sesshi,b["high"])
             if target and b["high"]>=target: exitrec={"time":t.strftime("%H:%M"),"price":target,"reason":"3R target hit","qty":shares};ev.append(f"TARGET exit ${target:.2f}");in_pos=False
             elif b["low"]<=cur: exitrec={"time":t.strftime("%H:%M"),"price":cur,"reason":("breakeven" if be else "protective")+" stop hit","qty":shares};ev.append(f"STOP exit ${cur:.2f}");in_pos=False
             else:
-                if not be and b["high"]>=entry+risk: cur=entry;be=True;ev.append(f"+1R → breakeven ${entry:.2f}")
+                trig=(b["high"]>=entry+be_r*risk) or (be_abs is not None and b["high"]>=entry*(1+be_abs/100))
+                if not be and trig: cur=round(entry*(1+lock_abs/100),4) if lock_abs else entry; be=True; ev.append(f"+BE/lock → ${cur:.2f}")
                 if mode in ("baseline","base_simarm","firstgreen") and be and prev_low is not None and prev_low-OFFSET>cur:
                     cur=round(prev_low-OFFSET,4);ev.append(f"trail stop → ${cur:.2f}")
-                if t>=selloff: exitrec={"time":t.strftime("%H:%M"),"price":round(b["close"],4),"reason":f"{SELLOFF_MIN}-min sell-off","qty":shares};ev.append(f"{SELLOFF_MIN}-MIN SELL-OFF ${b['close']:.2f}");in_pos=False
+                if noprog is not None and not be and nb>=noprog and b["close"]<entry:
+                    exitrec={"time":t.strftime("%H:%M"),"price":round(b["close"],4),"reason":"no-progress exit","qty":shares};ev.append(f"NO-PROGRESS exit ${b['close']:.2f}");in_pos=False
+                elif t>=selloff: exitrec={"time":t.strftime("%H:%M"),"price":round(b["close"],4),"reason":f"{SELLOFF_MIN}-min sell-off","qty":shares};ev.append(f"{SELLOFF_MIN}-MIN SELL-OFF ${b['close']:.2f}");in_pos=False
             prev_low=b["low"]
         tl.append({"t":t.strftime("%H:%M"),"o":b["open"],"h":b["high"],"l":b["low"],"c":b["close"],
                    "sma20":round(s20[i],3) if s20[i] else None,"sma200":round(s200[i],3) if s200[i] else None,
@@ -162,8 +169,9 @@ def compound_summary(days):
             "sweet": _compound_one(days, "sweet"),
             "baseline": _compound_one(days, "baseline")}
 
-def picks_for(syms, days, mode, gmin, gmax, selloff):
-    """Per-day picks for a given config (gap band, sell-off min) — for the 45-min A/B."""
+def picks_for(syms, days, mode, gmin, gmax, selloff, **simkw):
+    """Per-day picks for a given config (gap band, sell-off min) — for the 45-min A/B.
+    simkw is forwarded to sim_one (e.g. req20=True for the above-both loss filter)."""
     global SELLOFF_MIN
     save = SELLOFF_MIN; SELLOFF_MIN = selloff
     out = {}
@@ -178,7 +186,7 @@ def picks_for(syms, days, mode, gmin, gmax, selloff):
             pclose = bars[byday[dates[pos - 1]][-1]]["close"]; o = bars[idxs[0]]["open"]
             gap = (o - pclose) / pclose * 100
             if not (gmin <= gap <= gmax) or o > MAX_PRICE or o < MIN_PRICE: continue
-            r = sim_one(bars, s20, s200, idxs, day, s, mode)
+            r = sim_one(bars, s20, s200, idxs, day, s, mode, **simkw)
             if r and r.get("position_cost"):
                 lst.append({"sym": r["symbol"], "gap_pct": round(gap, 2), "arm_t": r["arm_t"],
                             "ret_pct": round(r["realized_pl"] / r["position_cost"] * 100, 3)})
@@ -253,6 +261,15 @@ def main():
         "base_simarm":compound_from_picks(picks_for(syms,rec,"base_simarm",0.5,4.0,30)),
         "firstgreen":compound_from_picks(picks_for(syms,rec,"firstgreen",0.5,4.0,30)),
         "sweet":compound_from_picks(picks_for(syms,rec,"sweet",0.5,4.0,30))}
+    # loss-minimization filter: new-sim, current vs "above-both" (arm bar must close > 20-SMA too).
+    # The one robust loss-reducer found (removes the sub-20-SMA losers); never hurts, helps full +2.5pts.
+    existing["lossmin"]={
+        "full":{"days":len(fdays),"window":f"{fdays[0]}..{fdays[-1]}",
+                "current":compound_from_picks(picks_for(syms,fdays,"sweet",0.5,4.0,30)),
+                "above_both":compound_from_picks(picks_for(syms,fdays,"sweet",0.5,4.0,30,req20=True))},
+        "recent":{"days":len(rec),"window":f"{rec[0]}..{rec[-1]}",
+                "current":compound_from_picks(picks_for(syms,rec,"sweet",0.5,4.0,30)),
+                "above_both":compound_from_picks(picks_for(syms,rec,"sweet",0.5,4.0,30,req20=True))}}
     json.dump(existing,open(OUT,"w"),indent=2,default=str)
     print(json.dumps({"added_days":[{"day":d["day"],"sweet$":d["sweet"]["totals"]["realized_pl"],
                                      "base$":d["baseline"]["totals"]["realized_pl"]} for d in days_out]},indent=2))

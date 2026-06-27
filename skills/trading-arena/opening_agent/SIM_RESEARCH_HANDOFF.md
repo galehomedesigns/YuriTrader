@@ -106,6 +106,26 @@ the regime-dependence caveat in §4. New-sim's edge is the **3R exit** layered o
 both). Modes in `sim_one`: `base_simarm`, `firstgreen`; JSON blocks `armgate` (full 61d) + `armgate_recent`
 (month). Dashboard: 🚀 Summary (improved arm) shows base_simarm over the month; 🔁/🟢 show the full window.
 
+## 3e. Loss-minimization study (2026-06-27) — exit cuts DON'T work, one filter does
+Exhaustive search for ways to cut the downside (`loss_min.py`, `loss_flags.py`, `loss_regime.py`;
+new-sim, both windows). **Headline: you cannot cut losses without cutting profit more** — winners and
+losers are nearly indistinguishable at entry; the +EV needs the volatile movers to run to 3R.
+- **Loser profile:** ~81% of losers go GREEN (avg +0.66% peak) then round-trip to −0.67%; breakeven
+  never engages because +1R is a ~3% move vs ~0.66% peaks.
+- **Exit cuts tested** (BE@+0.3–1.0% abs, BE@0.33–0.5R, MAE caps 1.5/2%, no-progress 3/5-bar,
+  lock-profit): every one shrinks the loss pool but shrinks the compound MORE. None beat current.
+  "Lock +0.2%" hits 63–69% win but lower compound (scratches would-be winners).
+- **Selection flags** (late arm, gap size, risk width, extension, location): the "obvious" cuts —
+  wide-risk (flagAvg +1.2/+2.1%, win 63–75%), already-extended, big-gap — are the **WINNERS**; cutting
+  them craters compound. Helpers gap<1.5%/risk<1.5% **flip between windows = overfit.**
+- **Day-level regime gate** (skip down-tape days, SPY/QQQ/IWM): **hurts the proxy** (−1.6 to −7.4) —
+  it was a small-cap-funnel fix, not a liquid-proxy lever.
+- **✅ The one robust winner — "above-both" arm filter:** require the arm bar to close **> 20-SMA AND
+  > 200-SMA** (new-sim currently only checks 200). Removes the one consistently-negative subset
+  (sub-20-SMA entries, ~20–24% win). **Full +10.2%→+12.7% (+2.5pts), recent +13.0%→+13.0% (unchanged) —
+  NEVER hurts.** Implemented as `sim_one(req20=True)` (inert by default). Shown in the 🛡 Loss filter
+  tab; **NOT adopted into the baseline** (user chose comparison-tab only).
+
 ## 4. The honest caveat (READ THIS)
 - **Regime-dependent.** Profit concentrates in trending stretches; the *first half* of the window
   was flat-to-negative for **every** config. No gap/stop/target/RVOL knob fixed it.

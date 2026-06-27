@@ -414,6 +414,35 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
       </div>`;
   }
 
+  function renderLossFilter(lm) {
+    if(!lm||!lm.recent){document.getElementById('day').innerHTML='<div class="empty">no loss-filter data — re-run sim_variant_ibkr_days.py</div>';return;}
+    const R=lm.recent, F=lm.full, cur=R.current, ab=R.above_both, CAP=cur.start;
+    const col=(s,refpct,label,klass)=>{
+      const dlt=refpct!=null?s.total_pct-refpct:null;
+      let h=`<div class="apphdr ${klass}">${label}</div>`;
+      h+=`<div class="apptot ${cls(s.end-s.start)}">$${s.start.toFixed(0)} → $${s.end.toFixed(2)} <span class="flat" style="font-size:0.82rem">(${s.total_pct>=0?'+':''}${s.total_pct}% · ${s.curve.length} days${dlt!=null?` · vs current ${refpct>=0?'+':''}${refpct}% → <b class="${cls(dlt)}">${dlt>=0?'+':''}${dlt.toFixed(1)} pts</b>`:''})</span></div>`;
+      h+=s.curve.map(r=>{
+        const picks=(r.picks||[]).map(p=>`<tr><td class="sym">${p.sym}</td><td class="num ${cls(p.gap_pct)}">${p.gap_pct>0?'+':''}${p.gap_pct}%</td><td class="num ${cls(p.ret_pct)}">${p.ret_pct>=0?'+':''}${p.ret_pct}%</td><td class="num ${cls(p.ret_usd)}">${money(p.ret_usd)}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">no picks (cash)</td></tr>';
+        return `<div class="card" style="padding:10px"><div class="funded"><b>${r.day}</b> · slot $${r.slot.toFixed(2)} × ${r.n} · <b class="${cls(r.day_pl)}">${money(r.day_pl)}</b> → $${r.capital.toFixed(2)}</div>
+          <table class="tape"><tr><th>Stock</th><th class="num">Gap</th><th class="num">Ret %</th><th class="num">Ret $</th></tr>${picks}</table></div>`;
+      }).join('');
+      return h;
+    };
+    document.getElementById('day').innerHTML=`
+      <div class="stat-row">
+        <div class="stat"><div class="value ${cls(ab.end-CAP)}">$${ab.end.toFixed(0)}</div><div class="label">Above-both (${ab.total_pct>=0?'+':''}${ab.total_pct}%) · recent</div></div>
+        <div class="stat"><div class="value ${cls(cur.end-CAP)}">$${cur.end.toFixed(0)}</div><div class="label">Current new-sim (${cur.total_pct>=0?'+':''}${cur.total_pct}%) · recent</div></div>
+        <div class="stat"><div class="value ${cls(F.above_both.total_pct-F.current.total_pct)}">${F.current.total_pct}% → ${F.above_both.total_pct}%</div><div class="label">Full ${F.days}d: current → above-both (${(F.above_both.total_pct-F.current.total_pct>=0?'+':'')}${(F.above_both.total_pct-F.current.total_pct).toFixed(1)} pts)</div></div>
+        <div class="stat"><div class="value" style="font-size:0.92rem">loss filter</div><div class="label">arm must close &gt; 20-SMA too</div></div></div>
+      <div class="banner" style="background:rgba(0,200,83,0.08);border:1px solid var(--ok)">
+        <b>The one robust loss-reducer found.</b> New-sim currently arms on <i>close &gt; 200-SMA</i>; this adds <b>and close &gt; 20-SMA</b> (arm bar above BOTH MAs).
+        It drops the single consistently-losing subset — entries below the fast MA (~20–24% win rate). <b>Full window ${F.current.total_pct}% → ${F.above_both.total_pct}% (+${(F.above_both.total_pct-F.current.total_pct).toFixed(1)} pts); recent unchanged (${cur.total_pct}% → ${ab.total_pct}%) — it never hurts.</b>
+        Exit-side cuts (breakeven/MAE/no-progress) and the regime gate were all tested and traded off profit ≥1:1 — only this selection filter helped. Research only; the live baseline is unchanged.</div>
+      <div class="split">
+        <div class="appcol">${col(cur,null,'⚙ CURRENT — close &gt; 200-SMA','base')}</div>
+        <div class="appcol">${col(ab,cur.total_pct,'🛡 ABOVE-BOTH — &gt; 20-SMA & 200-SMA','sweet')}</div></div>`;
+  }
+
   // tabs
   const tabs=document.getElementById('tabs');
   const setActive=el=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');};
@@ -439,6 +468,9 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
   const trg=document.createElement('div');trg.className='tab';trg.textContent='🌊 $15 + regime gate';
   trg.onclick=()=>{setActive(trg);renderScenario(scn,true);};
   tabs.appendChild(trg);
+  const lmt=document.createElement('div');lmt.className='tab';lmt.textContent='🛡 Loss filter';
+  lmt.onclick=()=>{setActive(lmt);renderLossFilter(data.lossmin);};
+  tabs.appendChild(lmt);
   const ag=data.armgate;
   const ta1=document.createElement('div');ta1.className='tab';ta1.textContent='🔁 Baseline + sim arm';
   ta1.onclick=()=>{setActive(ta1);renderArmgate(ag,'base_simarm','BASELINE + sim arm gate','Take the baseline but arm on the sim gate: a power bar closing above the 200-SMA (no TIGHT), so an upward first 2-min bar places the buy.');};
