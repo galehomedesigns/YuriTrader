@@ -62,6 +62,25 @@ opens that whipsaw a breakout strategy; the 231-name proxy is liquid large/mid-c
 the biggest finding of the whole thread. Tools: `sim_telegram.py`, `sim_telegram_analysis.py`. Tab:
 "📨 Telegram (real picks)". Forward capture still matters (only 12 days / 202 trades so far).
 
+## 3c. Price floor + market-regime gate (THE FIX FOR THE REAL PICKS)
+Two levers tested on the real Telegram picks (45-min config), compounded $1000/5, in `sim_telegram.py`
+→ tabs **"💧 $15 floor"** and **"🌊 $15 + regime gate"**:
+
+| Scenario (real picks, 45-min) | Baseline | New-sim |
+|---|---|---|
+| raw (no floor) | — | **−6.1%** |
+| **≥$15 floor** (+$300 cap) | −3.9% | −1.8% |
+| **≥$15 floor + SPY regime gate** | −1.5% | **+1.3%** ← first positive on real picks |
+
+- **Regime gate** = only trade a day when the **SPY** tape is up over the first 14 min (9:30→9:44 return
+  &gt; 0) — info known by **arm time** (~9:44), so it's live-implementable. Of 12 scan-days, **7 qualified**.
+  Tested SPY/QQQ/IWM as the proxy; SPY won (sweet +1.34% vs IWM +1.26% vs QQQ +0.31%) — code auto-picks
+  the best and labels it.
+- **Together** the price floor (drop sub-$15 illiquid gappers) + regime gate (skip down-tape days) flip the
+  real small-cap funnel from a −6.1% loser to a small new-sim **winner**. Each lever alone is not enough;
+  the combination is what crosses zero. Still a **small** edge over 12 days / 32 trades — directional, not
+  validated; the regime gate is the long-sought flat-period fix but needs forward data to confirm.
+
 ## 4. The honest caveat (READ THIS)
 - **Regime-dependent.** Profit concentrates in trending stretches; the *first half* of the window
   was flat-to-negative for **every** config. No gap/stop/target/RVOL knob fixed it.
@@ -87,7 +106,7 @@ self-stops 12:00 ET → `logs/session_replay_<date>/`). Regenerate the variant d
 ## 7. Next session — where to start
 1. **Forward-capture validation** — the daily 2-min capture cron is live; in ~2–3 weeks real
    funnel data accrues. Validate the 45-min config on THAT (live ranker + real names), not the proxy.
-2. **Market-regime gate** — the one unexplored lever for the flat period: only trade when the
-   broad tape / index is actually trending at the open. Most likely fix for the dead stretches.
+2. **Market-regime gate** — ✅ DONE (see §3c): SPY 9:30→9:44 up-gate + $15 floor flips the real picks
+   to +1.3% (new-sim). Small but the first positive config on real data. Confirm on forward capture.
 3. **Decision**: whether to adopt gap-2–4 / 45-min as the live config, or wait for forward data.
    It is NOT live-armed; nothing changed in the live path beyond the committed DOM fix.

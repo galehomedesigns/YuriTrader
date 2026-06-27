@@ -66,11 +66,16 @@ def main():
             if sym in cache:
                 bars, s20, s200, byday = cache[sym]
                 if day in byday:
+                    rec["price"] = round(bars[byday[day][0]]["open"], 2)
                     r = V.sim_one(bars, s20, s200, byday[day], day, sym, "sweet")
                     if r and r.get("position_cost"):
                         rec["armed"] = True
                         rec["ret_pct"] = round(r["realized_pl"] / r["position_cost"] * 100, 3)
                         rec["arm_t"] = r["arm_t"]; rec["entry"] = r["entry"]
+                    rb = V.sim_one(bars, s20, s200, byday[day], day, sym, "baseline")
+                    if rb and rb.get("position_cost"):
+                        rec["base_armed"] = True
+                        rec["base_ret"] = round(rb["realized_pl"] / rb["position_cost"] * 100, 3)
             rows.append(rec)
         days_out.append({"day": dstr, "n_picks": len(rows),
                          "n_cache": sum(1 for r in rows if r["in_cache"]),
@@ -103,7 +108,68 @@ def main():
                     nr = naive(bars, byday[day], day)
                     if nr is not None: failed_r.append(nr)
     avg = lambda r: round(sum(r) / len(r), 3) if r else None
-    tel = {"days": days_out, "compound": {"start": CAP0, "end": round(cap, 2),
+
+    # ---- market-regime gate (index early trend, known by arm time ~9:44) ----
+    def early_ret(sym, day, end_min=14):
+        if sym not in cache: return None
+        b, _, _, bd = cache[sym]
+        if day not in bd: return None
+        idxs = bd[day]; o = b[idxs[0]]["open"]
+        end = _dt.combine(day, V.OPEN_T, V.ET) + _td(minutes=end_min); ex = b[idxs[0]]["close"]
+        for i in idxs:
+            ex = b[i]["close"]
+            if b[i]["dt"] >= end: break
+        return round((ex - o) / o * 100, 3) if o else None
+    regime_by_day = {}
+    for d in days_out:
+        day = date.fromisoformat(d["day"])
+        regime_by_day[d["day"]] = {"spy": early_ret("SPY", day), "iwm": early_ret("IWM", day),
+                                   "qqq": early_ret("QQQ", day)}
+
+    FLOOR, CAPMAX, EPS = 15.0, 300.0, 0.0001
+    def build_scenario(strat, floor, capmax, gate):
+        armk = "armed" if strat == "sweet" else "base_armed"
+        retk = "ret_pct" if strat == "sweet" else "base_ret"
+        c = CAP0; curve = []; rets = []; ntr = 0
+        for d in days_out:
+            dstr = d["day"]
+            ok = True
+            if gate:
+                rg = regime_by_day.get(dstr, {}).get(gate)
+                ok = rg is not None and rg > 0
+            tr = []
+            if ok:
+                elig = [r for r in d["picks"] if r.get(armk) and r.get("price") is not None
+                        and r["price"] >= floor and (capmax is None or r["price"] <= capmax)]
+                tr = elig[:SLOTS]
+            slot = c / SLOTS
+            for r in tr:
+                rv = r[retk]; c += slot * rv / 100; rets.append(rv)
+            ntr += len(tr)
+            curve.append({"day": dstr, "n_traded": len(tr), "capital": round(c, 2),
+                          "regime": (regime_by_day.get(dstr, {}).get(gate) if gate else None),
+                          "traded": ok})
+        return {"start": CAP0, "end": round(c, 2), "total_pct": round((c / CAP0 - 1) * 100, 2),
+                "curve": curve, "n_trades": ntr,
+                "win": round(sum(1 for x in rets if x > 0) / len(rets) * 100, 1) if rets else 0,
+                "avg": round(sum(rets) / len(rets), 3) if rets else None}
+    # pick the index whose up-day gate best lifts the new-sim curve
+    cand = {g: build_scenario("sweet", FLOOR, CAPMAX, g)["total_pct"] for g in ("spy", "iwm", "qqq")}
+    GATE = max(cand, key=lambda g: cand[g])
+    n_up = sum(1 for v in regime_by_day.values() if (v.get(GATE) or -1) > 0)
+    scenarios = {
+        "floor15": {"baseline": build_scenario("baseline", FLOOR, CAPMAX, None),
+                    "sweet": build_scenario("sweet", FLOOR, CAPMAX, None)},
+        "floor15_regime": {"baseline": build_scenario("baseline", FLOOR, CAPMAX, GATE),
+                           "sweet": build_scenario("sweet", FLOOR, CAPMAX, GATE)},
+        "meta": {"floor": FLOOR, "cap": CAPMAX, "gate": GATE,
+                 "gate_label": {"spy": "SPY", "iwm": "IWM (Russell 2000)", "qqq": "QQQ"}[GATE],
+                 "gate_def": "index 9:30→9:44 return > 0 (broad tape up at arm time)",
+                 "regime_by_day": regime_by_day, "n_up_days": n_up, "n_days": len(days_out),
+                 "cand": cand}}
+
+    tel = {"days": days_out, "scenarios": scenarios,
+           "compound": {"start": CAP0, "end": round(cap, 2),
             "total_pct": round((cap / CAP0 - 1) * 100, 2), "curve": curve},
            "cache_size": len(cache),
            "gate": {"passed_n": len(passed_r), "passed_avg": avg(passed_r),

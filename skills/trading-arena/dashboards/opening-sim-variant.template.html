@@ -263,6 +263,37 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
     document.getElementById('day').innerHTML=html;
   }
 
+  function renderScenario(sc, gated) {
+    if(!sc||!sc.floor15){document.getElementById('day').innerHTML='<div class="empty">no scenario data — run sim_telegram.py</div>';return;}
+    const m=sc.meta, base=sc[gated?'floor15_regime':'floor15'].baseline, sweet=sc[gated?'floor15_regime':'floor15'].sweet;
+    const raw=sc.floor15;   // floor-only, for the "regime adds" delta
+    const col=(s,ref,label,klass)=>{
+      let h=`<div class="apphdr ${klass}">${label}</div>`;
+      const dlt=ref!=null?s.total_pct-ref:null;
+      h+=`<div class="apptot ${cls(s.end-s.start)}">$${s.start.toFixed(0)} → $${s.end.toFixed(2)} <span class="flat" style="font-size:0.8rem">(${s.total_pct>=0?'+':''}${s.total_pct}% · ${s.n_trades} trades · ${s.win}% win${dlt!=null?` · vs floor-only ${ref>=0?'+':''}${ref}% → <b class="${cls(dlt)}">${dlt>=0?'+':''}${dlt.toFixed(1)} pts</b>`:''})</span></div>`;
+      h+=s.curve.map(r=>{
+        const skip=gated&&!r.traded;
+        const rg=r.regime!=null?`<span class="${cls(r.regime)}">${r.regime>=0?'+':''}${r.regime}%</span>`:'<span class="flat">—</span>';
+        return `<div class="card" style="padding:8px 12px;${skip?'opacity:0.5':''}">
+          <div class="funded"><b>${r.day}</b> ${gated?`· tape ${rg} ${skip?'<span class="badge badge-muted">SKIP (tape down)</span>':'<span class="badge">trade</span>'}`:''} · ${r.n_traded} traded → capital <b>$${r.capital.toFixed(2)}</b></div></div>`;
+      }).join('');
+      return h;
+    };
+    const head=gated
+      ? `Adds a <b>market-regime gate</b> on top of the $15 floor: only trade a day when the <b>${m.gate_label}</b> tape is <b>up</b> over the first 14 min (9:30→9:44 return &gt; 0) — info known by arm time. ${m.n_up_days} of ${m.n_days} scan-days qualified.`
+      : `The real whole-market Telegram picks, <b>45-min config</b> (3R · 45-min hold · wick stop), filtered to a <b>$15 minimum price</b> (and $${m.cap.toFixed(0)} cap). No regime gate.`;
+    document.getElementById('day').innerHTML=`
+      <div class="stat-row">
+        <div class="stat"><div class="value ${cls(sweet.end-sweet.start)}">$${sweet.end.toFixed(0)}</div><div class="label">New-sim final (${sweet.total_pct>=0?'+':''}${sweet.total_pct}%)</div></div>
+        <div class="stat"><div class="value ${cls(base.end-base.start)}">$${base.end.toFixed(0)}</div><div class="label">Baseline final (${base.total_pct>=0?'+':''}${base.total_pct}%)</div></div>
+        <div class="stat"><div class="value" style="font-size:1rem">≥$${m.floor.toFixed(0)}${gated?' + '+m.gate_label+' gate':''}</div><div class="label">filter</div></div>
+        <div class="stat"><div class="value">${gated?m.n_up_days+'/'+m.n_days:m.n_days}</div><div class="label">${gated?'tape-up days traded':'scan days'}</div></div></div>
+      <div class="note" style="margin-bottom:10px">${head} Compounded $1000/5 first-5-by-arm; both apps on the same real picks.</div>
+      <div class="split">
+        <div class="appcol">${col(base,gated?raw.baseline.total_pct:null,'⚙ BASELINE — ≥$'+m.floor.toFixed(0)+(gated?' + regime':''),'base')}</div>
+        <div class="appcol">${col(sweet,gated?raw.sweet.total_pct:null,'★ NEW SIM — ≥$'+m.floor.toFixed(0)+(gated?' + regime':''),'sweet')}</div></div>`;
+  }
+
   // tabs
   const tabs=document.getElementById('tabs');
   const setActive=el=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');};
@@ -275,6 +306,13 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
   const tg=document.createElement('div');tg.className='tab';tg.textContent='📨 Telegram (real picks)';
   tg.onclick=()=>{setActive(tg);renderTelegram(data.telegram);};
   tabs.appendChild(tg);
+  const scn=data.telegram&&data.telegram.scenarios;
+  const tf=document.createElement('div');tf.className='tab';tf.textContent='💧 $15 floor';
+  tf.onclick=()=>{setActive(tf);renderScenario(scn,false);};
+  tabs.appendChild(tf);
+  const trg=document.createElement('div');trg.className='tab';trg.textContent='🌊 $15 + regime gate';
+  trg.onclick=()=>{setActive(trg);renderScenario(scn,true);};
+  tabs.appendChild(trg);
   data.days.forEach(d=>{const el=document.createElement('div');el.className='tab';
     el.textContent=d.day;el.onclick=()=>{setActive(el);renderDay(d);};tabs.appendChild(el);});
   if(data.compound) renderSummary(data.compound); else if(data.days.length) renderDay(data.days[0]);
