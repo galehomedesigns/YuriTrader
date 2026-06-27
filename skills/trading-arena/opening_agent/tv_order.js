@@ -111,8 +111,10 @@ const PAGE_FN = `async (opts) => {
   }
   // Find a bracket section (e.g. "Stop loss") = the row holding its switch + price.
   function findSection(word) {
-    let cands = Array.from(document.querySelectorAll('*')).filter(e => vis(e) && fuzzyStartsWith(e.innerText, word) && (e.innerText || '').length < 60);
-    cands.sort((a, b) => (a.innerText || '').length - (b.innerText || '').length);
+    // textContent, not innerText (the freshly-rendered ticket drops innerText over CDP).
+    const stx = e => (e.textContent || e.innerText || '');
+    let cands = Array.from(document.querySelectorAll('*')).filter(e => vis(e) && fuzzyStartsWith(stx(e), word) && stx(e).length < 60);
+    cands.sort((a, b) => stx(a).length - stx(b).length);
     let lab = cands[0]; if (!lab) return null;
     let row = lab, h = 0;
     while (row && h < 6) {
@@ -139,19 +141,22 @@ const PAGE_FN = `async (opts) => {
     };
     const candidates = aliases[norm] || [norm];
 
-    for (let attempt = 0; attempt < 3; attempt++) {
+    // textContent (raw DOM text), NOT innerText: Windows Chrome intermittently
+    // returns EMPTY innerText for a freshly-rendered ticket over CDP, while
+    // textContent stays populated; order-type tabs carry no data-name/aria-label.
+    const tx = b => ((b.textContent || b.innerText || '').trim().toLowerCase());
+    for (let attempt = 0; attempt < 6; attempt++) {
       const allBtns = Array.from(document.querySelectorAll('button,[role=button],[role=tab],[data-name*=order-type]'));
       const visBtns = allBtns.filter(b => vis(b));
 
-      // Phase 1: exact match on trimmed lowercase innerText
+      // Phase 1: exact match on trimmed lowercase text
       for (const b of visBtns) {
-        const txt = (b.innerText || '').trim().toLowerCase();
-        if (candidates.includes(txt)) return b;
+        if (candidates.includes(tx(b))) return b;
       }
 
-      // Phase 2: innerText starts with one of our candidates
+      // Phase 2: text starts with one of our candidates
       for (const b of visBtns) {
-        const txt = (b.innerText || '').trim().toLowerCase();
+        const txt = tx(b);
         for (const c of candidates) {
           if (txt.startsWith(c)) return b;
         }
@@ -171,7 +176,7 @@ const PAGE_FN = `async (opts) => {
         }
       }
 
-      if (attempt < 2) await sleep(600);
+      if (attempt < 5) await sleep(600);
     }
     return null;
   }
@@ -305,27 +310,39 @@ const PAGE_FN = `async (opts) => {
   }
   log.push('qty confirmed via qtyEl mirror = ' + String(opts.qty));
 
-  // 5b) attach protective stop-loss (bracket) if requested
+  // 5b) attach protective stop-loss — VERIFIED (switch-anchored). On ANY failure,
+  // NEUTRALIZE the ticket (blank qty) so a stopless entry can never be sent, then
+  // abort. Mirrors tv_order_queue.js's no-naked-long guarantee. See the 2026-06-26
+  // postmortem: the old label-walk finder failed intermittently and left a
+  // sendable stopless ticket on screen.
   if (opts.stop != null) {
-    let sl = findSection('Stop loss');
-    if (!sl) {
-      const findExits = () => Array.from(document.querySelectorAll('*')).filter(e => vis(e) && fuzzyEquals(e.innerText, 'exits') && (e.innerText || '').length < 12)[0];
-      for (let attempt = 0; attempt < 2 && !sl; attempt++) {
-        const hdr = findExits();
-        if (!hdr) break;
-        (hdr.closest('[role=button]') || hdr.parentElement || hdr).click();
-        await sleep(650);
-        sl = findSection('Stop loss');
-        log.push('toggled Exits (attempt ' + (attempt + 1) + '), SL found=' + !!sl);
-      }
+    const stopPx = opts.stop, side = opts.side, entryPx = opts.price;
+    // Pick the SL switch by CLOSEST labeled ancestor (Take-profit shares an outer
+    // container whose text also says "stop loss" — naive matching grabs TP).
+    const slSwitch = () => Array.from(document.querySelectorAll('[role=switch],input[type=checkbox]')).filter(vis)
+      .find(s => { let p=s,h=0; while(p&&h<6){ const t=(p.textContent||'').toLowerCase(); const mSL=t.search(/stop\\s*loss/),mTP=t.search(/take\\s*profit/); if(mSL>=0||mTP>=0) return mSL>=0&&(mTP<0||mSL<mTP); p=p.parentElement; h++; } return false; });
+    let sw = slSwitch();
+    if (!sw) {
+      const ex = Array.from(document.querySelectorAll('*')).filter(e => vis(e) && fuzzyEquals(e.innerText, 'exits') && (e.innerText||'').length < 12)[0];
+      if (ex) { (ex.closest('[role=button]')||ex.parentElement||ex).click(); await sleep(650); sw = slSwitch(); }
     }
-    if (!sl) return { ok: false, chartSymbol, log: [...log, 'STOP-LOSS SECTION NOT FOUND (even after trying to expand Exits)'] };
-    const cb = sl.toggle.querySelector('input[type=checkbox]') || (sl.toggle.tagName === 'INPUT' ? sl.toggle : null);
-    if (!cb) return { ok: false, chartSymbol, log: [...log, 'STOP-LOSS CHECKBOX NOT FOUND'] };
-    if (!cb.checked) { cb.click(); await sleep(400); }
-    if (!cb.checked) return { ok: false, chartSymbol, log: [...log, 'STOP-LOSS TOGGLE would not enable - aborting'] };
-    setInput(sl.price, opts.stop); await sleep(300);
-    log.push('stop-loss -> ' + opts.stop + ' (toggle on=' + cb.checked + ', price=' + sl.price.value + ')');
+    const fail = reason => { try { setInput(qtyInput, '0'); } catch (e) {} return { ok: false, nakedGuard: true, reason, chartSymbol, log: [...log, 'STOP-LOSS ATTACH FAILED (' + reason + ') — ticket NEUTRALIZED (qty->0); entry NOT sendable'] }; };
+    if (!sw) return fail('SL switch not found');
+    if (sw.checked !== true) { sw.click(); await sleep(450); sw = slSwitch(); }
+    if (!sw || sw.checked !== true) return fail('SL toggle would not enable');
+    const decs = Array.from(document.querySelectorAll('input')).filter(e => vis(e) && e.getAttribute('inputmode')==='decimal');
+    const slInput = decs.find(d => (sw.compareDocumentPosition(d) & 4));
+    if (!slInput) return fail('SL price input not found after toggle');
+    setInput(slInput, stopPx); await sleep(350);
+    const rb = parseFloat(String(slInput.value).replace(/,/g, ''));
+    if (!isFinite(rb)) return fail('readback not numeric "' + slInput.value + '"');
+    if (Math.abs(rb - stopPx) / stopPx > 0.01) return fail('readback mismatch got ' + rb + ' want ' + stopPx);
+    if (entryPx != null && isFinite(entryPx)) {
+      if (side === 'buy' && rb >= entryPx) return fail('BUY stop ' + rb + ' not below entry ' + entryPx);
+      if (side === 'sell' && rb <= entryPx) return fail('SELL stop ' + rb + ' not above entry ' + entryPx);
+      if (Math.abs(rb - entryPx) / entryPx > 0.25) return fail('stop ' + rb + ' >25% from entry ' + entryPx + ' (unit/scale error?)');
+    }
+    log.push('stop-loss -> ' + opts.stop + ' (VERIFIED readback=' + rb + ', side=' + side + ' vs entry ' + entryPx + ')');
   }
 
   // 5) read back for verification

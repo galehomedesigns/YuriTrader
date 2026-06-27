@@ -20,6 +20,9 @@ function arg(name, def) { const i = process.argv.indexOf("--" + name); return i 
 const PORT = arg("port", "9225");
 const ORDERS_FILE = arg("orders-file", null);
 const PER_ORDER_TIMEOUT_MS = Number(arg("timeout-ms", "100000"));
+// --dry: run the FULL staging path (incl. stop-loss attach + verification) but
+// NEVER click submit, and neutralize the ticket afterward. For pre-open testing.
+const DRY = process.argv.includes("--dry");
 
 if (!ORDERS_FILE) { console.error("--orders-file required"); process.exit(1); }
 const orders = JSON.parse(fs.readFileSync(ORDERS_FILE, "utf8"));
@@ -28,7 +31,7 @@ if (!Array.isArray(orders) || !orders.length) { console.error("orders file is em
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // DOM routine: switch symbol, fill ticket (+optional stop), open confirmation.
-const STAGE_FN = `async (o) => {
+const STAGE_FN = `async (o, dry) => {
   const log = [];
   // HARD GUARD: never operate on a DATA tab. An orphaned data tab (our nonce in
   // window, tracking file lost) can be mis-picked as the trading tab; staging or
@@ -46,7 +49,47 @@ const STAGE_FN = `async (o) => {
   const fuzzyEquals = (text, target) => { const t=(text||'').trim().toLowerCase(),g=target.toLowerCase(); if(t===g)return true; return t.length>=g.length*0.5&&t.length<=g.length*1.5&&_isSubseq(t,g); };
   function setInput(el, val){ const proto = el.tagName==='TEXTAREA'?HTMLTextAreaElement:HTMLInputElement; const s=Object.getOwnPropertyDescriptor(proto.prototype,'value').set; el.focus(); s.call(el,String(val)); el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); if(el.blur)el.blur(); }
   function labelFor(inp){ let lab=inp.getAttribute('aria-label')||inp.placeholder||''; let n=inp,h=0; while(n&&h<4&&!lab){n=n.parentElement;h++;if(!n)break;const t=Array.from(n.childNodes).filter(c=>c.nodeType===3).map(c=>c.textContent.trim()).filter(Boolean).join(' ');const le=n.querySelector('label,[class*=label],[class*=Label]');lab=((le?(le.innerText||''):'')+' '+t).replace(/\\s+/g,' ').trim();} return lab; }
-  function findSection(word){ let c=Array.from(document.querySelectorAll('*')).filter(e=>vis(e)&&fuzzyStartsWith(e.innerText,word)&&(e.innerText||'').length<60); c.sort((a,b)=>(a.innerText||'').length-(b.innerText||'').length); let lab=c[0]; if(!lab)return null; let row=lab,h=0; while(row&&h<6){const t=row.querySelector('[class*=switchContainer],input[type=checkbox],[role=switch]');const p=Array.from(row.querySelectorAll('input')).find(i=>i.getAttribute('inputmode')==='decimal'); if(t&&p)return{toggle:t,price:p}; row=row.parentElement;h++;} return null; }
+  function findSection(word){ const stx=e=>(e.textContent||e.innerText||''); let c=Array.from(document.querySelectorAll('*')).filter(e=>vis(e)&&fuzzyStartsWith(stx(e),word)&&stx(e).length<60); c.sort((a,b)=>stx(a).length-stx(b).length); let lab=c[0]; if(!lab)return null; let row=lab,h=0; while(row&&h<6){const t=row.querySelector('[class*=switchContainer],input[type=checkbox],[role=switch]');const p=Array.from(row.querySelectorAll('input')).find(i=>i.getAttribute('inputmode')==='decimal'); if(t&&p)return{toggle:t,price:p}; row=row.parentElement;h++;} return null; }
+  // Robust, VERIFIED stop-loss attach. Returns {ok, reason, readback, log:[]}.
+  // Anchors on the SL TOGGLE (a role=switch / checkbox whose ancestor text says
+  // "stop loss") — the old shortest-"Stop loss"-label walk was the bug (TV's DOM
+  // puts the price input in a cousin grid, not an ancestor row). Forces the toggle
+  // ON, locates the SL price input by DOCUMENT ORDER after the switch, types the
+  // ABSOLUTE price, then VERIFIES three ways so a ticks-mode field, a stale value,
+  // or a wrong-side stop can never pass: readback≈want, stop on the correct side
+  // of entry, and within a sane band of entry.
+  async function attachStopLoss(stopPx, side, entryPx){
+    const lg=[];
+    // Pick the SL switch by its CLOSEST labeled ancestor — the Take-profit switch
+    // shares an outer container whose text also contains "stop loss", so a naive
+    // ancestor-contains match grabs TP and silently sets the wrong field. Decide at
+    // the FIRST ancestor that mentions either exit, requiring stop-loss to win.
+    const slSwitch=()=>Array.from(document.querySelectorAll('[role=switch],input[type=checkbox]')).filter(vis)
+      .find(s=>{let p=s,h=0;while(p&&h<6){const t=(p.textContent||'').toLowerCase();const mSL=t.search(/stop\\s*loss/),mTP=t.search(/take\\s*profit/);if(mSL>=0||mTP>=0)return mSL>=0&&(mTP<0||mSL<mTP);p=p.parentElement;h++;}return false;});
+    let sw=slSwitch();
+    if(!sw){ // section may be collapsed — expand "Exits" once, then retry
+      const ex=Array.from(document.querySelectorAll('*')).filter(e=>vis(e)&&fuzzyEquals(e.innerText,'exits')&&(e.innerText||'').length<12)[0];
+      if(ex){ (ex.closest('[role=button]')||ex.parentElement||ex).click(); await sleep(650); sw=slSwitch(); }
+    }
+    if(!sw) return {ok:false,reason:'SL switch not found',log:lg};
+    lg.push('SL switch found (checked='+sw.checked+')');
+    if(sw.checked!==true){ sw.click(); await sleep(450); sw=slSwitch(); }
+    if(!sw||sw.checked!==true) return {ok:false,reason:'SL toggle would not enable',log:lg};
+    const decs=Array.from(document.querySelectorAll('input')).filter(e=>vis(e)&&e.getAttribute('inputmode')==='decimal');
+    const slInput=decs.find(d=>(sw.compareDocumentPosition(d)&4)); // 4 = DOCUMENT_POSITION_FOLLOWING
+    if(!slInput) return {ok:false,reason:'SL price input not found after toggle',log:lg};
+    setInput(slInput,stopPx); await sleep(350);
+    const rb=parseFloat(String(slInput.value).replace(/,/g,''));
+    lg.push('SL input set '+stopPx+' -> readback "'+slInput.value+'"');
+    if(!isFinite(rb)) return {ok:false,reason:'readback not numeric "'+slInput.value+'"',log:lg};
+    if(Math.abs(rb-stopPx)/stopPx>0.01) return {ok:false,reason:'readback mismatch got '+rb+' want '+stopPx,log:lg};
+    if(entryPx!=null&&isFinite(entryPx)){
+      if(side==='buy'&&rb>=entryPx) return {ok:false,reason:'BUY stop '+rb+' not below entry '+entryPx,log:lg};
+      if(side==='sell'&&rb<=entryPx) return {ok:false,reason:'SELL stop '+rb+' not above entry '+entryPx,log:lg};
+      if(Math.abs(rb-entryPx)/entryPx>0.25) return {ok:false,reason:'stop '+rb+' >25% from entry '+entryPx+' (unit/scale error?)',log:lg};
+    }
+    return {ok:true,readback:rb,log:lg};
+  }
 
   // Resilient order-type tab finder with fuzzy matching and retries.
   async function findOrderTypeTab(targetType) {
@@ -58,14 +101,19 @@ const STAGE_FN = `async (o) => {
       'stop limit': ['stop limit', 'stop-limit', 'stop limit order', 'stplmt']
     };
     const candidates = aliases[norm] || [norm];
-    for (let attempt = 0; attempt < 3; attempt++) {
+    // textContent (raw DOM text), NOT innerText: the Windows Chrome intermittently
+    // returns EMPTY innerText for a freshly-rendered ticket over CDP, while
+    // textContent is layout-independent and stays populated. The order-type tabs
+    // carry no data-name/aria-label (verified 2026-06-22), so text is the only key.
+    const tx = b => ((b.textContent || b.innerText || '').trim().toLowerCase());
+    for (let attempt = 0; attempt < 6; attempt++) {
       const allBtns = Array.from(document.querySelectorAll('button,[role=button],[role=tab],[data-name*=order-type]'));
       const visBtns = allBtns.filter(b => vis(b));
-      for (const b of visBtns) { const txt = (b.innerText || '').trim().toLowerCase(); if (candidates.includes(txt)) return b; }
-      for (const b of visBtns) { const txt = (b.innerText || '').trim().toLowerCase(); for (const c of candidates) { if (txt.startsWith(c)) return b; } }
+      for (const b of visBtns) { if (candidates.includes(tx(b))) return b; }
+      for (const b of visBtns) { const t = tx(b); for (const c of candidates) { if (t.startsWith(c)) return b; } }
       for (const b of visBtns) { const dn = (b.getAttribute('data-name') || '').toLowerCase(); if (dn.includes(norm) || dn.includes(norm.replace(' ', '-')) || dn.includes(norm.replace(' ', '_'))) return b; }
       for (const b of visBtns) { const al = (b.getAttribute('aria-label') || '').toLowerCase(); for (const c of candidates) { if (al.includes(c)) return b; } }
-      if (attempt < 2) await sleep(600);
+      if (attempt < 5) await sleep(600);
     }
     return null;
   }
@@ -213,17 +261,24 @@ const STAGE_FN = `async (o) => {
   }
   log.push('qty -> '+o.qty+' (confirmed)');
 
-  // 5b) attach protective stop-loss (expand Exits if needed; click inner checkbox)
+  // 5b) attach protective stop-loss — VERIFIED. On ANY failure, NEUTRALIZE the
+  // ticket (blank the qty so the entry is not sendable) and abort. This is the
+  // no-naked-long guarantee: a stopless entry can never be left on screen to send.
   if(o.stop!=null){
-    let sl=findSection('Stop loss');
-    if(!sl){ const fe=()=>Array.from(document.querySelectorAll('*')).filter(e=>vis(e)&&fuzzyEquals(e.innerText,'exits')&&(e.innerText||'').length<12)[0]; for(let a=0;a<2&&!sl;a++){const hdr=fe(); if(!hdr)break; (hdr.closest('[role=button]')||hdr.parentElement||hdr).click(); await sleep(650); sl=findSection('Stop loss');} }
-    if(!sl) return {ok:false,chartSymbol,log:[...log,'STOP-LOSS SECTION NOT FOUND']};
-    const cb=sl.toggle.querySelector('input[type=checkbox]')||(sl.toggle.tagName==='INPUT'?sl.toggle:null);
-    if(!cb) return {ok:false,chartSymbol,log:[...log,'STOP-LOSS CHECKBOX NOT FOUND']};
-    if(!cb.checked){cb.click(); await sleep(400);}
-    if(!cb.checked) return {ok:false,chartSymbol,log:[...log,'STOP-LOSS TOGGLE would not enable']};
-    setInput(sl.price,o.stop); await sleep(300);
-    log.push('stop-loss -> '+o.stop+' (on='+cb.checked+')');
+    const sl=await attachStopLoss(o.stop,o.side,oprice);
+    sl.log.forEach(l=>log.push(l));
+    if(!sl.ok){
+      try{ setInput(qEl,'0'); }catch(e){}
+      return {ok:false,nakedGuard:true,reason:sl.reason,chartSymbol,log:[...log,'STOP-LOSS ATTACH FAILED ('+sl.reason+') — ticket NEUTRALIZED (qty->0); entry NOT sendable']};
+    }
+    log.push('stop-loss -> '+o.stop+' (VERIFIED readback='+sl.readback+', side='+o.side+' vs entry '+oprice+')');
+  }
+
+  // DRY-RUN: full path exercised (incl. verified stop-loss) but NEVER submit.
+  // Neutralize the ticket so nothing is left sendable, then report success.
+  if(dry){
+    try{ setInput(qEl,'0'); }catch(e){}
+    return {ok:true,dry:true,chartSymbol,summary:(o.side||'')+' '+o.qty+' '+o.symbol+' @ '+oprice+(o.stop!=null?(' SL '+o.stop):'')+' [verified, not sent]',log:[...log,'DRY-RUN: stop verified, ticket neutralized, NOT submitted']};
   }
 
   // 6) submit -> open confirmation (resilient button finder + rejection detection)
@@ -303,16 +358,48 @@ const READ_POSITIONS_FN = `(async()=>{
 
   const results = [];
   const NO_DIALOG_FALLBACK_MS = 12000;
+  // Real-time backup: if CDP staging can't fill the ticket (cold-DOM miss / TV
+  // change), don't lose the trade silently — Telegram the EXACT manual order so
+  // the operator can place it by hand in seconds.
+  const manualMsg = o =>
+      o.action === 'modify-stop' ? `⚠️ STOP-MOVE failed to stage — move ${o.symbol} stop to ${o.price} BY HAND now.`
+    : o.action === 'modify-tp'   ? `⚠️ TAKE-PROFIT failed to stage — set ${o.symbol} TP limit ${o.take_profit} BY HAND now.`
+    : (o.type === 'close' || o.marketable) ? `⚠️ CLOSE failed to stage — SELL ${o.qty} ${o.symbol} at MARKET BY HAND now.`
+    : `⚠️ STAGE FAILED — place BY HAND now: ${(o.side||'buy').toUpperCase()} ${o.qty} ${o.symbol} ${(o.type||'stop').toUpperCase()} @ ${o.price}${o.stop != null ? `, STOP-LOSS ${o.stop}` : ''}.`;
+  async function tg(text) {
+    const tok = process.env.TELEGRAM_STOCK_BOT_TOKEN, chat = process.env.TELEGRAM_CHAT_ID || "6545739863";
+    if (!tok) { console.log("   (no TELEGRAM_STOCK_BOT_TOKEN — manual alert not sent)"); return; }
+    try { await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ chat_id: chat, text }) }); }
+    catch (e) { console.log("   (manual alert send failed: " + e.message + ")"); }
+  }
   for (let i = 0; i < orders.length; i++) {
     const o = orders[i];
     const desc = o.action === 'modify-stop' ? `modify ${o.symbol} stop -> ${o.price}`
       : o.action === 'modify-tp' ? `modify ${o.symbol} take-profit -> ${o.take_profit}`
       : `${o.side} ${o.qty} ${o.symbol} ${o.type} @ ${o.price}${o.stop != null ? ' (SL ' + o.stop + ')' : ''}`;
-    console.log(`\n=== [${i + 1}/${orders.length}] staging ${desc} ===`);
-    const staged = await evalJs(`(${STAGE_FN})(${JSON.stringify(o)})`, true);
+    console.log(`\n=== [${i + 1}/${orders.length}] staging ${desc}${DRY ? ' [DRY]' : ''} ===`);
+    let staged = await evalJs(`(${STAGE_FN})(${JSON.stringify(o)}, ${DRY})`, true);
     staged.log.forEach(l => console.log("   " + l));
-    if (staged.rejection) { console.log("   !! broker REJECTED - skipping"); results.push({ ...o, staged: false, rejected: staged.rejection }); continue; }
-    if (!staged.submitted) { console.log("   !! could not fill ticket - skipping to next"); results.push({ ...o, staged: false }); continue; }
+    if (DRY) {
+      const okv = staged.ok === true;
+      console.log(`   [DRY] ${okv ? 'PASS — stop verified & ticket neutralized' : 'FAIL — ' + (staged.reason || 'see log above')}`);
+      results.push({ ...o, dry: true, ok: okv, reason: staged.reason || null });
+      continue;
+    }
+    if (staged.rejection) { console.log("   !! broker REJECTED - skipping"); await tg(`⛔ ${o.symbol} broker REJECTED: ${staged.rejection}. Review by hand.`); results.push({ ...o, staged: false, rejected: staged.rejection }); continue; }
+    if (!staged.submitted) {
+      console.log("   .. stage failed — re-warming and retrying once");
+      await sleep(800);
+      const retry = await evalJs(`(${STAGE_FN})(${JSON.stringify(o)})`, true);
+      retry.log.forEach(l => console.log("   [retry] " + l));
+      if (retry.submitted) { staged = retry; }
+      else {
+        console.log("   !! could not fill ticket after retry — sending manual-fallback alert");
+        await tg(manualMsg(o));
+        results.push({ ...o, staged: false, fallbackAlerted: true });
+        continue;
+      }
+    }
     console.log(`   >> CONFIRM ON SCREEN${staged.ok ? '' : ' (dialog not auto-detected)'}: ${staged.summary || desc}  (click Send Order, or Cancel to skip)`);
 
     const start = Date.now();
@@ -357,6 +444,11 @@ const READ_POSITIONS_FN = `(async()=>{
   }
 
   sock.close();
+  if (DRY) {
+    const pass = results.filter(r => r.ok).length;
+    console.log(`\nDRY-RUN done: ${pass}/${orders.length} verified (stop attached + neutralized, nothing sent)`);
+    results.filter(r => !r.ok).forEach(r => console.log(`   FAIL ${r.symbol}: ${r.reason || 'see log'}`));
+  } else
   console.log(`\nqueue done: staged ${results.filter(r => r.staged).length}/${orders.length}`
     + (reconcile ? `, closes flattened ${reconcile.flattened}/${reconcile.total} (per positions)` : ""));
   process.exit(0);
