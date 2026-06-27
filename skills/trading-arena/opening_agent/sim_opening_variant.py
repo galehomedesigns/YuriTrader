@@ -157,7 +157,7 @@ def simulate(full, sym, tv, day, mode="sweet"):
             else:
                 if not be_done and b["high"] >= entry + risk:
                     cur_stop = entry; be_done = True; ev.append(f"+1R → breakeven ${entry:.2f}")
-                if mode == "baseline" and be_done and prev_low is not None and round(prev_low - OFFSET, 4) > cur_stop:
+                if mode in ("baseline", "base_simarm") and be_done and prev_low is not None and round(prev_low - OFFSET, 4) > cur_stop:
                     cur_stop = round(prev_low - OFFSET, 4); ev.append(f"trail stop → ${cur_stop:.2f}")
                 if dt >= selloff_dt:
                     exit_rec = {"time": dt.strftime("%H:%M"), "price": round(b["close"], 4),
@@ -204,14 +204,14 @@ def main():
     for dstr, snap_dir in sorted(discover_days().items(), reverse=True):
         day = date.fromisoformat(dstr)
         full_by = stitch(snap_dir)
-        sweet = []; base = []
+        sweet = []; base = []; simarm = []
         for tv, full in sorted(full_by.items()):
             if not full: continue
             sym = tv.split(":")[-1]
             pclose, topen, gap = premarket_gap(full, day)
             if gap is None or not (GAP_MIN <= gap <= GAP_MAX): continue
             if topen and topen > MAX_PRICE: continue       # remove high-priced stocks
-            for mode, bucket in (("sweet", sweet), ("baseline", base)):
+            for mode, bucket in (("sweet", sweet), ("baseline", base), ("base_simarm", simarm)):
                 r = simulate(full, sym, tv, day, mode)
                 if r.get("armed") and r.get("exit"):
                     r["premarket_gap_pct"] = round(gap, 2)
@@ -219,7 +219,7 @@ def main():
                     r["today_open"] = round(topen, 2) if topen else None
                     bucket.append(r)
         days_out.append({"day": dstr, "source": "TradingView 2-min (live capture)",
-                         "sweet": panel(sweet), "baseline": panel(base)})
+                         "sweet": panel(sweet), "baseline": panel(base), "base_simarm": panel(simarm)})
     summary = {
         "generated_at": datetime.now(ET).isoformat(),
         "window": "09:30–10:20 ET",

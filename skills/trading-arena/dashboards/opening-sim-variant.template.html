@@ -170,14 +170,18 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
   }
 
   function renderDay(d) {
-    const s=d.sweet.totals, b=d.baseline.totals;
+    // Baseline column represents the IMPROVED arm gate (sim arm: power bar + >200-SMA), falling
+    // back to the as-is TIGHT baseline only if the improved panel isn't present for that day.
+    const improved=!!d.base_simarm, bpan=d.base_simarm||d.baseline;
+    const s=d.sweet.totals, b=bpan.totals;
+    const blabel=improved?'Baseline + sim arm':'Baseline';
     let html=`<div class="stat-row">
       <div class="stat"><div class="value ${cls(s.realized_pl)}">${money(s.realized_pl)}</div><div class="label">New-sim P&L (${s.avg_pct>=0?'+':''}${s.avg_pct}%/trade)</div></div>
-      <div class="stat"><div class="value ${cls(b.realized_pl)}">${money(b.realized_pl)}</div><div class="label">Baseline P&L (${b.avg_pct>=0?'+':''}${b.avg_pct}%/trade)</div></div>
-      <div class="stat"><div class="value">${s.names} / ${b.names}</div><div class="label">trades: new-sim / baseline</div></div>
+      <div class="stat"><div class="value ${cls(b.realized_pl)}">${money(b.realized_pl)}</div><div class="label">${blabel} P&L (${b.avg_pct>=0?'+':''}${b.avg_pct}%/trade)</div></div>
+      <div class="stat"><div class="value">${s.names} / ${b.names}</div><div class="label">trades: new-sim / ${improved?'sim-arm':'baseline'}</div></div>
       <div class="stat"><div class="value" style="font-size:0.92rem">${esc(d.source||'')}</div><div class="label">${d.day} · data source · ≤$300 only</div></div></div>`;
     html+=`<div class="split">
-      <div class="appcol"><div class="apphdr base">⚙ BASELINE — live rules (TIGHT on · loc by open · wick stop · push-trail · 30-min)</div>${panelBody(d.baseline)}</div>
+      <div class="appcol"><div class="apphdr base">⚙ ${improved?'BASELINE + SIM ARM — power bar + close&gt;200-SMA (no TIGHT) · wick stop · push-trail · 30-min':'BASELINE — live rules (TIGHT on · loc by open · wick stop · push-trail · 30-min)'}</div>${panelBody(bpan)}</div>
       <div class="appcol"><div class="apphdr sweet">★ NEW SIM — sweet-spot (TIGHT off · loc by close · wick stop · 3R target · 30-min)</div>${panelBody(d.sweet)}</div>
     </div>`;
     document.getElementById('day').innerHTML=html;

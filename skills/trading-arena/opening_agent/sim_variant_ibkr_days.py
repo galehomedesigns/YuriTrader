@@ -206,7 +206,7 @@ def main():
     last=all_days[-N_DAYS:]
     days_out=[]
     for di_day in last:
-        sweet=[]; base=[]
+        sweet=[]; base=[]; simarm=[]
         for s,(bars,s20,s200,byday) in syms.items():
             if di_day not in byday: continue
             dates=sorted(byday); pos=dates.index(di_day)
@@ -217,13 +217,13 @@ def main():
             gap=(o-pclose)/pclose*100
             if not (GAP_MIN<=gap<=GAP_MAX): continue
             if o>MAX_PRICE: continue                       # remove high-priced stocks (>$300)
-            for mode,bucket in (("sweet",sweet),("baseline",base)):
+            for mode,bucket in (("sweet",sweet),("baseline",base),("base_simarm",simarm)):
                 r=sim_one(bars,s20,s200,idxs,di_day,s,mode)
                 if r:
                     r["premarket_gap_pct"]=round(gap,2); r["prev_close"]=round(pclose,2); r["today_open"]=round(o,2)
                     bucket.append(r)
         days_out.append({"day":di_day.isoformat(),"source":"IBKR 2-min (broad 231-name cache)",
-                         "sweet":panel(sweet),"baseline":panel(base)})
+                         "sweet":panel(sweet),"baseline":panel(base),"base_simarm":panel(simarm)})
     # merge with existing (TV 6/26) day
     existing=json.load(open(OUT))
     tv_days=[d for d in existing["days"] if d["day"] not in {x["day"] for x in days_out}]
