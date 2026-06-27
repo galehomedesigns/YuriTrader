@@ -351,10 +351,76 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
         <div class="appcol">${col(sweet,'★ NEW SIM — compounded','sweet',null)}</div></div>`;
   }
 
+  function renderStrategy() {
+    const c=data.compound||{}, bp=c.baseline?c.baseline.total_pct:null, sp=c.sweet?c.sweet.total_pct:null;
+    const armB='<span class="badge" style="background:var(--accent);color:#0d1117;font-weight:700">🎯 ARM GATE</span>';
+    const li=a=>`<ul style="margin:0;padding-left:18px;line-height:1.75">${a.map(x=>'<li>'+x+'</li>').join('')}</ul>`;
+    const common=[
+      '<b>Direction:</b> long only · US equities',
+      '<b>Price filter:</b> $5.00 ≤ open ≤ $300.00 (matches the live scanner floor)',
+      '<b>Pre-market gap:</b> +0.5% to +4.0% (today\'s open vs prior close)',
+      '<b>Bars:</b> 2-minute candles',
+      '<b>Arm window:</b> re-check each new 2-min bar from 9:30 → 9:44 ET; arm the FIRST that qualifies',
+      '<b>Entry order:</b> buy-stop (breakout) at the ARM bar\'s <b>high + $0.01</b>',
+      '<b>Stop order:</b> wick stop at the ARM bar\'s <b>low − $0.01</b> (= initial risk = 1R)',
+      '<b>Breakeven:</b> move stop up to entry once price reaches <b>+1R</b> (entry + risk)',
+      '<b>Time-stop:</b> flatten at <b>10:00 ET</b> (30 min after the open)',
+      '<b>Sizing:</b> $200 per slot → shares = floor(slot ÷ entry), min 1',
+      '<b>Compounding:</b> $1,000 start · 5 equal slots (capital ÷ 5) · first 5 names to arm each day · unused slots in cash · daily compound',
+    ];
+    const baseArm=[
+      'Classifier <b>MATCH_LONG</b> — requires the <b>coil / TIGHT state ON</b>',
+      'Plus a bullish <b>power bar</b>',
+      '<b>Location judged by OPEN</b> (also weighs the 20-SMA)',
+    ];
+    const baseExit=[
+      '<b>Upside: PUSH-TRAIL</b> — after +1R, ratchet the stop up to the prior bar\'s low',
+      '<b>No fixed profit target</b> (rides the trend; a pullback ends it)',
+      'Breakeven + 10:00 time-stop (as common)',
+    ];
+    const simArm=[
+      'A bullish <b>power bar that CLOSES above the 200-SMA</b>',
+      '<b>TIGHT / coil gate OFF</b> ← the key difference',
+      '<b>Location judged by CLOSE</b> (close &gt; 200-SMA); 20-SMA ignored',
+    ];
+    const simExit=[
+      '<b>Upside: fixed 3R target</b> (entry + 3 × risk) — take profit',
+      '<b>No trailing</b>',
+      'Breakeven + 10:00 time-stop (as common)',
+    ];
+    document.getElementById('day').innerHTML=`
+      <div class="stat-row">
+        <div class="stat"><div class="value">📋</div><div class="label">Opening-Power · rule sheet</div></div>
+        <div class="stat"><div class="value ${cls(sp)}">${sp!=null?(sp>=0?'+':'')+sp+'%':'—'}</div><div class="label">New-sim compound (recent month)</div></div>
+        <div class="stat"><div class="value ${cls(bp)}">${bp!=null?(bp>=0?'+':'')+bp+'%':'—'}</div><div class="label">Baseline compound (recent month)</div></div>
+        <div class="stat"><div class="value" style="font-size:0.9rem">research · signal-only</div><div class="label">NOT live-armed</div></div></div>
+      <div class="banner" style="background:rgba(124,138,255,0.10);border:1px solid var(--accent)">
+        ${armB} <b>What "ARM" means:</b> the first 2-min bar (9:30–9:44 ET) that passes the gate <b>arms</b> the setup — it fixes the
+        <b>entry</b> (that bar's high + $0.01) and the <b>stop</b> (that bar's low − $0.01). No qualifying bar → no trade that day.
+        The two strategies differ <b>only</b> in the ARM GATE, the location test, and the upside exit — everything else is shared.</div>
+      <div class="card" style="border:1px solid var(--border)">
+        <div class="funded" style="margin-bottom:6px"><b>⚖ COMMON TO BOTH STRATEGIES</b></div>${li(common)}</div>
+      <div class="split">
+        <div class="appcol">
+          <div class="apphdr base">⚙ BASELINE — live / armed rules</div>
+          <div class="card" style="border:1px solid var(--accent)"><div class="funded" style="margin-bottom:6px">${armB}</div>${li(baseArm)}</div>
+          <div class="card"><div class="funded" style="margin-bottom:6px"><b>Exits</b></div>${li(baseExit)}</div>
+        </div>
+        <div class="appcol">
+          <div class="apphdr sweet">★ NEW SIM — sweet-spot (research)</div>
+          <div class="card" style="border:1px solid var(--accent)"><div class="funded" style="margin-bottom:6px">${armB}</div>${li(simArm)}</div>
+          <div class="card"><div class="funded" style="margin-bottom:6px"><b>Exits</b></div>${li(simExit)}</div>
+        </div>
+      </div>`;
+  }
+
   // tabs
   const tabs=document.getElementById('tabs');
   const setActive=el=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');};
-  const sumTab=document.createElement('div');sumTab.className='tab active';sumTab.textContent='📈 Summary (compounded)';
+  const stratTab=document.createElement('div');stratTab.className='tab active';stratTab.textContent='📋 Trading Strategy';
+  stratTab.onclick=()=>{setActive(stratTab);renderStrategy();};
+  tabs.appendChild(stratTab);
+  const sumTab=document.createElement('div');sumTab.className='tab';sumTab.textContent='📈 Summary (compounded)';
   sumTab.onclick=()=>{setActive(sumTab);renderSummary(data.compound);};
   tabs.appendChild(sumTab);
   const sumI=document.createElement('div');sumI.className='tab';sumI.textContent='🚀 Summary (improved arm)';
@@ -382,7 +448,7 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
   tabs.appendChild(ta2);
   data.days.forEach(d=>{const el=document.createElement('div');el.className='tab';
     el.textContent=d.day;el.onclick=()=>{setActive(el);renderDay(d);};tabs.appendChild(el);});
-  if(data.compound) renderSummary(data.compound); else if(data.days.length) renderDay(data.days[0]);
+  renderStrategy();
 })();
 </script>
 </body>
