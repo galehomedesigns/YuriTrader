@@ -31,6 +31,7 @@ GAP_MIN, GAP_MAX = 0.5, 4.0    # SWEET SPOT: modest gaps, cap the big gappers
 SLOT = 200.0; OFFSET = C.DEFAULTS["trade_offset"]
 N_DAYS = 22; TOP_PER_DAY = 8     # ~one month of trading days (+ the 6/26 TV day)
 MAX_PRICE = 300.0              # remove high-priced stocks (>$300) from the dashboard
+MIN_PRICE = 5.0                # match the LIVE scanner floor (OPENING_MIN_PRICE default $5)
 
 def panel(rows):
     """Build a {totals, rows, picks} panel: totals over ALL rows, charts for the top-N
@@ -176,7 +177,7 @@ def picks_for(syms, days, mode, gmin, gmax, selloff):
             if len(idxs) < 12: continue
             pclose = bars[byday[dates[pos - 1]][-1]]["close"]; o = bars[idxs[0]]["open"]
             gap = (o - pclose) / pclose * 100
-            if not (gmin <= gap <= gmax) or o > MAX_PRICE: continue
+            if not (gmin <= gap <= gmax) or o > MAX_PRICE or o < MIN_PRICE: continue
             r = sim_one(bars, s20, s200, idxs, day, s, mode)
             if r and r.get("position_cost"):
                 lst.append({"sym": r["symbol"], "gap_pct": round(gap, 2), "arm_t": r["arm_t"],
@@ -216,7 +217,7 @@ def main():
             pclose=bars[byday[dates[pos-1]][-1]]["close"]; o=bars[idxs[0]]["open"]
             gap=(o-pclose)/pclose*100
             if not (GAP_MIN<=gap<=GAP_MAX): continue
-            if o>MAX_PRICE: continue                       # remove high-priced stocks (>$300)
+            if o>MAX_PRICE or o<MIN_PRICE: continue        # match live: $5–$300 only
             for mode,bucket in (("sweet",sweet),("baseline",base),("base_simarm",simarm)):
                 r=sim_one(bars,s20,s200,idxs,di_day,s,mode)
                 if r:

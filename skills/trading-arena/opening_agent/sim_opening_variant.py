@@ -185,6 +185,7 @@ def simulate(full, sym, tv, day, mode="sweet"):
             "session_high": round(sess_high, 4) if sess_high else None, "timeline": tl}
 
 MAX_PRICE = 300.0    # remove high-priced stocks (>$300) from the dashboard
+MIN_PRICE = 5.0      # match the LIVE scanner floor (OPENING_MIN_PRICE default $5)
 TOP_PER_DAY = 8
 
 def panel(rows):
@@ -210,7 +211,7 @@ def main():
             sym = tv.split(":")[-1]
             pclose, topen, gap = premarket_gap(full, day)
             if gap is None or not (GAP_MIN <= gap <= GAP_MAX): continue
-            if topen and topen > MAX_PRICE: continue       # remove high-priced stocks
+            if topen and (topen > MAX_PRICE or topen < MIN_PRICE): continue   # match live: $5–$300 only
             for mode, bucket in (("sweet", sweet), ("baseline", base), ("base_simarm", simarm)):
                 r = simulate(full, sym, tv, day, mode)
                 if r.get("armed") and r.get("exit"):

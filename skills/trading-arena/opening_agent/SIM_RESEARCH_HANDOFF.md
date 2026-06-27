@@ -85,12 +85,17 @@ Two levers tested on the real Telegram picks (45-min config), compounded $1000/5
 Keep the **baseline exit** (push-trail, no target) and change ONLY the arm gate, current config
 (gap 0.5–4 / 30-min), 61-day proxy window, compounded $1000/5:
 
-| Arm gate (baseline push-trail exit) | **Recent month** (5/22–6/24) | Full 61d (3/24–6/18) |
+PRICE FLOOR: the proxy backtest now applies the **live $5 floor** ($5–$300, matches `OPENING_MIN_PRICE`
+default) — `MIN_PRICE` in both `sim_variant_ibkr_days.py` and `sim_opening_variant.py`. Removing the 17
+sub-$5 penny names (CAN $0.34, WKSP, AMC…) lifted the sim variants (they were net drags). The $15 floor
+in §3c is **research-only on the real Telegram picks — NOT adopted; live stays $5.**
+
+| Arm gate (baseline push-trail exit, $5–$300) | **Recent month** (5/22–6/24) | Full 61d (3/24–6/18) |
 |---|---|---|
-| baseline TIGHT arm (as-is) | +8.0% | +2.9% |
-| **sim arm** (power bar + close>SMA200, no TIGHT) | **+9.7%** | **+6.5%** |
-| first green bar (arm only if 09:30 closes up, any size) | +4.0% ⚠ | +7.4% |
-| *new-sim (sim arm + 3R target exit), reference* | +11.4% | +8.2% |
+| baseline TIGHT arm (as-is) | +6.5% | +4.3% |
+| **sim arm** (power bar + close>SMA200, no TIGHT) | **+10.8%** | **+7.7%** |
+| first green bar (arm only if 09:30 closes up, any size) | +2.8% ⚠ | +8.5% |
+| *new-sim (sim arm + 3R target exit), reference* | +13.0% | +10.2% |
 
 **Two windows tell different stories — robustness matters.** The **sim arm gate** (power bar + >200-SMA)
 beats baseline in BOTH windows (+1.7 / +3.6 pts) — the durable arm-gate improvement. The **"first green
