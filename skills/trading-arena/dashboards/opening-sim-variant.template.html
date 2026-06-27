@@ -235,18 +235,19 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
 
   function renderTelegram(t) {
     if(!t){document.getElementById('day').innerHTML='<div class="empty">no Telegram data — run sim_telegram.py</div>';return;}
-    const T=t.totals, c=t.compound, covpct=T.total_picks?(T.armed_replayed/T.total_picks*100):0;
+    const T=t.totals, c=t.compound, g=t.gate||{}, covpct=T.total_picks?(T.in_cache/T.total_picks*100):0;
     let html=`<div class="stat-row">
       <div class="stat"><div class="value">${T.scan_days}</div><div class="label">Whole-market scan days (Telegram)</div></div>
-      <div class="stat"><div class="value">${T.total_picks}</div><div class="label">Real funnel picks posted</div></div>
-      <div class="stat"><div class="value">${T.armed_replayed} <span class="flat" style="font-size:0.8rem">/ ${T.total_picks}</span></div><div class="label">Replayable (have bars) · ${covpct.toFixed(0)}% coverage</div></div>
-      <div class="stat"><div class="value ${cls(c.end-c.start)}">$${c.end.toFixed(0)}</div><div class="label">Compounded over replayable (${c.total_pct>=0?'+':''}${c.total_pct}%)</div></div></div>
+      <div class="stat"><div class="value">${T.total_picks} <span class="flat" style="font-size:0.8rem">· ${T.in_cache} w/ bars</span></div><div class="label">Real funnel picks · ${covpct.toFixed(0)}% now have bars</div></div>
+      <div class="stat"><div class="value">${T.armed_replayed}</div><div class="label">Passed the 2-min test (armed) · ${g.passed_win!=null?g.passed_win+'% win':''}</div></div>
+      <div class="stat"><div class="value ${cls(c.end-c.start)}">$${c.end.toFixed(0)}</div><div class="label">Compounded over real picks (${c.total_pct>=0?'+':''}${c.total_pct}%)</div></div></div>
       <div class="banner" style="background:rgba(255,23,68,0.1);border-color:var(--fail)">
-        <b>The honest reality check.</b> These are the <b>real whole-market picks</b> the live scan posted to Telegram —
-        but only <b>${covpct.toFixed(0)}%</b> are replayable (we have 2-min bars for them in the 231-name cache; the rest are
-        small-caps like BMNR/KEEL/HIMS/BTQ we never captured). The replayable slice nets <b class="${cls(c.total_pct)}">${c.total_pct>=0?'+':''}${c.total_pct}%</b>
-        — i.e. the proxy's +17.6% does <b>not</b> transfer here. ✓ = in cache. 6/25–6/26 show 0 (IBKR cache ends 6/24).
-        Forward capture is the only fix.</div>`;
+        <b>The real whole-market result (bars now pulled from IBKR).</b> ${covpct.toFixed(0)}% of the ${T.total_picks} actual Telegram
+        picks are now replayable. Compounded $1000/5 over the real picks: <b class="${cls(c.total_pct)}">$${c.end.toFixed(0)} (${c.total_pct>=0?'+':''}${c.total_pct}%)</b>
+        over ${T.scan_days} days — the strategy <b>loses</b> on the real small-cap funnel, vs the 231-large-cap proxy's +17.6% (the proxy badly overstated).
+        <b>But the 2-minute gate is strongly validated:</b> picks that passed it averaged <b class="${cls(g.passed_avg)}">${g.passed_avg}%</b>/trade
+        vs <b class="${cls(g.failed_avg)}">${g.failed_avg}%</b> for the ones that failed (traded anyway) — the gate avoids the disasters,
+        but even gated, the small-cap gappers bleed. ✓ = bars available.</div>`;
     html += t.days.map(d=>{
       const picks=d.picks.slice(0,15).map(p=>{
         const trade = p.armed ? `<span class="${cls(p.ret_pct)}">${p.ret_pct>=0?'+':''}${p.ret_pct}% @ ${p.arm_t||''}</span>`

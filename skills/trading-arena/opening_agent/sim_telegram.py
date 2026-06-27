@@ -47,11 +47,14 @@ def parse_log():
 
 def main():
     by_day = parse_log()
-    # load IBKR cache once
+    # load bars: broad cache first, then the fresh telegram_cache (full pull of the
+    # actual Telegram picks through 6/26) overrides/extends it.
+    TGCACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs", "telegram_cache")
     cache = {}
-    for p in glob.glob(os.path.join(V.CACHE, "*.json")):
-        try: cache[os.path.basename(p)[:-5]] = V.load(p)
-        except Exception: pass
+    for cdir in (V.CACHE, TGCACHE):
+        for p in glob.glob(os.path.join(cdir, "*.json")):
+            try: cache[os.path.basename(p)[:-5]] = V.load(p)
+            except Exception: pass
     days_out = []
     for dstr, picks in sorted(by_day.items()):
         day = date.fromisoformat(dstr)
@@ -80,9 +83,32 @@ def main():
         slot = cap / SLOTS
         for r in tr: cap += slot * r["ret_pct"] / 100
         curve.append({"day": d["day"], "n_traded": len(tr), "capital": round(cap, 2)})
+    # gate-value: passed-the-2-min (armed, gated) vs failed-but-traded-anyway (buy open, 45-min)
+    from datetime import datetime as _dt, timedelta as _td
+    def naive(bars, idxs, day):
+        if not idxs: return None
+        entry = bars[idxs[0]]["open"]; so = _dt.combine(day, V.OPEN_T, V.ET) + _td(minutes=45); ex = bars[idxs[0]]["close"]
+        for i in idxs:
+            ex = bars[i]["close"]
+            if bars[i]["dt"] >= so: break
+        return (ex - entry) / entry * 100 if entry else None
+    passed_r, failed_r = [], []
+    for d in days_out:
+        day = date.fromisoformat(d["day"])
+        for pk in d["picks"]:
+            if pk["armed"]: passed_r.append(pk["ret_pct"])
+            elif pk["in_cache"] and pk["sym"] in cache:
+                bars, s20, s200, byday = cache[pk["sym"]]
+                if day in byday:
+                    nr = naive(bars, byday[day], day)
+                    if nr is not None: failed_r.append(nr)
+    avg = lambda r: round(sum(r) / len(r), 3) if r else None
     tel = {"days": days_out, "compound": {"start": CAP0, "end": round(cap, 2),
             "total_pct": round((cap / CAP0 - 1) * 100, 2), "curve": curve},
            "cache_size": len(cache),
+           "gate": {"passed_n": len(passed_r), "passed_avg": avg(passed_r),
+                    "passed_win": round(sum(1 for x in passed_r if x > 0) / len(passed_r) * 100, 1) if passed_r else 0,
+                    "failed_n": len(failed_r), "failed_avg": avg(failed_r)},
            "totals": {"scan_days": len(days_out),
                       "total_picks": sum(d["n_picks"] for d in days_out),
                       "in_cache": sum(d["n_cache"] for d in days_out),

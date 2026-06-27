@@ -43,13 +43,24 @@ baseline and new-sim over the broad window. Levers that mattered (from `scenario
   but costs more in trends; **net worse**. Not a fix.
 - **Original variant** (gap 1–6 / 1.5%-cap stop / 2R / 20-min) → loses out-of-sample (−52%/60d).
 
-## 3b. The REAL whole-market picks (Telegram tab) — the decisive reality check
-`sim_telegram.py` parses the live scan's actual Telegram funnel from `logs/opening_scan_cron.log`
-and replays the picks we have bars for. Result over **12 scan-days (6/11–6/26), 491 real picks**:
-only **34 are replayable** (~7% — the rest are small-caps like BMNR/KEEL/HIMS/BTQ never captured),
-and that slice nets **−0.11% (flat)**. **So the proxy's +17.6% does NOT transfer to the real picks.**
-Shown in the dashboard's "📨 Telegram (real picks)" tab. Bottom line: the 231-cache analysis is a
-proxy; the real funnel trades different names we can't yet verify. Forward capture is the only fix.
+## 3b. The REAL whole-market picks (Telegram tab) — THE DECISIVE RESULT
+`sim_telegram.py` parses the live scan's actual Telegram funnel (`logs/opening_scan_cron.log`) and
+replays it. We **pulled the real picks' 2-min bars from IBKR** (`ibkr_history/backfill.py` →
+`logs/telegram_cache/`, 219 symbols, gateway was up) so coverage is now ~100% (489/491), not 7%.
+
+**Result over 12 scan-days (6/11–6/26), 491 real picks, 202 passed the 2-min test:**
+- Compounded $1000/5 (first-5-by-arm): **$939 — −6.1%.** The strategy **LOSES on the real
+  small-cap funnel** — vs the 231-large-cap proxy's +17.6%. **The proxy badly overstated; the real
+  picks lose.** Win rate 25.7%.
+- **The 2-minute gate IS strongly validated:** picks that passed it averaged **−0.43%/trade** vs
+  **−3.23%** for the ones that failed (traded anyway). The gate avoids the disasters (−3.2% losers),
+  but even gated, the small-cap gappers bleed.
+
+**Why proxy(+17.6%) ≠ real(−6.1%):** the live funnel is small-cap gappers with violent, mean-reverting
+opens that whipsaw a breakout strategy; the 231-name proxy is liquid large/mid-caps with orderly opens.
+**The strategy works on liquid names, not on the small-cap gappers the live scan actually picks.** That's
+the biggest finding of the whole thread. Tools: `sim_telegram.py`, `sim_telegram_analysis.py`. Tab:
+"📨 Telegram (real picks)". Forward capture still matters (only 12 days / 202 trades so far).
 
 ## 4. The honest caveat (READ THIS)
 - **Regime-dependent.** Profit concentrates in trending stretches; the *first half* of the window
