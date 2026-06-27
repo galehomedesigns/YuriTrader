@@ -29,7 +29,18 @@ OPEN_T, ARM_END, WIN_END = dtime(9, 30), dtime(9, 44), dtime(10, 20)
 SELLOFF_MIN, RR = 30, 3.0      # SWEET SPOT: 3R target, 30-min hold
 GAP_MIN, GAP_MAX = 0.5, 4.0    # SWEET SPOT: modest gaps, cap the big gappers
 SLOT = 200.0; OFFSET = C.DEFAULTS["trade_offset"]
-N_DAYS = 10; TOP_PER_DAY = 10
+N_DAYS = 10; TOP_PER_DAY = 8
+MAX_PRICE = 300.0              # remove high-priced stocks (>$300) from the dashboard
+
+def panel(rows):
+    """Build a {totals, rows} panel: totals over ALL rows, charts for the top-N by P&L."""
+    pcts=[r["realized_pl"]/r["position_cost"]*100 for r in rows if r.get("position_cost")]
+    disp=sorted(rows,key=lambda r:-(r.get("realized_pl") or 0))[:TOP_PER_DAY]
+    return {"totals":{"realized_pl":round(sum(r["realized_pl"] for r in rows),2),
+                      "avg_pct":round(sum(pcts)/len(pcts),3) if pcts else 0,
+                      "names":len(rows),"shown":len(disp),
+                      "held_to_1020_pl":round(sum((r["held_to_1020_pl"] or 0) for r in rows),2)},
+            "rows":disp}
 CACHE = os.path.join(HERE, "..", "logs", "backtest_cache_ibkr_broad")
 OUT = os.path.join(HERE, "..", "logs", "opening_sim_variant.json")
 
@@ -54,66 +65,45 @@ def load(path):
     for i,x in enumerate(bars): byday[x["dt"].date()].append(i)
     return bars,s20,s200,byday
 
-def baseline_trade(bars,s20,s200,idxs,day):
-    """Live-style baseline on the SAME candidate: classifier arm (TIGHT on, location
-    by OPEN) + wick stop + breakeven@1R + push-trail (prior-bar low) + 30-min sell-off,
-    full slot. Returns (realized_$, ret_%) or None. For the per-day A/B vs sweet-spot."""
+def sim_one(bars,s20,s200,idxs,day,sym,mode):
+    """Full sim producing row+timeline for one candidate, in 'sweet' or 'baseline' mode.
+    sweet:    arm power+close>SMA200 (no TIGHT), wick stop, 3R target, breakeven@1R, 30-min.
+    baseline: arm classifier MATCH_LONG (TIGHT on, loc by open), wick stop, breakeven@1R +
+              push-trail (prior-bar low), no fixed target, 30-min sell-off."""
     arm=None
     for i in idxs:
         if bars[i]["dt"].time()>ARM_END: break
         if s200[i] is None: continue
-        if C.classify_opening("S",bars[i],bars[max(0,i-30):i],s20[i],s200[i]).decision=="MATCH_LONG":
-            arm=i; break
+        prior=bars[max(0,i-30):i]
+        ok=(C.bar_signal(bars[i],prior)>0 and bars[i]["close"]>s200[i]) if mode=="sweet" \
+           else (C.classify_opening("S",bars[i],prior,s20[i],s200[i]).decision=="MATCH_LONG")
+        if ok: arm=i; break
     if arm is None: return None
-    entry=bars[arm]["high"]+OFFSET; stop=bars[arm]["low"]-OFFSET
+    entry=round(bars[arm]["high"]+OFFSET,2); stop=round(bars[arm]["low"]-OFFSET,2)
     if stop>=entry: return None
-    risk=entry-stop; shares=max(1,math.floor(SLOT/entry))
-    selloff=datetime.combine(day,OPEN_T,ET)+timedelta(minutes=SELLOFF_MIN)
-    in_pos=False; cur=stop; be=False; prev_low=None
-    for i in idxs:
-        if i<=arm: continue
-        b=bars[i]
-        if b["dt"].time()>WIN_END: break
-        if not in_pos and b["high"]>=entry: in_pos=True; prev_low=b["low"]
-        if in_pos:
-            if b["low"]<=cur: return ((cur-entry)*shares,(cur-entry)/entry*100)
-            if not be and b["high"]>=entry+risk: cur=entry; be=True
-            if be and prev_low is not None: cur=max(cur,prev_low-OFFSET)
-            if b["dt"]>=selloff: return ((b["close"]-entry)*shares,(b["close"]-entry)/entry*100)
-            prev_low=b["low"]
-    return None
-
-def sim_one(bars,s20,s200,idxs,day,sym):
-    # arm
-    arm=None
-    for i in idxs:
-        if bars[i]["dt"].time()>ARM_END: break
-        if s200[i] is None: continue
-        if C.bar_signal(bars[i],bars[max(0,i-30):i])>0 and bars[i]["close"]>s200[i]:
-            arm=i; break
-    if arm is None: return None
-    entry=round(bars[arm]["high"]+OFFSET,2)
-    stop=round(bars[arm]["low"]-OFFSET,2)             # SWEET SPOT: wick stop (one-bar low), no cap
-    risk=round(entry-stop,4); target=round(entry+RR*risk,4)
-    shares=max(1,math.floor(SLOT/entry))
+    risk=round(entry-stop,4); shares=max(1,math.floor(SLOT/entry))
+    target=round(entry+RR*risk,4) if mode=="sweet" else None
     loc=("above-both" if bars[arm]["close"]>max(s20[arm],s200[arm]) else "above-200/below-20")
     selloff=datetime.combine(day,OPEN_T,ET)+timedelta(minutes=SELLOFF_MIN)
-    tl=[]; in_pos=False; cur=stop; be=False; exitrec=None; ent_dt=None; sesshi=None
+    tl=[]; in_pos=False; cur=stop; be=False; exitrec=None; ent_dt=None; sesshi=None; prev_low=None
     for i in idxs:
         b=bars[i]; t=b["dt"]
         if t.time()>WIN_END: break
         ev=[]
         if t.time()==bars[arm]["dt"].time():
-            ev.append(f"ARMED — buy-stop ${entry:.2f}, stop ${stop:.2f}, target ${target:.2f} (2R), loc {loc}")
+            ev.append(f"ARMED ${entry:.2f}, stop ${stop:.2f}"+(f", target ${target:.2f} (3R)" if target else " (trail)"))
         if not in_pos and exitrec is None and i>arm and b["high"]>=entry:
-            in_pos=True; ent_dt=t; ev.append(f"ENTRY {shares} @ ${entry:.2f}; stop ${cur:.2f}, target ${target:.2f}")
+            in_pos=True; ent_dt=t; prev_low=b["low"]; ev.append(f"ENTRY {shares} @ ${entry:.2f}")
         if in_pos:
             sesshi=b["high"] if sesshi is None else max(sesshi,b["high"])
-            if b["high"]>=target: exitrec={"time":t.strftime("%H:%M"),"price":target,"reason":"2R target hit","qty":shares};ev.append(f"TARGET — exit @ ${target:.2f}");in_pos=False
-            elif b["low"]<=cur: exitrec={"time":t.strftime("%H:%M"),"price":cur,"reason":("breakeven" if be else "protective")+" stop hit","qty":shares};ev.append(f"STOP — exit @ ${cur:.2f}");in_pos=False
+            if target and b["high"]>=target: exitrec={"time":t.strftime("%H:%M"),"price":target,"reason":"3R target hit","qty":shares};ev.append(f"TARGET exit ${target:.2f}");in_pos=False
+            elif b["low"]<=cur: exitrec={"time":t.strftime("%H:%M"),"price":cur,"reason":("breakeven" if be else "protective")+" stop hit","qty":shares};ev.append(f"STOP exit ${cur:.2f}");in_pos=False
             else:
-                if not be and b["high"]>=entry+risk: cur=entry;be=True;ev.append(f"+1R → stop to breakeven ${entry:.2f}")
-                if t>=selloff: exitrec={"time":t.strftime("%H:%M"),"price":round(b["close"],4),"reason":f"{SELLOFF_MIN}-min sell-off","qty":shares};ev.append(f"{SELLOFF_MIN}-MIN SELL-OFF — exit @ ${b['close']:.2f}");in_pos=False
+                if not be and b["high"]>=entry+risk: cur=entry;be=True;ev.append(f"+1R → breakeven ${entry:.2f}")
+                if mode=="baseline" and be and prev_low is not None and prev_low-OFFSET>cur:
+                    cur=round(prev_low-OFFSET,4);ev.append(f"trail stop → ${cur:.2f}")
+                if t>=selloff: exitrec={"time":t.strftime("%H:%M"),"price":round(b["close"],4),"reason":f"{SELLOFF_MIN}-min sell-off","qty":shares};ev.append(f"{SELLOFF_MIN}-MIN SELL-OFF ${b['close']:.2f}");in_pos=False
+            prev_low=b["low"]
         tl.append({"t":t.strftime("%H:%M"),"o":b["open"],"h":b["high"],"l":b["low"],"c":b["close"],
                    "sma20":round(s20[i],3) if s20[i] else None,"sma200":round(s200[i],3) if s200[i] else None,
                    "shares":(shares if in_pos or (exitrec and exitrec["time"]==t.strftime("%H:%M")) else 0),
@@ -125,11 +115,11 @@ def sim_one(bars,s20,s200,idxs,day,sym):
     realized=round((exitrec["price"]-entry)*shares,2)
     held=round((tl[-1]["c"]-entry)*shares,2) if (tl and ent_dt) else None
     pos=round(shares*entry,2)
-    return {"symbol":sym,"tv":sym,"armed":True,"arm_t":bars[arm]["dt"].strftime("%H:%M"),
+    return {"symbol":sym,"tv":sym,"armed":True,"mode":mode,"arm_t":bars[arm]["dt"].strftime("%H:%M"),
             "sma20":round(s20[arm],2),"sma200":round(s200[arm],2),"loc":loc,
             "entry":entry,"stop":stop,"target":target,"risk_per_share":risk,
             "risk_pct":round(risk/entry*100,2),"shares":shares,"position_cost":pos,
-            "over_slot":pos>SLOT*1.1,"exit":exitrec,"realized_pl":realized,
+            "exit":exitrec,"realized_pl":realized,
             "held_to_1020_pl":held,"session_high":round(sesshi,4) if sesshi else None,"timeline":tl}
 
 def main():
@@ -141,7 +131,7 @@ def main():
     last=all_days[-N_DAYS:]
     days_out=[]
     for di_day in last:
-        sweet=[]; base_pl=0.0; base_rets=[]; base_n=0
+        sweet=[]; base=[]
         for s,(bars,s20,s200,byday) in syms.items():
             if di_day not in byday: continue
             dates=sorted(byday); pos=dates.index(di_day)
@@ -151,36 +141,21 @@ def main():
             pclose=bars[byday[dates[pos-1]][-1]]["close"]; o=bars[idxs[0]]["open"]
             gap=(o-pclose)/pclose*100
             if not (GAP_MIN<=gap<=GAP_MAX): continue
-            # sweet-spot (charted)
-            r=sim_one(bars,s20,s200,idxs,di_day,s)
-            if r:
-                r["premarket_gap_pct"]=round(gap,2); r["prev_close"]=round(pclose,2); r["today_open"]=round(o,2)
-                sweet.append(r)
-            # baseline (live-style) on the SAME candidate — A/B
-            bt=baseline_trade(bars,s20,s200,idxs,di_day)
-            if bt: base_pl+=bt[0]; base_rets.append(bt[1]); base_n+=1
-        sweet_pl=sum(r["realized_pl"] for r in sweet)
-        sweet_rets=[(r["realized_pl"]/r["position_cost"]*100) for r in sweet if r.get("position_cost")]
-        rows=sorted(sweet,key=lambda r:-(r.get("premarket_gap_pct") or 0))[:TOP_PER_DAY]
-        rows.sort(key=lambda r:-(r.get("realized_pl") or 0))
+            if o>MAX_PRICE: continue                       # remove high-priced stocks (>$300)
+            for mode,bucket in (("sweet",sweet),("baseline",base)):
+                r=sim_one(bars,s20,s200,idxs,di_day,s,mode)
+                if r:
+                    r["premarket_gap_pct"]=round(gap,2); r["prev_close"]=round(pclose,2); r["today_open"]=round(o,2)
+                    bucket.append(r)
         days_out.append({"day":di_day.isoformat(),"source":"IBKR 2-min (broad 231-name cache)",
-                         "totals":{"realized_pl":round(sweet_pl,2),
-                                   "held_to_1020_pl":round(sum((r["held_to_1020_pl"] or 0) for r in sweet),2),
-                                   "names":len(sweet),"shown":len(rows),
-                                   "sweet_avg_pct":round(sum(sweet_rets)/len(sweet_rets),3) if sweet_rets else 0,
-                                   "baseline_pl":round(base_pl,2),"baseline_names":base_n,
-                                   "baseline_avg_pct":round(sum(base_rets)/len(base_rets),3) if base_rets else 0},
-                         "rows":rows})
+                         "sweet":panel(sweet),"baseline":panel(base)})
     # merge with existing (TV 6/26) day
     existing=json.load(open(OUT))
     tv_days=[d for d in existing["days"] if d["day"] not in {x["day"] for x in days_out}]
-    for d in tv_days: d.setdefault("source","TradingView 2-min (live capture)")
     existing["days"]=sorted(tv_days+days_out, key=lambda d:d["day"], reverse=True)
-    existing["ab_note"]=("60-day A/B on the full 231-name universe: BASELINE (live rules) +58.9% / 966 trades "
-                         "(+0.061%/trade) vs VARIANT −48.5% / 2209 trades (−0.022%/trade). The variant LOSES "
-                         "out-of-sample — shown per day for inspection, not as a recommendation.")
     json.dump(existing,open(OUT,"w"),indent=2,default=str)
-    print(json.dumps({"added_days":[{"day":d["day"],"totals":d["totals"]} for d in days_out]},indent=2))
+    print(json.dumps({"added_days":[{"day":d["day"],"sweet$":d["sweet"]["totals"]["realized_pl"],
+                                     "base$":d["baseline"]["totals"]["realized_pl"]} for d in days_out]},indent=2))
 
 if __name__=="__main__":
     main()
