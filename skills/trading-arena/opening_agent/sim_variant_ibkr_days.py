@@ -244,6 +244,14 @@ def main():
         "base_simarm":compound_from_picks(picks_for(syms,fdays,"base_simarm",0.5,4.0,30)),
         "firstgreen":compound_from_picks(picks_for(syms,fdays,"firstgreen",0.5,4.0,30)),
         "sweet":compound_from_picks(picks_for(syms,fdays,"sweet",0.5,4.0,30))}
+    # same arm-gate test over the RECENT month (matches the 📈 Summary window) so the lift is
+    # apples-to-apples with the Summary tab, not diluted by the flat March–April first half.
+    rec=[d for d in all_days if d.isoformat()>="2026-05-22"]
+    existing["armgate_recent"]={"days":len(rec),"window":f"{rec[0]}..{rec[-1]}","config":"gap 0.5–4% · 30-min · push-trail exit",
+        "baseline":compound_from_picks(picks_for(syms,rec,"baseline",0.5,4.0,30)),
+        "base_simarm":compound_from_picks(picks_for(syms,rec,"base_simarm",0.5,4.0,30)),
+        "firstgreen":compound_from_picks(picks_for(syms,rec,"firstgreen",0.5,4.0,30)),
+        "sweet":compound_from_picks(picks_for(syms,rec,"sweet",0.5,4.0,30))}
     json.dump(existing,open(OUT,"w"),indent=2,default=str)
     print(json.dumps({"added_days":[{"day":d["day"],"sweet$":d["sweet"]["totals"]["realized_pl"],
                                      "base$":d["baseline"]["totals"]["realized_pl"]} for d in days_out]},indent=2))

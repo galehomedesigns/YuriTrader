@@ -320,9 +320,9 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
         <div class="appcol">${col(v,base.total_pct,'★ '+label,'sweet')}</div></div>`;
   }
 
-  function renderSummaryImproved(a) {
+  function renderSummaryImproved(a, full) {
     if(!a||!a.firstgreen){document.getElementById('day').innerHTML='<div class="empty">no arm-gate data — re-run sim_variant_ibkr_days.py</div>';return;}
-    const imp=a.firstgreen, sweet=a.sweet, asis=a.baseline, CAP=imp.start;
+    const imp=a.base_simarm, sweet=a.sweet, asis=a.baseline, CAP=imp.start;
     const col=(s,label,klass,refpct)=>{
       const dlt=refpct!=null?s.total_pct-refpct:null;
       let h=`<div class="apphdr ${klass}">${label}</div>`;
@@ -338,12 +338,12 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
     document.getElementById('day').innerHTML=`
       <div class="stat-row">
         <div class="stat"><div class="value ${cls(sweet.end-CAP)}">$${sweet.end.toFixed(2)}</div><div class="label">New-sim final (${sweet.total_pct>=0?'+':''}${sweet.total_pct}%)</div></div>
-        <div class="stat"><div class="value ${cls(imp.end-CAP)}">$${imp.end.toFixed(2)}</div><div class="label">Baseline + first-green arm (${imp.total_pct>=0?'+':''}${imp.total_pct}% · was ${asis.total_pct}%)</div></div>
+        <div class="stat"><div class="value ${cls(imp.end-CAP)}">$${imp.end.toFixed(2)}</div><div class="label">Baseline + sim arm (${imp.total_pct>=0?'+':''}${imp.total_pct}% · was ${asis.total_pct}%)</div></div>
         <div class="stat"><div class="value ${cls(imp.total_pct-asis.total_pct)}">${imp.total_pct-asis.total_pct>=0?'+':''}${(imp.total_pct-asis.total_pct).toFixed(1)} pts</div><div class="label">arm-gate lift on baseline</div></div>
         <div class="stat"><div class="value">${a.days}</div><div class="label">days · ${esc(a.window||'')}</div></div></div>
-      <div class="note" style="margin-bottom:10px">Same compounded $1000/5 first-5-by-arm as the Summary tab, over the full ${a.days}-day window. <b>The baseline column now arms on the FIRST GREEN BAR</b> (enter on the first up 2-min bar, any size; if 09:30 is red the name is skipped) instead of the TIGHT gate — exit unchanged (push-trail). It lifts the as-is baseline ${asis.total_pct>=0?'+':''}${asis.total_pct}% → <b class="${cls(imp.total_pct)}">${imp.total_pct>=0?'+':''}${imp.total_pct}%</b>. New-sim = sim arm + 3R target. ${esc(a.config||'')}.</div>
+      <div class="note" style="margin-bottom:10px">Same compounded $1000/5 first-5-by-arm and <b>same ~month window as the 📈 Summary tab</b> (${esc(a.window||'')}, ${a.days} days). <b>The baseline column now arms on the SIM gate</b> — a power bar closing above the 200-SMA (no TIGHT) — instead of the strict TIGHT classifier; exit unchanged (push-trail). It lifts the as-is baseline ${asis.total_pct>=0?'+':''}${asis.total_pct}% → <b class="${cls(imp.total_pct)}">${imp.total_pct>=0?'+':''}${imp.total_pct}%</b> over the month, and ${full?`${full.baseline.total_pct}% → ${full.base_simarm.total_pct}% over the full ${full.days}d window — an improvement in BOTH`:'in both windows'}. New-sim = sim arm + 3R target. ${esc(a.config||'')}. <span class="flat">⚠ The looser "first green bar" gate (🟢 tab) is NOT robust — it wins over 61d (+${full?full.firstgreen.total_pct:''}%) only because the flat Mar–Apr half punished TIGHT; over this recent month it over-trades and does just ${a.firstgreen.total_pct}% vs baseline's ${asis.total_pct}%.</span></div>
       <div class="split">
-        <div class="appcol">${col(imp,'⚙ BASELINE + first-green arm — compounded','base',asis.total_pct)}</div>
+        <div class="appcol">${col(imp,'⚙ BASELINE + sim arm — compounded','base',asis.total_pct)}</div>
         <div class="appcol">${col(sweet,'★ NEW SIM — compounded','sweet',null)}</div></div>`;
   }
 
@@ -354,7 +354,7 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
   sumTab.onclick=()=>{setActive(sumTab);renderSummary(data.compound);};
   tabs.appendChild(sumTab);
   const sumI=document.createElement('div');sumI.className='tab';sumI.textContent='🚀 Summary (improved arm)';
-  sumI.onclick=()=>{setActive(sumI);renderSummaryImproved(data.armgate);};
+  sumI.onclick=()=>{setActive(sumI);renderSummaryImproved(data.armgate_recent||data.armgate, data.armgate);};
   tabs.appendChild(sumI);
   const t45=document.createElement('div');t45.className='tab';t45.textContent='⚡ 45min setup';
   t45.onclick=()=>{setActive(t45);renderSummary45(data.compound45);};

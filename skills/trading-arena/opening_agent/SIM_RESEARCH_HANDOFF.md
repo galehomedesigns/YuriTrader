@@ -85,17 +85,21 @@ Two levers tested on the real Telegram picks (45-min config), compounded $1000/5
 Keep the **baseline exit** (push-trail, no target) and change ONLY the arm gate, current config
 (gap 0.5–4 / 30-min), 61-day proxy window, compounded $1000/5:
 
-| Arm gate (baseline push-trail exit) | Compounded | vs baseline |
+| Arm gate (baseline push-trail exit) | **Recent month** (5/22–6/24) | Full 61d (3/24–6/18) |
 |---|---|---|
-| baseline TIGHT arm (as-is) | +2.9% | — |
-| **sim arm** (power bar + close>SMA200, no TIGHT) | **+6.5%** | +3.6 pts |
-| **first green bar** (arm only if 09:30 closes up, any size; else skip name) | **+7.4%** | +4.5 pts |
-| *new-sim (sim arm + 3R target exit), reference* | +8.2% | +5.3 pts |
+| baseline TIGHT arm (as-is) | +8.0% | +2.9% |
+| **sim arm** (power bar + close>SMA200, no TIGHT) | **+9.7%** | **+6.5%** |
+| first green bar (arm only if 09:30 closes up, any size) | +4.0% ⚠ | +7.4% |
+| *new-sim (sim arm + 3R target exit), reference* | +11.4% | +8.2% |
 
-**The arm gate is the bigger lever** — dropping TIGHT and entering on the first up bar lifts baseline
-+2.9%→+6.5/+7.4% on its own; switching the exit to a 3R target adds the last ~1 pt to +8.2%.
-"First green bar" (simplest rule, earliest entry) edges out the rolling sim gate. Modes live in
-`sim_one`: `base_simarm`, `firstgreen`. Same in-sample/proxy caveat as everything in §2.
+**Two windows tell different stories — robustness matters.** The **sim arm gate** (power bar + >200-SMA)
+beats baseline in BOTH windows (+1.7 / +3.6 pts) — the durable arm-gate improvement. The **"first green
+bar"** gate (any green 09:30 bar, no size/SMA filter) is **NOT robust**: it wins big over 61d (+7.4 vs
++2.9) only because the flat Mar–Apr first half punished TIGHT's selectivity; over a normal trending month
+it over-trades junk and **loses** to baseline (+4.0 vs +8.0). The 61-day-only read overstated it — exactly
+the regime-dependence caveat in §4. New-sim's edge is the **3R exit** layered on the sim arm gate (best in
+both). Modes in `sim_one`: `base_simarm`, `firstgreen`; JSON blocks `armgate` (full 61d) + `armgate_recent`
+(month). Dashboard: 🚀 Summary (improved arm) shows base_simarm over the month; 🔁/🟢 show the full window.
 
 ## 4. The honest caveat (READ THIS)
 - **Regime-dependent.** Profit concentrates in trending stretches; the *first half* of the window
