@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Opening Power — Variant Sim (candles · SMAs · gap · location)</title>
+<style>
+:root {
+  --bg: #0d1117; --surface: #161b22; --surface-2: #1c222b; --border: #21262d;
+  --text: #e6edf3; --text-dim: #8b95a7; --text-muted: #556677;
+  --accent: #7c8aff; --accent-2: #c77dff; --ok: #00c853; --warn: #ffc107;
+  --fail: #ff1744; --pnl-pos: #69f0ae; --pnl-neg: #ef5350; --radius: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg); color: var(--text); padding: 20px; line-height: 1.5; }
+.container { max-width: 1180px; margin: 0 auto; }
+.dash-header { margin-bottom: 12px; }
+.dash-header h1 { font-size: 1.5rem; }
+.subtitle { color: var(--text-dim); font-size: 0.9rem; }
+.updated { color: var(--text-muted); font-size: 0.8rem; margin-top: 4px; }
+.banner { padding: 10px 14px; border-radius: var(--radius); margin: 12px 0; font-size: 0.88rem; }
+.banner-warn { background: rgba(255,193,7,0.12); border: 1px solid var(--warn); }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0 6px; border-bottom: 1px solid var(--border); }
+.tab { padding: 8px 16px; cursor: pointer; color: var(--text-dim); border: 1px solid var(--border);
+  border-bottom: none; border-radius: 8px 8px 0 0; background: var(--surface); font-size: 0.86rem; }
+.tab.active { color: var(--text); background: var(--surface-2); border-color: var(--accent); font-weight: 600; }
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; margin: 14px 0; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.stat .value { font-size: 1.5rem; font-weight: 600; }
+.stat .label { color: var(--text-dim); font-size: 0.78rem; text-transform: uppercase; letter-spacing: .04em; }
+.pos { color: var(--pnl-pos); } .neg { color: var(--pnl-neg); } .flat { color: var(--text-dim); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin: 14px 0; }
+.card h2 { font-size: 1.05rem; margin-bottom: 4px; }
+.card h2 .pill { font-size: 0.72rem; color: var(--text-dim); font-weight: 400; }
+table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 0.68rem; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.sym { font-weight: 600; }
+.badge { padding: 2px 8px; border-radius: 6px; font-size: 0.72rem; white-space: nowrap; }
+.badge-ok { background: rgba(0,200,83,0.15); color: var(--pnl-pos); }
+.badge-warn { background: rgba(255,193,7,0.15); color: var(--warn); }
+.badge-fail { background: rgba(255,23,68,0.15); color: var(--pnl-neg); }
+.badge-muted { background: var(--surface-2); color: var(--text-dim); }
+.win { background: rgba(124,138,255,0.10); }
+.empty { color: var(--text-muted); padding: 10px; font-style: italic; }
+.note { color: var(--text-muted); font-size: 0.78rem; margin-top: 8px; }
+.note b { color: var(--text-dim); }
+.funded { color: var(--text-dim); font-size: 0.82rem; margin: 4px 0 8px; }
+.funded b { color: var(--text); }
+.legend { font-size: 0.73rem; color: var(--text-dim); margin: 6px 0; display: flex; gap: 14px; flex-wrap: wrap; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.swatch { width: 14px; height: 3px; display: inline-block; border-radius: 2px; }
+.chart-wrap { width: 100%; overflow-x: auto; }
+svg { display: block; width: 100%; height: auto; }
+details { margin-top: 10px; } summary { cursor: pointer; color: var(--text-dim); font-size: 0.82rem; }
+.tape { font-size: 0.74rem; margin-top: 8px; } .tape td, .tape th { padding: 3px 6px; }
+.tape td.ev { color: var(--text-dim); }
+tr.r-entry { background: rgba(199,125,255,0.14); } tr.r-stopmove { background: rgba(255,193,7,0.10); }
+tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text-muted); }
+.state { font-size: 0.66rem; padding: 1px 5px; border-radius: 5px; background: var(--surface-2); color: var(--text-dim); }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="dash-header">
+    <h1>Opening Power — Variant Simulation</h1>
+    <div class="subtitle" id="rules"></div>
+    <div class="updated">Generated: <span id="updated-at">&mdash;</span></div>
+  </header>
+  <div class="banner banner-warn" id="limits"></div>
+  <div class="tabs" id="tabs"></div>
+  <div id="day"></div>
+</div>
+
+<script id="dashboard-data" type="application/json">{{DATA}}</script>
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('dashboard-data').textContent);
+  const money = (v) => (v == null) ? '—' : ((+v >= 0 ? '+$' : '-$') + Math.abs(+v).toFixed(2));
+  const cls = (v) => (v == null || Math.abs(+v) < 0.005) ? 'flat' : (+v > 0 ? 'pos' : 'neg');
+  const f2 = (v) => (v == null) ? '' : (+v).toFixed(2);
+  const esc = (s) => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const CO = { up:'#69f0ae', dn:'#ef5350', stop:'#ff1744', entry:'#c77dff', target:'#00c853',
+               selloff:'#ffc107', sma20:'#7c8aff', sma200:'#ffa726', grid:'#21262d', axis:'#556677' };
+  document.getElementById('updated-at').textContent = data.updated || '—';
+  document.getElementById('rules').innerHTML = 'Rule set: <b>' + esc((data.config||{}).rules) + '</b>';
+  document.getElementById('limits').innerHTML =
+    `<b>SWEET-SPOT config</b> — ${esc((data.config||{}).rules || '')}.
+     Found by a parameter sweep over these days; on the full 231-name universe over 60 days it does <b>+0.079%/trade
+     (+223%)</b> vs the live baseline's +0.061% (+59%) and the first variant's −0.022% (−52%). Each tab shows
+     <b>sweet-spot vs baseline head-to-head</b> for that day (totals over all gap-0.5–4% candidates; charts show the
+     top by P&L). 6/26 = live TradingView feed; prior days = IBKR broad cache. Grid-searched → the exact figure is
+     optimistic, but the pattern (loose wick stops · let winners run to 3R · modest gaps) is robust.`;
+
+  function chart(r) {
+    const bars = (r.timeline||[]).filter(x=>x.o!=null);
+    const W=1100,H=400,mL=58,mR=86,mT=14,mB=26, pw=W-mL-mR, ph=H-mT-mB, n=bars.length;
+    let lo=Infinity,hi=-Infinity;
+    bars.forEach(b=>{lo=Math.min(lo,b.l);hi=Math.max(hi,b.h);});
+    [r.entry,r.stop,r.target].forEach(v=>{if(v!=null){lo=Math.min(lo,+v);hi=Math.max(hi,+v);}});
+    bars.forEach(b=>{[b.sma20,b.sma200,b.stop].forEach(v=>{if(v!=null){lo=Math.min(lo,v);hi=Math.max(hi,v);}});});
+    const pad=(hi-lo)*0.06||0.1; lo-=pad; hi+=pad;
+    const xOf=i=>mL+pw*(i+0.5)/n, yOf=p=>mT+ph*(hi-p)/(hi-lo), cw=Math.max(2,pw/n*0.6);
+    let s=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">`;
+    for(let k=0;k<=5;k++){const p=lo+(hi-lo)*k/5,y=yOf(p);
+      s+=`<line x1="${mL}" y1="${y.toFixed(1)}" x2="${mL+pw}" y2="${y.toFixed(1)}" stroke="${CO.grid}"/>`;
+      s+=`<text x="${mL-6}" y="${(y+3).toFixed(1)}" fill="${CO.axis}" font-size="11" text-anchor="end">${p.toFixed(2)}</text>`;}
+    bars.forEach((b,i)=>{if(i%5===0||i===n-1)s+=`<text x="${xOf(i).toFixed(1)}" y="${H-8}" fill="${CO.axis}" font-size="10" text-anchor="middle">${b.t}</text>`;});
+    // SMA polylines
+    const poly=(key,col)=>{const pts=bars.map((b,i)=>b[key]!=null?`${xOf(i).toFixed(1)},${yOf(b[key]).toFixed(1)}`:null).filter(Boolean).join(' ');
+      return pts?`<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.6" opacity="0.9"/>`:'';};
+    s+=poly('sma200',CO.sma200)+poly('sma20',CO.sma20);
+    // entry / target / stop lines
+    const hline=(p,col,dash,lbl)=>p==null?'':`<line x1="${mL}" y1="${yOf(p).toFixed(1)}" x2="${mL+pw}" y2="${yOf(p).toFixed(1)}" stroke="${col}" stroke-width="1.2" stroke-dasharray="${dash}"/><text x="${mL+pw+4}" y="${(yOf(p)+3).toFixed(1)}" fill="${col}" font-size="11">${lbl} ${(+p).toFixed(2)}</text>`;
+    s+=hline(r.target,CO.target,'5 4','target');
+    s+=hline(r.entry,CO.entry,'6 4','entry');
+    s+=hline(r.stop,CO.stop,'2 3','stop');
+    // candles
+    bars.forEach((b,i)=>{const x=xOf(i),up=b.c>=b.o,col=up?CO.up:CO.dn;
+      s+=`<line x1="${x.toFixed(1)}" y1="${yOf(b.h).toFixed(1)}" x2="${x.toFixed(1)}" y2="${yOf(b.l).toFixed(1)}" stroke="${col}" stroke-width="1.1"/>`;
+      const yo=yOf(b.o),yc=yOf(b.c);s+=`<rect x="${(x-cw/2).toFixed(1)}" y="${Math.min(yo,yc).toFixed(1)}" width="${cw.toFixed(1)}" height="${Math.max(1,Math.abs(yo-yc)).toFixed(1)}" fill="${col}"/>`;});
+    // markers
+    bars.forEach((b,i)=>{const x=xOf(i);
+      if(/ENTRY/.test(b.event||'')){const y=yOf(b.l)+12;s+=`<path d="M ${x-5} ${y} L ${x+5} ${y} L ${x} ${y-8} Z" fill="${CO.entry}"/><text x="${x}" y="${y+12}" fill="${CO.entry}" font-size="10" text-anchor="middle">BUY</text>`;}
+      if(/TARGET|STOP —|SELL-OFF/.test(b.event||'')){const c2=/TARGET/.test(b.event)?CO.target:(/SELL-OFF/.test(b.event)?CO.selloff:CO.stop);
+        s+=`<line x1="${x.toFixed(1)}" y1="${mT}" x2="${x.toFixed(1)}" y2="${mT+ph}" stroke="${c2}" stroke-width="1" stroke-dasharray="4 3"/><text x="${x}" y="${mT+11}" fill="${c2}" font-size="10" text-anchor="middle">EXIT</text>`;}});
+    return s+`</svg>`;
+  }
+
+  function renderDay(d) {
+    const aff=d.rows.filter(r=>r.armed && !r.over_slot);
+    let html=`<div class="stat-row">
+      <div class="stat"><div class="value ${cls(d.totals.realized_pl)}">${money(d.totals.realized_pl)}</div><div class="label">Sweet-spot P&L (${d.totals.sweet_avg_pct!=null?(d.totals.sweet_avg_pct>=0?'+':'')+d.totals.sweet_avg_pct+'%/trade':''})</div></div>
+      <div class="stat"><div class="value ${cls(d.totals.baseline_pl)}">${money(d.totals.baseline_pl)}</div><div class="label">Baseline P&L (${d.totals.baseline_avg_pct!=null?(d.totals.baseline_avg_pct>=0?'+':'')+d.totals.baseline_avg_pct+'%/trade':''}) · ${d.totals.baseline_names||0} trades</div></div>
+      <div class="stat"><div class="value">${d.totals.names}</div><div class="label">Sweet-spot trades (charts: top ${d.totals.shown||d.totals.names})</div></div>
+      <div class="stat"><div class="value" style="font-size:0.95rem">${esc(d.source||'')}</div><div class="label">${d.day} · data source</div></div></div>`;
+    // summary
+    html+=`<div class="card"><h2>Summary</h2><table><tr><th>Symbol</th><th class="num">Gap</th><th>Location</th>
+      <th>Armed</th><th class="num">Entry</th><th class="num">Placed $</th><th class="num">Stop (risk)</th><th class="num">Target 3R</th>
+      <th>Exit</th><th class="num">P/L $</th><th class="num">P/L %</th></tr>`+
+      d.rows.map(r=>{
+        if(!r.armed) return `<tr><td class="sym">${r.symbol}</td><td colspan="10" class="empty">not armed (${esc(r.note||'no qualifying bar')})</td></tr>`;
+        const ex=r.exit||{}, ob=r.over_slot?` <span class="badge badge-warn">over $200 slot</span>`:'';
+        const bcl=/target/.test(ex.reason||'')?'badge-ok':(/sell-off/.test(ex.reason||'')?'badge-warn':'badge-fail');
+        const plpct=(r.position_cost)?(r.realized_pl/r.position_cost*100):null;
+        return `<tr class="${r.realized_pl>0?'win':''}"><td class="sym">${r.symbol}${ob}</td>
+          <td class="num ${cls(r.premarket_gap_pct)}">${r.premarket_gap_pct!=null?(r.premarket_gap_pct>0?'+':'')+r.premarket_gap_pct+'%':'—'}</td>
+          <td>${esc(r.loc)}</td><td class="num">${r.arm_t}</td><td class="num">$${f2(r.entry)}</td>
+          <td class="num">$${f2(r.position_cost)}</td>
+          <td class="num">$${f2(r.stop)} (${r.risk_pct}%)</td><td class="num">$${f2(r.target)}</td>
+          <td><span class="badge ${bcl}">$${f2(ex.price)} ${ex.time||''}</span></td>
+          <td class="num ${cls(r.realized_pl)}">${money(r.realized_pl)}</td>
+          <td class="num ${cls(plpct)}">${plpct!=null?((plpct>=0?'+':'')+plpct.toFixed(2)+'%'):'—'}</td></tr>`;
+      }).join('')+`</table>
+      <div class="note">Gap = open vs prior close. Location read on the entry bar's <b>close</b> vs the 20/200 SMA band
+        (variant: bullish = close above the 200, doesn't require above the 20). Stop = one-bar low capped at 1.5%.</div></div>`;
+    // per-symbol charts
+    html+=d.rows.filter(r=>r.armed).map(r=>{
+      const ex=r.exit||{};
+      const tape=(r.timeline||[]).map(x=>{let e=x.event||'',rc='';
+        if(/TARGET|STOP —|SELL-OFF/.test(e))rc='r-exit';else if(/ENTRY/.test(e))rc='r-entry';else if(/breakeven|ARMED/.test(e))rc='r-stopmove';else if(x.shares===0&&x.if_held!=null)rc='r-flat';
+        return `<tr class="${rc}"><td class="num">${x.t}</td><td class="num">${f2(x.o)}</td><td class="num">${f2(x.h)}</td><td class="num">${f2(x.l)}</td><td class="num">${f2(x.c)}</td>
+          <td class="num">${f2(x.sma20)}</td><td class="num">${f2(x.sma200)}</td><td class="num">${x.stop!=null?'$'+f2(x.stop):''}</td>
+          <td class="num">${x.shares||''}</td><td class="ev">${esc(e)}</td></tr>`;}).join('');
+      return `<div class="card"><h2>${r.symbol} <span class="badge badge-muted">${r.tv}</span>
+        <span class="pill">gap ${r.premarket_gap_pct>0?'+':''}${r.premarket_gap_pct}% · prev close $${f2(r.prev_close)} → open $${f2(r.today_open)} · armed ${r.arm_t} · loc ${esc(r.loc)}</span></h2>
+        <div class="funded">Funded <b>$200 slot</b>${r.over_slot?` <span class="badge badge-warn">1 sh = $${f2(r.position_cost)} > slot</span>`:''} ·
+          bought <b>${r.shares} @ $${f2(r.entry)}</b> · stop <b>$${f2(r.stop)}</b> (${r.risk_pct}% risk, wick stop) · target <b>$${f2(r.target)}</b> (3R) ·
+          exit $${f2(ex.price)} @ ${ex.time||''} (${esc(ex.reason)}) → <b class="${cls(r.realized_pl)}">${money(r.realized_pl)}</b> · held-to-10:20 <b class="${cls(r.held_to_1020_pl)}">${money(r.held_to_1020_pl)}</b></div>
+        <div class="legend">
+          <span><span class="swatch" style="background:#69f0ae"></span>up</span><span><span class="swatch" style="background:#ef5350"></span>down</span>
+          <span><span class="swatch" style="background:#7c8aff"></span>SMA20</span><span><span class="swatch" style="background:#ffa726"></span>SMA200</span>
+          <span><span class="swatch" style="background:#c77dff"></span>entry</span><span><span class="swatch" style="background:#ff1744"></span>stop</span>
+          <span><span class="swatch" style="background:#00c853"></span>target 3R</span><span><span class="swatch" style="background:#ffc107"></span>20-min sell-off</span></div>
+        <div class="chart-wrap">${chart(r)}</div>
+        <details><summary>exact 2-min numbers (incl. SMA20 / SMA200)</summary>
+          <table class="tape"><tr><th>Time</th><th class="num">O</th><th class="num">H</th><th class="num">L</th><th class="num">C</th>
+            <th class="num">SMA20</th><th class="num">SMA200</th><th class="num">Stop</th><th class="num">Sh</th><th>Event</th></tr>${tape}</table></details></div>`;
+    }).join('');
+    document.getElementById('day').innerHTML=html;
+  }
+
+  // tabs
+  const tabs=document.getElementById('tabs');
+  data.days.forEach((d,idx)=>{const el=document.createElement('div');el.className='tab'+(idx===0?' active':'');
+    el.textContent=d.day;el.onclick=()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderDay(d);};
+    tabs.appendChild(el);});
+  if(data.days.length) renderDay(data.days[0]);
+})();
+</script>
+</body>
+</html>

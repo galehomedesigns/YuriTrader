@@ -70,3 +70,7 @@ SHELL=/bin/bash
 # ---------- Questrade token keep-fresh ----------
 # Refresh 5 min before each medic check (token lives ~30 min).
 */20 * * * * /home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/questrade/scripts/questrade.py portfolio > /dev/null 2>&1
+
+# ---------- Opening-session 2-min capture (feeds opening-sim dashboards) ----------
+# 7:28 MDT = 9:28 ET, weekdays; self-stops 12:00 ET.
+28 7 * * 1-5 /home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/trading-arena/opening_agent/session_capture.py >> /home/tonygale/openclaw/skills/trading-arena/logs/session_capture.log 2>&1

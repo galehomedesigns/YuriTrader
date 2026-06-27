@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Opening Power — 2026-06-26 Candles + Stops</title>
+<style>
+:root {
+  --bg: #0d1117; --surface: #161b22; --surface-2: #1c222b; --border: #21262d;
+  --text: #e6edf3; --text-dim: #8b95a7; --text-muted: #556677;
+  --accent: #7c8aff; --accent-2: #c77dff; --ok: #00c853; --warn: #ffc107;
+  --fail: #ff1744; --pnl-pos: #69f0ae; --pnl-neg: #ef5350; --radius: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg); color: var(--text); padding: 20px; line-height: 1.5; }
+.container { max-width: 1180px; margin: 0 auto; }
+.dash-header { margin-bottom: 18px; }
+.dash-header h1 { font-size: 1.5rem; }
+.subtitle { color: var(--text-dim); font-size: 0.9rem; }
+.updated { color: var(--text-muted); font-size: 0.8rem; margin-top: 4px; }
+.banner { padding: 10px 14px; border-radius: var(--radius); margin: 14px 0; font-size: 0.9rem; }
+.banner-warn { background: rgba(255,193,7,0.12); border: 1px solid var(--warn); }
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; margin: 16px 0; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.stat .value { font-size: 1.5rem; font-weight: 600; }
+.stat .label { color: var(--text-dim); font-size: 0.78rem; text-transform: uppercase; letter-spacing: .04em; }
+.pos { color: var(--pnl-pos); } .neg { color: var(--pnl-neg); } .flat { color: var(--text-dim); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin: 16px 0; }
+.card h2 { font-size: 1.05rem; margin-bottom: 4px; color: var(--text); }
+.card h2 .pill { font-size: 0.72rem; color: var(--text-dim); font-weight: 400; }
+table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 0.68rem; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.sym { font-weight: 600; }
+.badge { padding: 2px 8px; border-radius: 6px; font-size: 0.72rem; white-space: nowrap; }
+.badge-muted { background: var(--surface-2); color: var(--text-dim); }
+.badge-ok { background: rgba(0,200,83,0.15); color: var(--pnl-pos); }
+.badge-warn { background: rgba(255,193,7,0.15); color: var(--warn); }
+.badge-fail { background: rgba(255,23,68,0.15); color: var(--pnl-neg); }
+.win { background: rgba(124,138,255,0.10); }
+.empty { color: var(--text-muted); padding: 12px; font-style: italic; }
+.note { color: var(--text-muted); font-size: 0.78rem; margin-top: 8px; }
+.note b { color: var(--text-dim); }
+.funded { color: var(--text-dim); font-size: 0.82rem; margin: 4px 0 10px; }
+.funded b { color: var(--text); }
+.legend { font-size: 0.74rem; color: var(--text-dim); margin: 8px 0 2px; display: flex; gap: 16px; flex-wrap: wrap; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.swatch { width: 14px; height: 3px; display: inline-block; border-radius: 2px; }
+.chart-wrap { width: 100%; overflow-x: auto; }
+svg { display: block; width: 100%; height: auto; }
+details { margin-top: 10px; }
+summary { cursor: pointer; color: var(--text-dim); font-size: 0.82rem; }
+.tape { font-size: 0.76rem; margin-top: 8px; }
+.tape td, .tape th { padding: 3px 7px; }
+.tape td.ev { color: var(--text-dim); }
+tr.r-entry { background: rgba(199,125,255,0.14); }
+tr.r-stopmove { background: rgba(255,193,7,0.10); }
+tr.r-exit { background: rgba(255,23,68,0.15); }
+tr.r-scan td, tr.r-flat td { color: var(--text-muted); }
+.state { font-size: 0.68rem; padding: 1px 5px; border-radius: 5px; background: var(--surface-2); color: var(--text-dim); }
+.gatetrail { margin: 6px 0 12px; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; background: rgba(0,0,0,0.12); }
+.gt-label { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 4px; }
+.gate { font-size: 0.78rem; }
+.gate td, .gate th { padding: 3px 8px; }
+tr.g-match { background: rgba(0,200,83,0.10); }
+tr.g-no td { color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="dash-header">
+    <h1>Opening Power — 2026-06-26 · Candles + Stop-Loss</h1>
+    <div class="subtitle">Each name that passed the 9:32 gate, 2-min candles <b>9:30 → 10:20</b>, stop-loss as a stepped red line — buy, stop trail, and the <b>20-minute sell-off (9:50)</b> marked. Perfect execution per the original setup; no intervention. (Window is display-only; the strategy exit is the 9:50 sell-off or a stop hit.)</div>
+    <div class="updated">Generated: <span id="updated-at">&mdash;</span></div>
+  </header>
+
+  <div class="banner banner-warn" id="limits"></div>
+  <div id="totals" class="stat-row"></div>
+
+  <div class="card">
+    <h2>Summary — strategy exit vs. held to 10:20</h2>
+    <div id="summary"></div>
+  </div>
+
+  <div id="charts"></div>
+
+  <div class="card">
+    <h2>Run configuration &amp; data provenance</h2>
+    <div class="note" id="config-note"></div>
+  </div>
+</div>
+
+<script id="dashboard-data" type="application/json">{{DATA}}</script>
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('dashboard-data').textContent);
+  const money = (v) => (v == null) ? '—' : ((+v >= 0 ? '+$' : '-$') + Math.abs(+v).toFixed(2));
+  const pct = (v) => (v == null) ? '—' : (((+v) >= 0 ? '+' : '') + (+v).toFixed(2) + '%');
+  const cls = (v) => (v == null || Math.abs(+v) < 0.005) ? 'flat' : (+v > 0 ? 'pos' : 'neg');
+  const f2 = (v) => (v == null) ? '' : (+v).toFixed(2);
+  const esc = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const C = { pos:'#69f0ae', neg:'#ef5350', stop:'#ff1744', entry:'#c77dff', exit:'#ffc107',
+              grid:'#21262d', axis:'#556677', text:'#8b95a7' };
+  document.getElementById('updated-at').textContent = data.updated || '—';
+
+  const cfg = data.config || {}, tot = data.totals || {};
+  document.getElementById('limits').innerHTML =
+    `<b>One real session (${data.day}), ${esc(data.window||'')}.</b> Candles are the captured TradingView 2-min bars
+     this morning; the red step-line is the engine's live stop-loss (validated vs advisory_monitor.log). Funded at the
+     live <b>$${(cfg.slot_usd||0).toFixed(0)}/slot</b>; half-slot at the breakout, G9 add to full. Commission-free; slippage not modelled.`;
+
+  const stats = [
+    { v: money(tot.realized_pl), c: cls(tot.realized_pl), l: 'Strategy realized P&L' },
+    { v: money(tot.held_to_1020_pl), c: cls(tot.held_to_1020_pl), l: 'If held to 10:20' },
+    { v: '$'+(cfg.budget_usd||0).toFixed(0), c: '', l: 'Capital funded' },
+    { v: (data.rows||[]).filter(r=>r.affordable).length+' / 5', c: '', l: 'Names traded (armed)' },
+  ];
+  document.getElementById('totals').innerHTML = stats.map(s =>
+    `<div class="stat"><div class="value ${s.c}">${s.v}</div><div class="label">${s.l}</div></div>`).join('');
+
+  const rows = data.rows || [];
+  const shead = `<tr><th>Symbol</th><th>Armed</th><th class="num">Buy-in</th><th class="num">Shares</th>
+     <th class="num">Init stop</th><th>Exit</th><th class="num">Realized</th><th class="num">Held→10:20</th></tr>`;
+  const sbody = rows.map(r => {
+    if (!r.affordable) return `<tr><td class="sym">${r.symbol}</td><td colspan="7" class="empty">passed gate but $${(cfg.slot_usd||0).toFixed(0)} slot &lt; 1 share — not sized</td></tr>`;
+    const ex = r.exit || {}; const badge = /mark|cutoff/.test(ex.reason||'') ? 'badge-warn' : (r.realized_pl>0?'badge-ok':'badge-fail');
+    return `<tr class="${r.realized_pl>0?'win':''}"><td class="sym">${r.symbol}</td><td class="num">${r.arming_bar_time}</td>
+      <td class="num">$${(+r.entry).toFixed(2)}</td><td class="num">${r.qty_total}</td><td class="num">$${(+r.init_stop).toFixed(2)}</td>
+      <td><span class="badge ${badge}">$${f2(ex.price)} @ ${ex.time||''}</span></td>
+      <td class="num ${cls(r.realized_pl)}">${money(r.realized_pl)}</td>
+      <td class="num ${cls(r.held_to_1020_pl)}">${money(r.held_to_1020_pl)}</td></tr>`;
+  }).join('');
+  document.getElementById('summary').innerHTML = `<table>${shead}${sbody}</table>`;
+
+  // ---- candlestick + stop-line SVG ----
+  function chart(r) {
+    const bars = (r.timeline||[]).filter(x => x.o!=null);
+    const W=1100, H=380, mL=56, mR=70, mT=16, mB=26;
+    const pw=W-mL-mR, ph=H-mT-mB, n=bars.length;
+    let lo=Infinity, hi=-Infinity;
+    bars.forEach(b => { lo=Math.min(lo,b.l); hi=Math.max(hi,b.h); });
+    [r.entry, r.init_stop, (r.exit||{}).price].forEach(v => { if(v!=null){lo=Math.min(lo,+v);hi=Math.max(hi,+v);} });
+    bars.forEach(b => { if(b.stop!=null){lo=Math.min(lo,b.stop);hi=Math.max(hi,b.stop);} });
+    const pad=(hi-lo)*0.06||0.1; lo-=pad; hi+=pad;
+    const xOf=i=>mL+pw*(i+0.5)/n, yOf=p=>mT+ph*(hi-p)/(hi-lo);
+    const cw=Math.max(2, pw/n*0.6);
+    let svg=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img">`;
+    // price gridlines + labels
+    const gl=5;
+    for(let k=0;k<=gl;k++){ const p=lo+(hi-lo)*k/gl, y=yOf(p);
+      svg+=`<line x1="${mL}" y1="${y.toFixed(1)}" x2="${mL+pw}" y2="${y.toFixed(1)}" stroke="${C.grid}" stroke-width="1"/>`;
+      svg+=`<text x="${mL-6}" y="${(y+3).toFixed(1)}" fill="${C.axis}" font-size="11" text-anchor="end">${p.toFixed(2)}</text>`; }
+    // time labels (every ~5 bars)
+    bars.forEach((b,i)=>{ if(i%5===0||i===n-1){ svg+=`<text x="${xOf(i).toFixed(1)}" y="${H-8}" fill="${C.axis}" font-size="10" text-anchor="middle">${b.t}</text>`; }});
+    // entry line (dashed purple)
+    if(r.entry!=null){ const y=yOf(+r.entry);
+      svg+=`<line x1="${mL}" y1="${y.toFixed(1)}" x2="${mL+pw}" y2="${y.toFixed(1)}" stroke="${C.entry}" stroke-width="1.2" stroke-dasharray="6 4"/>`;
+      svg+=`<text x="${mL+pw+4}" y="${(y+3).toFixed(1)}" fill="${C.entry}" font-size="11">entry ${(+r.entry).toFixed(2)}</text>`; }
+    // stop-loss stepped line (red) across bars where a stop is set
+    let segs='', pts=bars.map((b,i)=>({i,s:b.stop}));
+    let prevY=null;
+    pts.forEach((p,idx)=>{ if(p.s==null){prevY=null;return;}
+      const xl=xOf(p.i)-pw/n/2, xr=xOf(p.i)+pw/n/2, y=yOf(p.s);
+      if(prevY!==null && Math.abs(prevY-y)>0.01) segs+=`<line x1="${xl.toFixed(1)}" y1="${prevY.toFixed(1)}" x2="${xl.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${C.stop}" stroke-width="2"/>`;
+      segs+=`<line x1="${xl.toFixed(1)}" y1="${y.toFixed(1)}" x2="${xr.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${C.stop}" stroke-width="2"/>`;
+      prevY=y; });
+    svg+=segs;
+    // candles
+    bars.forEach((b,i)=>{ const x=xOf(i), up=b.c>=b.o, col=up?C.pos:C.neg;
+      svg+=`<line x1="${x.toFixed(1)}" y1="${yOf(b.h).toFixed(1)}" x2="${x.toFixed(1)}" y2="${yOf(b.l).toFixed(1)}" stroke="${col}" stroke-width="1.2"/>`;
+      const yo=yOf(b.o), yc=yOf(b.c), bt=Math.min(yo,yc), bh=Math.max(1,Math.abs(yo-yc));
+      svg+=`<rect x="${(x-cw/2).toFixed(1)}" y="${bt.toFixed(1)}" width="${cw.toFixed(1)}" height="${bh.toFixed(1)}" fill="${col}"/>`; });
+    // buy + exit markers by event
+    bars.forEach((b,i)=>{ const x=xOf(i);
+      if(/ENTRY fill/.test(b.event||'')){ const y=yOf(b.l)+12;
+        svg+=`<path d="M ${x-5} ${y} L ${x+5} ${y} L ${x} ${y-8} Z" fill="${C.entry}"/>`;
+        svg+=`<text x="${x}" y="${y+12}" fill="${C.entry}" font-size="10" text-anchor="middle">BUY</text>`; }
+      if(/EXIT|STOP EXECUTED|CUTOFF|SELL-OFF/.test(b.event||'')){
+        svg+=`<line x1="${x.toFixed(1)}" y1="${mT}" x2="${x.toFixed(1)}" y2="${mT+ph}" stroke="${C.exit}" stroke-width="1" stroke-dasharray="4 3"/>`;
+        const ey=yOf((r.exit||{}).price!=null?+r.exit.price:b.c);
+        svg+=`<circle cx="${x.toFixed(1)}" cy="${ey.toFixed(1)}" r="4" fill="${C.exit}"/>`;
+        svg+=`<text x="${x}" y="${mT+12}" fill="${C.exit}" font-size="10" text-anchor="middle">EXIT</text>`; }
+    });
+    svg+=`</svg>`;
+    return svg;
+  }
+
+  document.getElementById('charts').innerHTML = rows.filter(r=>r.affordable).map(r => {
+    const fills=(r.fills||[]).map(f=>`${f.qty} @ $${(+f.price).toFixed(2)}`).join(' + ');
+    const tape = (r.timeline||[]).map(x=>{
+      const e=x.event||''; let rc='';
+      if(/EXIT|STOP EXECUTED|CUTOFF|SELL-OFF/.test(e)) rc='r-exit'; else if(/ENTRY|ADD/.test(e)) rc='r-entry';
+      else if(/stop →/.test(e)) rc='r-stopmove'; else if(x.state==='scan') rc='r-scan'; else if(x.state==='FLAT') rc='r-flat';
+      return `<tr class="${rc}"><td class="num">${x.t}</td><td class="num">${f2(x.o)}</td><td class="num">${f2(x.h)}</td>
+        <td class="num">${f2(x.l)}</td><td class="num">${f2(x.c)}</td><td><span class="state">${x.state}</span></td>
+        <td class="num">${x.shares||''}</td><td class="num">${x.stop!=null?'$'+f2(x.stop):''}</td>
+        <td class="num ${cls(x.mtm)}">${x.mtm!=null?money(x.mtm):''}</td><td class="ev">${esc(e)}</td></tr>`;
+    }).join('');
+    return `<div class="card">
+      <h2>${r.symbol} <span class="badge badge-muted">${r.tv}</span>
+        <span class="pill">armed ${r.arming_bar_time} · entry $${(+r.entry).toFixed(2)} · session high $${f2(r.session_high_after_entry)}</span></h2>
+      <div class="funded">Funded <b>$${(cfg.slot_usd||0).toFixed(0)}</b> · bought <b>${fills||'—'}</b> = ${r.qty_total} sh @ avg $${f2(r.avg_cost)} ·
+        exit $${f2((r.exit||{}).price)} @ ${(r.exit||{}).time||''} → <b class="${cls(r.realized_pl)}">${money(r.realized_pl)}</b>
+        · held-to-10:20 <b class="${cls(r.held_to_1020_pl)}">${money(r.held_to_1020_pl)}</b></div>
+      <div class="gatetrail">
+        <div class="gt-label">Why it armed at <b>${r.arming_bar_time}</b> — the 2-min gate verdict on each opening bar (rolling-arm; first MATCH arms):</div>
+        <table class="gate"><tr><th>Bar (ET)</th><th class="num">Range</th><th>Gate verdict</th></tr>
+        ${(r.gate_trail||[]).map(g => `<tr class="${/MATCH/.test(g.decision)?'g-match':'g-no'}">
+          <td class="num">${g.t}</td><td class="num">$${(+g.range).toFixed(2)}</td>
+          <td><span class="badge ${/MATCH/.test(g.decision)?'badge-ok':'badge-muted'}">${g.decision}</span> <span class="flat">${esc(g.reason)}</span></td></tr>`).join('')}
+        </table></div>
+      <div class="legend">
+        <span><span class="swatch" style="background:#69f0ae"></span>up candle</span>
+        <span><span class="swatch" style="background:#ef5350"></span>down candle</span>
+        <span><span class="swatch" style="background:#ff1744"></span>stop-loss (stepped)</span>
+        <span><span class="swatch" style="background:#c77dff"></span>entry</span>
+        <span><span class="swatch" style="background:#ffc107"></span>exit</span></div>
+      <div class="chart-wrap">${chart(r)}</div>
+      <details><summary>show the exact 2-min numbers (verify against your own chart)</summary>
+        <table class="tape"><tr><th>Time</th><th class="num">O</th><th class="num">H</th><th class="num">L</th><th class="num">C</th>
+          <th>State</th><th class="num">Sh</th><th class="num">Stop</th><th class="num">P&amp;L</th><th>Event</th></tr>${tape}</table>
+      </details></div>`;
+  }).join('');
+
+  document.getElementById('config-note').innerHTML =
+    `Budget <b>$${(cfg.budget_usd||0).toFixed(0)}</b>/<b>${cfg.max_trades}</b> = <b>$${(cfg.slot_usd||0).toFixed(0)}/slot</b> ·
+     cutoff <b>${cfg.cutoff_min} min</b> · TIGHT gate <b>${cfg.tight_mode}</b> · offset <b>$${cfg.offset}</b> · <b>${esc(cfg.commission||'')}</b>.
+     Candles + stop line are drawn from the same per-bar data in the tables. Data: ${esc(data.data_source||'')}.`;
+})();
+</script>
+</body>
+</html>
