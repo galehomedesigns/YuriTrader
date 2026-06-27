@@ -233,6 +233,35 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
         <div class="appcol">${col(c.improved.sweet,c.current.sweet.total_pct,'★ NEW SIM — 45-min config','sweet')}</div></div>`;
   }
 
+  function renderTelegram(t) {
+    if(!t){document.getElementById('day').innerHTML='<div class="empty">no Telegram data — run sim_telegram.py</div>';return;}
+    const T=t.totals, c=t.compound, covpct=T.total_picks?(T.armed_replayed/T.total_picks*100):0;
+    let html=`<div class="stat-row">
+      <div class="stat"><div class="value">${T.scan_days}</div><div class="label">Whole-market scan days (Telegram)</div></div>
+      <div class="stat"><div class="value">${T.total_picks}</div><div class="label">Real funnel picks posted</div></div>
+      <div class="stat"><div class="value">${T.armed_replayed} <span class="flat" style="font-size:0.8rem">/ ${T.total_picks}</span></div><div class="label">Replayable (have bars) · ${covpct.toFixed(0)}% coverage</div></div>
+      <div class="stat"><div class="value ${cls(c.end-c.start)}">$${c.end.toFixed(0)}</div><div class="label">Compounded over replayable (${c.total_pct>=0?'+':''}${c.total_pct}%)</div></div></div>
+      <div class="banner" style="background:rgba(255,23,68,0.1);border-color:var(--fail)">
+        <b>The honest reality check.</b> These are the <b>real whole-market picks</b> the live scan posted to Telegram —
+        but only <b>${covpct.toFixed(0)}%</b> are replayable (we have 2-min bars for them in the 231-name cache; the rest are
+        small-caps like BMNR/KEEL/HIMS/BTQ we never captured). The replayable slice nets <b class="${cls(c.total_pct)}">${c.total_pct>=0?'+':''}${c.total_pct}%</b>
+        — i.e. the proxy's +17.6% does <b>not</b> transfer here. ✓ = in cache. 6/25–6/26 show 0 (IBKR cache ends 6/24).
+        Forward capture is the only fix.</div>`;
+    html += t.days.map(d=>{
+      const picks=d.picks.slice(0,15).map(p=>{
+        const trade = p.armed ? `<span class="${cls(p.ret_pct)}">${p.ret_pct>=0?'+':''}${p.ret_pct}% @ ${p.arm_t||''}</span>`
+                      : (p.in_cache ? '<span class="flat">no arm</span>' : '<span class="flat">no bars</span>');
+        const dcol = p.dir==='LONG'?'pos':(p.dir==='SHORT'?'neg':'flat');
+        return `<tr class="${p.armed?(p.ret_pct>0?'r-entry':'r-exit'):''}"><td class="num">${p.rank}</td><td class="sym">${p.sym}${p.in_cache?' <span class="badge badge-muted">✓bars</span>':''}</td>
+          <td class="${dcol}">${p.dir}</td><td class="num ${cls(p.gap)}">${p.gap!=null?(p.gap>0?'+':'')+p.gap+'%':''}</td>
+          <td>${p.state||''}</td><td class="num">${trade}</td></tr>`;}).join('');
+      const more=d.picks.length>15?`<div class="note">…+${d.picks.length-15} more picks</div>`:'';
+      return `<div class="card"><h2>${d.day} <span class="pill">${d.n_picks} picks · ${d.n_cache} in cache · ${d.n_armed} replayed</span></h2>
+        <table><tr><th class="num">#</th><th>Stock</th><th>Dir</th><th class="num">Gap</th><th>State</th><th class="num">Trade (45-min sim)</th></tr>${picks}</table>${more}</div>`;
+    }).join('');
+    document.getElementById('day').innerHTML=html;
+  }
+
   // tabs
   const tabs=document.getElementById('tabs');
   const setActive=el=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');};
@@ -242,6 +271,9 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
   const t45=document.createElement('div');t45.className='tab';t45.textContent='⚡ 45min setup';
   t45.onclick=()=>{setActive(t45);renderSummary45(data.compound45);};
   tabs.appendChild(t45);
+  const tg=document.createElement('div');tg.className='tab';tg.textContent='📨 Telegram (real picks)';
+  tg.onclick=()=>{setActive(tg);renderTelegram(data.telegram);};
+  tabs.appendChild(tg);
   data.days.forEach(d=>{const el=document.createElement('div');el.className='tab';
     el.textContent=d.day;el.onclick=()=>{setActive(el);renderDay(d);};tabs.appendChild(el);});
   if(data.compound) renderSummary(data.compound); else if(data.days.length) renderDay(data.days[0]);

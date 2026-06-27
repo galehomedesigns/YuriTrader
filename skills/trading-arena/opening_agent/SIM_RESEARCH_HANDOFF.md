@@ -43,6 +43,14 @@ baseline and new-sim over the broad window. Levers that mattered (from `scenario
   but costs more in trends; **net worse**. Not a fix.
 - **Original variant** (gap 1–6 / 1.5%-cap stop / 2R / 20-min) → loses out-of-sample (−52%/60d).
 
+## 3b. The REAL whole-market picks (Telegram tab) — the decisive reality check
+`sim_telegram.py` parses the live scan's actual Telegram funnel from `logs/opening_scan_cron.log`
+and replays the picks we have bars for. Result over **12 scan-days (6/11–6/26), 491 real picks**:
+only **34 are replayable** (~7% — the rest are small-caps like BMNR/KEEL/HIMS/BTQ never captured),
+and that slice nets **−0.11% (flat)**. **So the proxy's +17.6% does NOT transfer to the real picks.**
+Shown in the dashboard's "📨 Telegram (real picks)" tab. Bottom line: the 231-cache analysis is a
+proxy; the real funnel trades different names we can't yet verify. Forward capture is the only fix.
+
 ## 4. The honest caveat (READ THIS)
 - **Regime-dependent.** Profit concentrates in trending stretches; the *first half* of the window
   was flat-to-negative for **every** config. No gap/stop/target/RVOL knob fixed it.
