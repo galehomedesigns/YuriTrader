@@ -190,11 +190,14 @@ TOP_PER_DAY = 8
 def panel(rows):
     pcts = [r["realized_pl"] / r["position_cost"] * 100 for r in rows if r.get("position_cost")]
     disp = sorted(rows, key=lambda r: -(r.get("realized_pl") or 0))[:TOP_PER_DAY]
+    picks = [{"sym": r["symbol"], "gap_pct": r.get("premarket_gap_pct"), "arm_t": r.get("arm_t"),
+              "ret_pct": round(r["realized_pl"] / r["position_cost"] * 100, 3)}
+             for r in rows if r.get("position_cost")]
     return {"totals": {"realized_pl": round(sum(r["realized_pl"] for r in rows), 2),
                        "avg_pct": round(sum(pcts) / len(pcts), 3) if pcts else 0,
                        "names": len(rows), "shown": len(disp),
                        "held_to_1020_pl": round(sum((r["held_to_1020_pl"] or 0) for r in rows), 2)},
-            "rows": disp}
+            "rows": disp, "picks": picks}
 
 def main():
     days_out = []

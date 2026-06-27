@@ -183,12 +183,68 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
     document.getElementById('day').innerHTML=html;
   }
 
+  function renderSummary(c) {
+    if(!c){document.getElementById('day').innerHTML='<div class="empty">no compound data — run sim_variant_ibkr_days.py</div>';return;}
+    const col=(s,label,klass)=>{
+      let h=`<div class="apphdr ${klass}">${label}</div>`;
+      h+=`<div class="apptot ${cls(s.end-c.capital)}">$${s.start.toFixed(0)} → $${s.end.toFixed(2)} <span class="flat" style="font-size:0.82rem">(${s.total_pct>=0?'+':''}${s.total_pct}% · ${s.curve.length} days)</span></div>`;
+      h+=s.curve.map(r=>{
+        const picks=(r.picks||[]).map(p=>`<tr><td class="sym">${p.sym}</td><td class="num ${cls(p.gap_pct)}">${p.gap_pct>0?'+':''}${p.gap_pct}%</td><td class="num ${cls(p.ret_pct)}">${p.ret_pct>=0?'+':''}${p.ret_pct}%</td><td class="num ${cls(p.ret_usd)}">${money(p.ret_usd)}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">no picks (slots in cash)</td></tr>';
+        return `<div class="card" style="padding:12px">
+          <div class="funded"><b>${r.day}</b> · slot $${r.slot.toFixed(2)} × ${r.n} · day <b class="${cls(r.day_pl)}">${money(r.day_pl)}</b> (${r.day_ret_pct>=0?'+':''}${r.day_ret_pct}%) → capital <b>$${r.capital.toFixed(2)}</b></div>
+          <table class="tape"><tr><th>Stock</th><th class="num">Gap</th><th class="num">Return %</th><th class="num">Return $</th></tr>${picks}</table></div>`;
+      }).join('');
+      return h;
+    };
+    document.getElementById('day').innerHTML=`
+      <div class="stat-row">
+        <div class="stat"><div class="value ${cls(c.sweet.end-c.capital)}">$${c.sweet.end.toFixed(2)}</div><div class="label">New-sim final (${c.sweet.total_pct>=0?'+':''}${c.sweet.total_pct}%)</div></div>
+        <div class="stat"><div class="value ${cls(c.baseline.end-c.capital)}">$${c.baseline.end.toFixed(2)}</div><div class="label">Baseline final (${c.baseline.total_pct>=0?'+':''}${c.baseline.total_pct}%)</div></div>
+        <div class="stat"><div class="value">$${c.capital.toFixed(0)}</div><div class="label">Start capital · ${c.slots} equal slots ($${(c.capital/c.slots).toFixed(0)}/slot)</div></div>
+        <div class="stat"><div class="value">${c.sweet.curve.length}</div><div class="label">Days compounded</div></div></div>
+      <div class="note" style="margin-bottom:10px">Daily-compounded: each day the <b>first ${c.slots} names to arm</b> get an equal slot (capital/${c.slots}); unused slots sit in cash; the day's P&L compounds into the next day. Stocks &gt;$300 excluded. Per-stock <b>Return $</b> = slot × return%.</div>
+      <div class="split">
+        <div class="appcol">${col(c.baseline,'⚙ BASELINE — compounded','base')}</div>
+        <div class="appcol">${col(c.sweet,'★ NEW SIM — compounded','sweet')}</div></div>`;
+  }
+
+  function renderSummary45(c) {
+    if(!c){document.getElementById('day').innerHTML='<div class="empty">no 45-min data — re-run sim_variant_ibkr_days.py</div>';return;}
+    const col=(imp,curpct,label,klass)=>{
+      const dlt=imp.total_pct-curpct;
+      let h=`<div class="apphdr ${klass}">${label}</div>`;
+      h+=`<div class="apptot ${cls(imp.end-imp.start)}">$${imp.start.toFixed(0)} → $${imp.end.toFixed(2)} <span class="flat" style="font-size:0.8rem">(${imp.total_pct>=0?'+':''}${imp.total_pct}% · current was ${curpct>=0?'+':''}${curpct}% → <b class="${cls(dlt)}">${dlt>=0?'+':''}${dlt.toFixed(1)} pts</b>)</span></div>`;
+      h+=imp.curve.map(r=>{
+        const picks=(r.picks||[]).map(p=>`<tr><td class="sym">${p.sym}</td><td class="num ${cls(p.gap_pct)}">${p.gap_pct>0?'+':''}${p.gap_pct}%</td><td class="num ${cls(p.ret_pct)}">${p.ret_pct>=0?'+':''}${p.ret_pct}%</td><td class="num ${cls(p.ret_usd)}">${money(p.ret_usd)}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">no picks (cash)</td></tr>';
+        return `<div class="card" style="padding:10px"><div class="funded"><b>${r.day}</b> · slot $${r.slot.toFixed(2)} × ${r.n} · <b class="${cls(r.day_pl)}">${money(r.day_pl)}</b> → $${r.capital.toFixed(2)}</div>
+          <table class="tape"><tr><th>Stock</th><th class="num">Gap</th><th class="num">Ret %</th><th class="num">Ret $</th></tr>${picks}</table></div>`;
+      }).join('');
+      return h;
+    };
+    document.getElementById('day').innerHTML=`
+      <div class="stat-row">
+        <div class="stat"><div class="value ${cls(c.improved.sweet.end-c.improved.sweet.start)}">$${c.improved.sweet.end.toFixed(0)}</div><div class="label">New-sim 45-min (${c.improved.sweet.total_pct>=0?'+':''}${c.improved.sweet.total_pct}% · was ${c.current.sweet.total_pct}%)</div></div>
+        <div class="stat"><div class="value ${cls(c.improved.baseline.end-c.improved.baseline.start)}">$${c.improved.baseline.end.toFixed(0)}</div><div class="label">Baseline 45-min (${c.improved.baseline.total_pct>=0?'+':''}${c.improved.baseline.total_pct}% · was ${c.current.baseline.total_pct}%)</div></div>
+        <div class="stat"><div class="value" style="font-size:1rem">gap 2–4% · 3R · 45-min</div><div class="label">improved config</div></div>
+        <div class="stat"><div class="value">${c.days}</div><div class="label">days · ${esc(c.window||'')}</div></div></div>
+      <div class="note" style="margin-bottom:10px">The <b>improved config (gap 2–4%, hold 45 min)</b> applied to both apps, compounded $1000/5 first-5-by-arm. "<b>current was</b>" = the existing config (gap 0.5–4%, 30-min) over the same days. Over this window it lifts <b>both</b> baseline and new-sim — but note it's the full populated window; on the most recent ~3 weeks the edge narrows (regime-dependent).</div>
+      <div class="split">
+        <div class="appcol">${col(c.improved.baseline,c.current.baseline.total_pct,'⚙ BASELINE — 45-min config','base')}</div>
+        <div class="appcol">${col(c.improved.sweet,c.current.sweet.total_pct,'★ NEW SIM — 45-min config','sweet')}</div></div>`;
+  }
+
   // tabs
   const tabs=document.getElementById('tabs');
-  data.days.forEach((d,idx)=>{const el=document.createElement('div');el.className='tab'+(idx===0?' active':'');
-    el.textContent=d.day;el.onclick=()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderDay(d);};
-    tabs.appendChild(el);});
-  if(data.days.length) renderDay(data.days[0]);
+  const setActive=el=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');};
+  const sumTab=document.createElement('div');sumTab.className='tab active';sumTab.textContent='📈 Summary (compounded)';
+  sumTab.onclick=()=>{setActive(sumTab);renderSummary(data.compound);};
+  tabs.appendChild(sumTab);
+  const t45=document.createElement('div');t45.className='tab';t45.textContent='⚡ 45min setup';
+  t45.onclick=()=>{setActive(t45);renderSummary45(data.compound45);};
+  tabs.appendChild(t45);
+  data.days.forEach(d=>{const el=document.createElement('div');el.className='tab';
+    el.textContent=d.day;el.onclick=()=>{setActive(el);renderDay(d);};tabs.appendChild(el);});
+  if(data.compound) renderSummary(data.compound); else if(data.days.length) renderDay(data.days[0]);
 })();
 </script>
 </body>
