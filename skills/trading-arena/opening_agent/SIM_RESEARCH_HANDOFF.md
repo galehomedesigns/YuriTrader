@@ -81,6 +81,22 @@ Two levers tested on the real Telegram picks (45-min config), compounded $1000/5
   the combination is what crosses zero. Still a **small** edge over 12 days / 32 trades — directional, not
   validated; the regime gate is the long-sought flat-period fix but needs forward data to confirm.
 
+## 3d. Arm-gate swap on baseline (isolates the entry lever) — tabs 🔁 / 🟢
+Keep the **baseline exit** (push-trail, no target) and change ONLY the arm gate, current config
+(gap 0.5–4 / 30-min), 61-day proxy window, compounded $1000/5:
+
+| Arm gate (baseline push-trail exit) | Compounded | vs baseline |
+|---|---|---|
+| baseline TIGHT arm (as-is) | +2.9% | — |
+| **sim arm** (power bar + close>SMA200, no TIGHT) | **+6.5%** | +3.6 pts |
+| **first green bar** (arm only if 09:30 closes up, any size; else skip name) | **+7.4%** | +4.5 pts |
+| *new-sim (sim arm + 3R target exit), reference* | +8.2% | +5.3 pts |
+
+**The arm gate is the bigger lever** — dropping TIGHT and entering on the first up bar lifts baseline
++2.9%→+6.5/+7.4% on its own; switching the exit to a 3R target adds the last ~1 pt to +8.2%.
+"First green bar" (simplest rule, earliest entry) edges out the rolling sim gate. Modes live in
+`sim_one`: `base_simarm`, `firstgreen`. Same in-sample/proxy caveat as everything in §2.
+
 ## 4. The honest caveat (READ THIS)
 - **Regime-dependent.** Profit concentrates in trending stretches; the *first half* of the window
   was flat-to-negative for **every** config. No gap/stop/target/RVOL knob fixed it.

@@ -294,6 +294,32 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
         <div class="appcol">${col(sweet,gated?raw.sweet.total_pct:null,'★ NEW SIM — ≥$'+m.floor.toFixed(0)+(gated?' + regime':''),'sweet')}</div></div>`;
   }
 
+  function renderArmgate(a, key, label, desc) {
+    if(!a||!a[key]){document.getElementById('day').innerHTML='<div class="empty">no arm-gate data — re-run sim_variant_ibkr_days.py</div>';return;}
+    const base=a.baseline, v=a[key], ref=a.sweet;
+    const col=(s,refpct,hdr,klass)=>{
+      const dlt=refpct!=null?s.total_pct-refpct:null;
+      let h=`<div class="apphdr ${klass}">${hdr}</div>`;
+      h+=`<div class="apptot ${cls(s.end-s.start)}">$${s.start.toFixed(0)} → $${s.end.toFixed(2)} <span class="flat" style="font-size:0.8rem">(${s.total_pct>=0?'+':''}${s.total_pct}%${dlt!=null?` · vs baseline ${refpct>=0?'+':''}${refpct}% → <b class="${cls(dlt)}">${dlt>=0?'+':''}${dlt.toFixed(1)} pts</b>`:''})</span></div>`;
+      h+=s.curve.map(r=>{
+        const picks=(r.picks||[]).map(p=>`<tr><td class="sym">${p.sym}</td><td class="num ${cls(p.gap_pct)}">${p.gap_pct>0?'+':''}${p.gap_pct}%</td><td class="num ${cls(p.ret_pct)}">${p.ret_pct>=0?'+':''}${p.ret_pct}%</td><td class="num ${cls(p.ret_usd)}">${money(p.ret_usd)}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">no picks (cash)</td></tr>';
+        return `<div class="card" style="padding:10px"><div class="funded"><b>${r.day}</b> · slot $${r.slot.toFixed(2)} × ${r.n} · <b class="${cls(r.day_pl)}">${money(r.day_pl)}</b> → $${r.capital.toFixed(2)}</div>
+          <table class="tape"><tr><th>Stock</th><th class="num">Gap</th><th class="num">Ret %</th><th class="num">Ret $</th></tr>${picks}</table></div>`;
+      }).join('');
+      return h;
+    };
+    document.getElementById('day').innerHTML=`
+      <div class="stat-row">
+        <div class="stat"><div class="value ${cls(v.end-v.start)}">$${v.end.toFixed(0)}</div><div class="label">${label} (${v.total_pct>=0?'+':''}${v.total_pct}%)</div></div>
+        <div class="stat"><div class="value ${cls(base.end-base.start)}">$${base.end.toFixed(0)}</div><div class="label">Baseline as-is (${base.total_pct>=0?'+':''}${base.total_pct}%)</div></div>
+        <div class="stat"><div class="value ${cls(v.total_pct-base.total_pct)}">${(v.total_pct-base.total_pct>=0?'+':'')}${(v.total_pct-base.total_pct).toFixed(1)} pts</div><div class="label">improvement on baseline</div></div>
+        <div class="stat"><div class="value">${a.days}</div><div class="label">days · ${esc(a.window||'')}</div></div></div>
+      <div class="note" style="margin-bottom:10px">${desc} <b>Only the arm gate changes — the exit stays baseline (push-trail, no fixed target).</b> Same config (${esc(a.config||'')}), compounded $1000/5 first-5-by-arm, same 231-name window. Reference: the full new-sim (sim arm + 3R target exit) does <b class="${cls(ref.total_pct)}">${ref.total_pct>=0?'+':''}${ref.total_pct}%</b> — the gap to that is the exit's contribution.</div>
+      <div class="split">
+        <div class="appcol">${col(base,null,'⚙ BASELINE — TIGHT arm (as-is)','base')}</div>
+        <div class="appcol">${col(v,base.total_pct,'★ '+label,'sweet')}</div></div>`;
+  }
+
   // tabs
   const tabs=document.getElementById('tabs');
   const setActive=el=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');};
@@ -313,6 +339,13 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
   const trg=document.createElement('div');trg.className='tab';trg.textContent='🌊 $15 + regime gate';
   trg.onclick=()=>{setActive(trg);renderScenario(scn,true);};
   tabs.appendChild(trg);
+  const ag=data.armgate;
+  const ta1=document.createElement('div');ta1.className='tab';ta1.textContent='🔁 Baseline + sim arm';
+  ta1.onclick=()=>{setActive(ta1);renderArmgate(ag,'base_simarm','BASELINE + sim arm gate','Take the baseline but arm on the sim gate: a power bar closing above the 200-SMA (no TIGHT), so an upward first 2-min bar places the buy.');};
+  tabs.appendChild(ta1);
+  const ta2=document.createElement('div');ta2.className='tab';ta2.textContent='🟢 First green bar';
+  ta2.onclick=()=>{setActive(ta2);renderArmgate(ag,'firstgreen','FIRST GREEN BAR only','Arm ONLY on the 09:30 bar if it closes green (up), any size. If the first 2-min bar is red/down, the name is skipped for the day — no rolling, no later entry.');};
+  tabs.appendChild(ta2);
   data.days.forEach(d=>{const el=document.createElement('div');el.className='tab';
     el.textContent=d.day;el.onclick=()=>{setActive(el);renderDay(d);};tabs.appendChild(el);});
   if(data.compound) renderSummary(data.compound); else if(data.days.length) renderDay(data.days[0]);

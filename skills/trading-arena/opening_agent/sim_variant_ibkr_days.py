@@ -73,15 +73,25 @@ def sim_one(bars,s20,s200,idxs,day,sym,mode):
     """Full sim producing row+timeline for one candidate, in 'sweet' or 'baseline' mode.
     sweet:    arm power+close>SMA200 (no TIGHT), wick stop, 3R target, breakeven@1R, 30-min.
     baseline: arm classifier MATCH_LONG (TIGHT on, loc by open), wick stop, breakeven@1R +
-              push-trail (prior-bar low), no fixed target, 30-min sell-off."""
+              push-trail (prior-bar low), no fixed target, 30-min sell-off.
+    base_simarm: baseline EXIT (push-trail) but with the sim arm gate (power+close>SMA200, no TIGHT).
+    firstgreen:  baseline EXIT (push-trail), arm ONLY on the 09:30 bar if it's green (close>open,
+                 any size); if the first bar isn't up, the name is skipped entirely (no rolling)."""
     arm=None
-    for i in idxs:
-        if bars[i]["dt"].time()>ARM_END: break
-        if s200[i] is None: continue
-        prior=bars[max(0,i-30):i]
-        ok=(C.bar_signal(bars[i],prior)>0 and bars[i]["close"]>s200[i]) if mode=="sweet" \
-           else (C.classify_opening("S",bars[i],prior,s20[i],s200[i]).decision=="MATCH_LONG")
-        if ok: arm=i; break
+    if mode=="firstgreen":
+        # ONLY the 09:30 bar: if it's green (close>open, any size) we arm; else never trade this name.
+        i0=idxs[0]
+        if s200[i0] is not None and bars[i0]["close"]>bars[i0]["open"]: arm=i0
+    else:
+        for i in idxs:
+            if bars[i]["dt"].time()>ARM_END: break
+            if s200[i] is None: continue
+            prior=bars[max(0,i-30):i]
+            if mode in ("sweet","base_simarm"):    # sim arm gate: power bar + close>SMA200 (no TIGHT)
+                ok=(C.bar_signal(bars[i],prior)>0 and bars[i]["close"]>s200[i])
+            else:                                  # baseline: full classifier (TIGHT on + loc-by-open)
+                ok=(C.classify_opening("S",bars[i],prior,s20[i],s200[i]).decision=="MATCH_LONG")
+            if ok: arm=i; break
     if arm is None: return None
     entry=round(bars[arm]["high"]+OFFSET,2); stop=round(bars[arm]["low"]-OFFSET,2)
     if stop>=entry: return None
@@ -104,7 +114,7 @@ def sim_one(bars,s20,s200,idxs,day,sym,mode):
             elif b["low"]<=cur: exitrec={"time":t.strftime("%H:%M"),"price":cur,"reason":("breakeven" if be else "protective")+" stop hit","qty":shares};ev.append(f"STOP exit ${cur:.2f}");in_pos=False
             else:
                 if not be and b["high"]>=entry+risk: cur=entry;be=True;ev.append(f"+1R → breakeven ${entry:.2f}")
-                if mode=="baseline" and be and prev_low is not None and prev_low-OFFSET>cur:
+                if mode in ("baseline","base_simarm","firstgreen") and be and prev_low is not None and prev_low-OFFSET>cur:
                     cur=round(prev_low-OFFSET,4);ev.append(f"trail stop → ${cur:.2f}")
                 if t>=selloff: exitrec={"time":t.strftime("%H:%M"),"price":round(b["close"],4),"reason":f"{SELLOFF_MIN}-min sell-off","qty":shares};ev.append(f"{SELLOFF_MIN}-MIN SELL-OFF ${b['close']:.2f}");in_pos=False
             prev_low=b["low"]
@@ -228,6 +238,12 @@ def main():
                     "sweet":compound_from_picks(picks_for(syms,fdays,"sweet",2.0,4.0,45))},
         "current":{"baseline":compound_from_picks(picks_for(syms,fdays,"baseline",0.5,4.0,30)),
                    "sweet":compound_from_picks(picks_for(syms,fdays,"sweet",0.5,4.0,30))}}
+    # arm-gate test: keep BASELINE exit (push-trail), swap only the arm gate, current config
+    existing["armgate"]={"days":len(fdays),"window":f"{fdays[0]}..{fdays[-1]}","config":"gap 0.5–4% · 30-min · push-trail exit",
+        "baseline":compound_from_picks(picks_for(syms,fdays,"baseline",0.5,4.0,30)),
+        "base_simarm":compound_from_picks(picks_for(syms,fdays,"base_simarm",0.5,4.0,30)),
+        "firstgreen":compound_from_picks(picks_for(syms,fdays,"firstgreen",0.5,4.0,30)),
+        "sweet":compound_from_picks(picks_for(syms,fdays,"sweet",0.5,4.0,30))}
     json.dump(existing,open(OUT,"w"),indent=2,default=str)
     print(json.dumps({"added_days":[{"day":d["day"],"sweet$":d["sweet"]["totals"]["realized_pl"],
                                      "base$":d["baseline"]["totals"]["realized_pl"]} for d in days_out]},indent=2))
