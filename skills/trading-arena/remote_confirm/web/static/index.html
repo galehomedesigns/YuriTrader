@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gale Force Arena</title>
+<style>
+  :root{
+    --bg:#0b0e14; --surface:#151a23; --surface-2:#1b212c; --border:#232b38;
+    --text:#e6edf3; --dim:#9aa6b8; --muted:#5c6675;
+    --pos:#3fd07f; --pos-soft:rgba(63,208,127,.12);
+    --neg:#ff5d6c; --neg-soft:rgba(255,93,108,.12);
+    --accent:#7c8aff; --accent2:#b07dff; --radius:16px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;padding:0 0 48px}
+  .wrap{max-width:560px;margin:0 auto;padding:20px 16px}
+  a{color:var(--accent)}
+
+  header{display:flex;align-items:center;gap:12px;padding:6px 2px 16px}
+  .logo{width:46px;height:46px;flex:0 0 auto;border-radius:12px;
+    box-shadow:0 6px 18px rgba(124,138,255,.28)}
+  .brand{font-weight:800;font-size:1.32rem;letter-spacing:.2px;line-height:1.1}
+  .brand small{display:block;color:var(--dim);font-weight:500;font-size:.7rem;
+    letter-spacing:2.4px;margin-top:3px}
+
+  nav{display:flex;gap:8px;background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:5px;margin-bottom:18px}
+  nav button{flex:1;border:0;background:transparent;color:var(--dim);font-weight:600;
+    font-size:.9rem;padding:9px;border-radius:8px;cursor:pointer;transition:.15s}
+  nav button.active{background:var(--surface-2);color:var(--text)}
+
+  .tag{color:var(--dim);font-size:.82rem;margin:0 2px 16px;line-height:1.5}
+
+  /* ---- performance ---- */
+  .session{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:16px;margin-bottom:16px}
+  .s-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
+  .s-date{font-weight:700;font-size:1.02rem}
+  .s-date small{display:block;color:var(--dim);font-weight:400;font-size:.72rem;margin-top:2px}
+  .s-net{text-align:right}
+  .s-net .v{font-size:1.5rem;font-weight:800;line-height:1}
+  .s-net .l{color:var(--dim);font-size:.66rem;text-transform:uppercase;letter-spacing:.6px;margin-top:4px}
+  .pos{color:var(--pos)} .neg{color:var(--neg)}
+  .splitbar{display:flex;height:8px;border-radius:6px;overflow:hidden;margin:4px 0 16px;background:var(--surface-2)}
+  .splitbar i{display:block;height:100%}
+  .splitbar .w{background:var(--pos)} .splitbar .l{background:var(--neg)}
+  .sides{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .side{border-radius:12px;padding:13px}
+  .side.win{background:var(--pos-soft);border:1px solid rgba(63,208,127,.25)}
+  .side.loss{background:var(--neg-soft);border:1px solid rgba(255,93,108,.25)}
+  .side .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .side .hd b{font-size:.78rem;letter-spacing:.3px}
+  .side .rate{font-size:1.45rem;font-weight:800;line-height:1}
+  .side .rows{margin-top:8px;font-size:.78rem;color:var(--dim);line-height:1.7}
+  .side .rows span{float:right;color:var(--text);font-variant-numeric:tabular-nums}
+  .trades{margin-top:14px;border-top:1px solid var(--border);padding-top:12px}
+  .trades summary{cursor:pointer;color:var(--dim);font-size:.78rem;list-style:none;user-select:none}
+  .trades summary::-webkit-details-marker{display:none}
+  .trades summary:after{content:"▾";float:right}
+  .chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px}
+  .chip{font-size:.74rem;font-variant-numeric:tabular-nums;padding:5px 9px;border-radius:8px;
+    background:var(--surface-2);border:1px solid var(--border)}
+  .chip b{font-weight:700}
+  .chip.w b{color:var(--pos)} .chip.l b{color:var(--neg)}
+
+  /* ---- join / sign-up ---- */
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:16px}
+  .card h2{margin:0 0 4px;font-size:1.05rem}
+  .card p.sub{margin:0 0 14px;color:var(--dim);font-size:.82rem;line-height:1.5}
+  .grp{margin-bottom:13px}
+  .grp label{display:block;font-size:.78rem;color:var(--dim);margin-bottom:6px;font-weight:600}
+  .grp input[type=text],.grp input[type=email]{width:100%;background:var(--bg);
+    border:1px solid var(--border);border-radius:10px;color:var(--text);padding:11px 12px;font-size:.92rem}
+  .grp input:focus{outline:none;border-color:var(--accent)}
+  .check{display:flex;gap:10px;align-items:flex-start;font-size:.84rem;color:var(--text);
+    background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:11px 12px;margin-bottom:9px;cursor:pointer}
+  .check input{margin-top:2px;width:17px;height:17px;accent-color:var(--accent);flex:0 0 auto}
+  .assigned{background:var(--surface-2);border:1px dashed var(--border);border-radius:12px;padding:13px;margin-top:4px}
+  .assigned .row{display:flex;justify-content:space-between;font-size:.8rem;padding:5px 0;color:var(--dim)}
+  .assigned .row b{color:var(--text);font-weight:600}
+  .btn{width:100%;border:0;border-radius:11px;padding:13px;font-size:.95rem;font-weight:700;cursor:pointer;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b0e14;margin-top:6px}
+  .ok{background:var(--pos-soft);border:1px solid rgba(63,208,127,.3);border-radius:12px;
+    padding:16px;color:var(--text);font-size:.86rem;line-height:1.55}
+  .ok b{color:var(--pos)}
+  .err{color:var(--neg);font-size:.78rem;margin-top:8px;min-height:1em}
+
+  .foot{color:var(--muted);font-size:.7rem;text-align:center;margin-top:24px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <!-- Gale Force Arena — trading bot over a faint GF watermark (template logo) -->
+    <svg class="logo" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Gale Force Arena">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#7c8aff"/><stop offset="1" stop-color="#b07dff"/>
+        </linearGradient>
+      </defs>
+      <rect width="64" height="64" rx="14" fill="url(#g)"/>
+      <text x="32" y="46" text-anchor="middle" font-family="Arial Black, Arial, sans-serif"
+            font-weight="900" font-size="42" fill="#0b0e14" opacity="0.16">GF</text>
+      <!-- robot -->
+      <line x1="32" y1="14" x2="32" y2="20" stroke="#0b0e14" stroke-width="2.4" stroke-linecap="round"/>
+      <circle cx="32" cy="12" r="3" fill="#0b0e14"/>
+      <rect x="18" y="20" width="28" height="22" rx="7" fill="#0b0e14"/>
+      <circle cx="26" cy="31" r="3.4" fill="#3fd07f"/>
+      <circle cx="38" cy="31" r="3.4" fill="#3fd07f"/>
+      <rect x="25" y="37" width="14" height="2.6" rx="1.3" fill="#7c8aff"/>
+      <!-- mini up-trend on the chest -->
+      <polyline points="22,52 28,48 34,50 42,43" stroke="#0b0e14" stroke-width="2.4"
+                stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.85"/>
+    </svg>
+    <div class="brand">Gale Force Arena<small>OPENING SIGNAL ARENA</small></div>
+  </header>
+
+  <nav>
+    <button id="nav-perf" class="active" onclick="show('perf')">Performance</button>
+    <button id="nav-join" onclick="show('join')">Join</button>
+  </nav>
+
+  <!-- ===================== PERFORMANCE ===================== -->
+  <section id="view-perf">
+    <div class="tag">Every trading session, scored. Win rate, loss rate and P&amp;L for each side —
+      the same calls every member gets, so you always know how they performed.</div>
+    <div id="sessions"></div>
+  </section>
+
+  <!-- ===================== JOIN / SIGN-UP ===================== -->
+  <section id="view-join" style="display:none">
+    <form class="card" id="signup" onsubmit="return submitJoin(event)">
+      <h2>Become a member</h2>
+      <p class="sub">Same signals as everyone — confirmed by you, on your own accounts. Tell us about
+        yourself and we'll provision your access.</p>
+
+      <div class="grp"><label>Full name</label><input type="text" name="name" placeholder="Jane Trader"></div>
+      <div class="grp"><label>Email</label><input type="email" name="email" placeholder="you@email.com"></div>
+      <div class="grp"><label>Telegram username</label><input type="text" name="telegram" placeholder="@yourhandle"></div>
+
+      <label class="check"><input type="checkbox" name="tv"> I have an active <b>TradingView</b> account.</label>
+      <label class="check"><input type="checkbox" name="qt"> I have a funded <b>Questrade</b> account.</label>
+      <label class="check"><input type="checkbox" name="pc"> I have a computer that stays on during US market open.</label>
+      <label class="check"><input type="checkbox" name="ss"> I'll keep TradingView signed out on my other devices (one active session).</label>
+
+      <div class="assigned">
+        <div class="row"><span>Assigned on approval</span><b>Access port 9301–9325</b></div>
+        <div class="row"><span>Daily confirmation</span><b>@TVConfirm_bot · Approve / Skip</b></div>
+        <div class="row"><span>Slot size (starting)</span><b>$200 &nbsp;($1,000 ÷ 5)</b></div>
+      </div>
+
+      <div class="err" id="joinErr"></div>
+      <button class="btn" type="submit">Request access</button>
+    </form>
+    <div class="card" id="joinDone" style="display:none">
+      <div class="ok"><b>Request received.</b> Next: open <b>@TVConfirm_bot</b> in Telegram and tap
+        <b>Start</b> so we can link your chat. We'll assign your access port and send your setup steps there.</div>
+    </div>
+  </section>
+
+  <div class="foot">Past performance is not indicative of future results. Members only · Gale Force Arena.</div>
+</div>
+
+<script id="perf-data" type="application/json">
+{
+  "sessions": [
+    {
+      "date": "2026-06-26", "label": "Friday open",
+      "trades": 7, "net_pct": 0.67,
+      "win":  { "n": 3, "rate": 43, "avg": 1.22, "total": 3.67 },
+      "loss": { "n": 4, "rate": 57, "avg": -0.75, "total": -3.00 },
+      "detail": [
+        { "sym": "WSE",  "ret": 0.60 }, { "sym": "EQX",  "ret": 1.53 },
+        { "sym": "FCEL", "ret": 1.54 }, { "sym": "PLTR", "ret": -0.94 },
+        { "sym": "NOW",  "ret": -0.12 }, { "sym": "AU",   "ret": -0.15 },
+        { "sym": "AVEX", "ret": -1.79 }
+      ]
+    }
+  ]
+}
+</script>
+
+<script>
+  function show(v){
+    document.getElementById('view-perf').style.display = v==='perf'?'':'none';
+    document.getElementById('view-join').style.display = v==='join'?'':'none';
+    document.getElementById('nav-perf').classList.toggle('active', v==='perf');
+    document.getElementById('nav-join').classList.toggle('active', v==='join');
+  }
+  function submitJoin(e){
+    e.preventDefault();
+    const f = e.target, err = document.getElementById('joinErr');
+    const name = f.name.value.trim(), tg = f.telegram.value.trim();
+    if(!name || !tg){ err.textContent = 'Name and Telegram username are required.'; return false; }
+    if(!(f.tv.checked && f.qt.checked && f.pc.checked && f.ss.checked)){
+      err.textContent = 'Please confirm all four checkboxes.'; return false; }
+    err.textContent='';
+    f.style.display='none';
+    document.getElementById('joinDone').style.display='';
+    return false;   // template: no backend yet — wired to the portal API later
+  }
+  (function(){
+    const data = JSON.parse(document.getElementById('perf-data').textContent);
+    const sc = x => x>=0?'pos':'neg', pct = x => (x>=0?'+':'')+x.toFixed(2)+'%';
+    document.getElementById('sessions').innerHTML = data.sessions.map(s=>{
+      const chips=(s.detail||[]).map(t=>`<span class="chip ${t.ret>=0?'w':'l'}">${t.sym} <b>${pct(t.ret)}</b></span>`).join('');
+      return `<div class="session">
+        <div class="s-head">
+          <div class="s-date">${s.date}<small>${s.label||''} · ${s.trades} trades</small></div>
+          <div class="s-net"><div class="v ${sc(s.net_pct)}">${pct(s.net_pct)}</div><div class="l">net session</div></div>
+        </div>
+        <div class="splitbar"><i class="w" style="width:${s.win.rate}%"></i><i class="l" style="width:${s.loss.rate}%"></i></div>
+        <div class="sides">
+          <div class="side win"><div class="hd"><b>WIN SIDE</b><span class="pos">${s.win.n} win${s.win.n!==1?'s':''}</span></div>
+            <div class="rate pos">${s.win.rate}%</div>
+            <div class="rows">avg <span class="pos">${pct(s.win.avg)}</span><br>total <span class="pos">${pct(s.win.total)}</span></div></div>
+          <div class="side loss"><div class="hd"><b>LOSS SIDE</b><span class="neg">${s.loss.n} loss${s.loss.n!==1?'es':''}</span></div>
+            <div class="rate neg">${s.loss.rate}%</div>
+            <div class="rows">avg <span class="neg">${pct(s.loss.avg)}</span><br>total <span class="neg">${pct(s.loss.total)}</span></div></div>
+        </div>
+        ${chips?`<details class="trades"><summary>Per-trade results</summary><div class="chips">${chips}</div></details>`:''}
+      </div>`;
+    }).join('');
+  })();
+</script>
+</body>
+</html>
