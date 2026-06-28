@@ -66,6 +66,24 @@
   .chip b{font-weight:700}
   .chip.w b{color:var(--pos)} .chip.l b{color:var(--neg)}
 
+  /* ---- track record ---- */
+  .ttoggle{display:flex;gap:8px;margin-bottom:14px}
+  .ttoggle button{flex:1;border:1px solid var(--border);background:var(--surface);color:var(--dim);
+    font-weight:600;font-size:.85rem;padding:9px;border-radius:10px;cursor:pointer}
+  .ttoggle button.on{background:var(--accent);border-color:var(--accent);color:#0b0e14}
+  .summary{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:18px;margin-bottom:16px;text-align:center}
+  .summary .big{font-size:2.1rem;font-weight:800;line-height:1}
+  .summary .ssub{color:var(--dim);font-size:.82rem;margin-top:7px}
+  .tlist{margin-top:6px}
+  .trow{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
+    padding:7px 0;border-top:1px solid var(--border);font-size:.84rem}
+  .trow:first-child{border-top:0}
+  .tsym{font-weight:700}
+  .tlv{color:var(--dim);font-variant-numeric:tabular-nums;font-size:.8rem}
+  .tret{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+  .trow.muted{color:var(--muted);display:block}
+
   /* ---- join / sign-up ---- */
   .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:16px}
   .card h2{margin:0 0 4px;font-size:1.05rem}
@@ -119,7 +137,8 @@
   </header>
 
   <nav>
-    <button id="nav-perf" class="active" onclick="show('perf')">Performance</button>
+    <button id="nav-perf" class="active" onclick="show('perf')">Last session</button>
+    <button id="nav-track" onclick="show('track')">Track record</button>
     <button id="nav-join" onclick="show('join')">Join</button>
   </nav>
 
@@ -128,6 +147,17 @@
     <div class="tag">Every trading session, scored. Win rate, loss rate and P&amp;L for each side —
       the same calls every member gets, so you always know how they performed.</div>
     <div id="sessions"></div>
+  </section>
+
+  <!-- ===================== TRACK RECORD ===================== -->
+  <section id="view-track" style="display:none">
+    <div class="tag">The full call history — entry &amp; stop on every trade, each session, compounded
+      from $1,000. The same calls every member gets; size them to your own budget.</div>
+    <div class="ttoggle">
+      <button id="cfg-baseline" onclick="setCfg('baseline')">Baseline</button>
+      <button id="cfg-improved" class="on" onclick="setCfg('improved')">Sim Improved</button>
+    </div>
+    <div id="track"></div>
   </section>
 
   <!-- ===================== JOIN / SIGN-UP ===================== -->
@@ -164,6 +194,8 @@
   <div class="foot">Past performance is not indicative of future results. Members only · Gale Force Arena.</div>
 </div>
 
+<script id="track-data" type="application/json">{"baseline":{"start":1000,"end":1070.23,"total_pct":7.02,"sessions":23,"days":[{"date":"2026-05-22","capital":998.4,"day_pl":-1.6,"trades":[{"sym":"RIOT","entry":24.72,"stop":24.3,"ret":-0.65},{"sym":"AVAV","entry":166.57,"stop":164.1,"ret":1.17},{"sym":"KLAC","entry":187.51,"stop":186.26,"ret":-0.67},{"sym":"HUBS","entry":203.01,"stop":200.01,"ret":-1.48},{"sym":"PATH","entry":10.93,"stop":10.77,"ret":0.82}]},{"date":"2026-05-26","capital":1002.86,"day_pl":4.46,"trades":[{"sym":"DNA","entry":8.77,"stop":8.62,"ret":-1.71},{"sym":"UPST","entry":30.31,"stop":28.97,"ret":0.86},{"sym":"C","entry":126.66,"stop":126.19,"ret":0.04},{"sym":"CVNA","entry":71.51,"stop":69.73,"ret":1.66},{"sym":"MCHP","entry":96.28,"stop":95.04,"ret":1.38}]},{"date":"2026-05-27","capital":1005.82,"day_pl":2.96,"trades":[{"sym":"UPS","entry":103.81,"stop":102.88,"ret":-0.59},{"sym":"ENPH","entry":68.6,"stop":66.14,"ret":1.3},{"sym":"WYNN","entry":100.01,"stop":98.58,"ret":1.27},{"sym":"LVS","entry":50.96,"stop":50.48,"ret":0.06},{"sym":"PYPL","entry":44.46,"stop":44.21,"ret":-0.56}]},{"date":"2026-05-28","capital":1010.94,"day_pl":5.11,"trades":[{"sym":"NET","entry":218.94,"stop":213.29,"ret":1.26},{"sym":"OXY","entry":57.84,"stop":57.61,"ret":0.21},{"sym":"DNA","entry":9.06,"stop":8.87,"ret":0.0},{"sym":"IBM","entry":260.41,"stop":258.4,"ret":0.78},{"sym":"XOM","entry":149.3,"stop":148.8,"ret":0.29}]},{"date":"2026-05-29","capital":1012.14,"day_pl":1.21,"trades":[{"sym":"ARRY","entry":9.47,"stop":9.3,"ret":-1.8},{"sym":"FROG","entry":74.52,"stop":73.73,"ret":2.03},{"sym":"ANET","entry":159.01,"stop":156.82,"ret":0.25},{"sym":"DOCU","entry":50.15,"stop":49.82,"ret":0.12},{"sym":"NBIS","entry":231.01,"stop":229.81,"ret":0.0}]},{"date":"2026-06-01","capital":1025.56,"day_pl":13.42,"trades":[{"sym":"AI","entry":11.13,"stop":10.89,"ret":1.08},{"sym":"PATH","entry":12.2,"stop":11.9,"ret":4.18},{"sym":"SNAP","entry":5.89,"stop":5.79,"ret":0.34},{"sym":"HPE","entry":44.86,"stop":43.94,"ret":-0.78},{"sym":"S","entry":17.67,"stop":17.34,"ret":1.81}]},{"date":"2026-06-02","capital":1036.26,"day_pl":10.7,"trades":[{"sym":"BE","entry":290.0,"stop":279.09,"ret":2.47},{"sym":"CIFR","entry":25.8,"stop":24.69,"ret":1.03},{"sym":"HAL","entry":39.95,"stop":39.47,"ret":0.23},{"sym":"EH","entry":10.22,"stop":10.04,"ret":1.37},{"sym":"PDD","entry":89.29,"stop":88.59,"ret":0.12}]},{"date":"2026-06-03","capital":1035.6,"day_pl":-0.66,"trades":[{"sym":"ON","entry":130.51,"stop":129.67,"ret":-0.64},{"sym":"CVS","entry":91.01,"stop":90.58,"ret":0.27},{"sym":"COP","entry":117.61,"stop":117.1,"ret":0.03},{"sym":"OXY","entry":59.65,"stop":59.27,"ret":0.02}]},{"date":"2026-06-04","capital":1042.11,"day_pl":6.5,"trades":[{"sym":"ABBV","entry":222.6,"stop":221.99,"ret":-0.27},{"sym":"BNTX","entry":89.45,"stop":89.32,"ret":-0.15},{"sym":"MCD","entry":277.77,"stop":277.05,"ret":-0.26},{"sym":"CVS","entry":93.57,"stop":93.15,"ret":-0.45},{"sym":"RDW","entry":19.8,"stop":19.3,"ret":4.27}]},{"date":"2026-06-05","capital":1036.17,"day_pl":-5.94,"trades":[{"sym":"CI","entry":284.78,"stop":282.99,"ret":0.8},{"sym":"MMM","entry":153.81,"stop":153.49,"ret":0.32},{"sym":"U","entry":31.25,"stop":30.94,"ret":-0.99},{"sym":"BILL","entry":36.87,"stop":36.24,"ret":-1.71},{"sym":"CMG","entry":30.03,"stop":29.65,"ret":-1.27}]},{"date":"2026-06-08","capital":1032.14,"day_pl":-4.02,"trades":[{"sym":"F","entry":15.08,"stop":14.98,"ret":-0.66},{"sym":"MARA","entry":12.81,"stop":12.59,"ret":0.0},{"sym":"CVX","entry":189.77,"stop":189.0,"ret":0.24},{"sym":"XOM","entry":152.1,"stop":151.67,"ret":-0.28},{"sym":"WULF","entry":25.15,"stop":24.84,"ret":-1.23}]},{"date":"2026-06-09","capital":1050.25,"day_pl":18.11,"trades":[{"sym":"F","entry":15.25,"stop":15.09,"ret":0.13},{"sym":"KLAC","entry":217.41,"stop":215.72,"ret":3.65},{"sym":"NKE","entry":43.61,"stop":43.26,"ret":2.8},{"sym":"DAL","entry":80.6,"stop":79.69,"ret":0.82},{"sym":"STEM","entry":7.98,"stop":7.87,"ret":1.38}]},{"date":"2026-06-10","capital":1053.55,"day_pl":3.3,"trades":[{"sym":"KLAC","entry":217.01,"stop":214.11,"ret":1.14},{"sym":"CVX","entry":189.76,"stop":188.22,"ret":-0.07},{"sym":"CVS","entry":97.8,"stop":97.12,"ret":-0.7},{"sym":"OXY","entry":57.08,"stop":56.68,"ret":0.07},{"sym":"DVN","entry":45.48,"stop":45.04,"ret":1.12}]},{"date":"2026-06-11","capital":1067.09,"day_pl":13.54,"trades":[{"sym":"PFE","entry":26.05,"stop":25.78,"ret":0.58},{"sym":"BMY","entry":56.89,"stop":56.53,"ret":-0.63},{"sym":"LUNR","entry":28.07,"stop":26.79,"ret":5.77},{"sym":"MS","entry":208.86,"stop":208.23,"ret":0.0},{"sym":"ARRY","entry":7.03,"stop":6.93,"ret":0.71}]},{"date":"2026-06-12","capital":1066.7,"day_pl":-0.4,"trades":[{"sym":"ABBV","entry":227.76,"stop":226.38,"ret":-0.61},{"sym":"SCHW","entry":90.42,"stop":90.06,"ret":0.42}]},{"date":"2026-06-15","capital":1070.48,"day_pl":3.79,"trades":[{"sym":"PLTR","entry":132.08,"stop":129.76,"ret":0.08},{"sym":"NVDA","entry":210.41,"stop":208.67,"ret":-0.61},{"sym":"UPS","entry":109.06,"stop":108.71,"ret":0.95},{"sym":"F","entry":15.31,"stop":15.2,"ret":0.0},{"sym":"LYFT","entry":14.11,"stop":13.76,"ret":1.35}]},{"date":"2026-06-16","capital":1069.8,"day_pl":-0.68,"trades":[{"sym":"MMM","entry":159.77,"stop":158.41,"ret":0.89},{"sym":"UBER","entry":73.38,"stop":72.96,"ret":0.41},{"sym":"AAL","entry":15.96,"stop":15.56,"ret":-0.19},{"sym":"UAL","entry":122.97,"stop":120.86,"ret":-1.72},{"sym":"DLR","entry":187.12,"stop":185.49,"ret":0.29}]},{"date":"2026-06-17","capital":1074.48,"day_pl":4.68,"trades":[{"sym":"NNE","entry":25.41,"stop":24.54,"ret":2.72},{"sym":"NVTS","entry":23.54,"stop":23.12,"ret":-1.78},{"sym":"CCJ","entry":108.4,"stop":107.79,"ret":0.5},{"sym":"BNTX","entry":91.24,"stop":90.81,"ret":0.76},{"sym":"BAC","entry":57.57,"stop":57.39,"ret":0.0}]},{"date":"2026-06-18","capital":1070.08,"day_pl":-4.4,"trades":[{"sym":"SMR","entry":10.9,"stop":10.55,"ret":-0.05},{"sym":"DAL","entry":84.35,"stop":83.81,"ret":0.3},{"sym":"DNA","entry":8.81,"stop":8.71,"ret":-1.14},{"sym":"PANW","entry":284.23,"stop":280.92,"ret":-1.16}]},{"date":"2026-06-22","capital":1069.94,"day_pl":-0.13,"trades":[{"sym":"GILD","entry":124.47,"stop":122.99,"ret":-0.68},{"sym":"COP","entry":109.66,"stop":108.52,"ret":-1.04},{"sym":"CVS","entry":100.4,"stop":98.99,"ret":0.88},{"sym":"HPE","entry":48.51,"stop":48.03,"ret":1.61},{"sym":"ABBV","entry":228.31,"stop":223.12,"ret":-0.82}]},{"date":"2026-06-23","capital":1059.46,"day_pl":-10.48,"trades":[{"sym":"GTLB","entry":26.39,"stop":25.98,"ret":-1.06},{"sym":"HUBS","entry":176.11,"stop":174.1,"ret":-1.14},{"sym":"TMUS","entry":182.18,"stop":181.59,"ret":-0.32},{"sym":"CHWY","entry":18.31,"stop":18.03,"ret":-1.53},{"sym":"NOW","entry":96.11,"stop":95.3,"ret":-0.84}]},{"date":"2026-06-24","capital":1064.68,"day_pl":5.22,"trades":[{"sym":"AAL","entry":16.83,"stop":16.43,"ret":-0.3},{"sym":"LOW","entry":216.05,"stop":215.33,"ret":1.62},{"sym":"DAL","entry":88.61,"stop":87.63,"ret":0.0},{"sym":"TGT","entry":136.01,"stop":134.79,"ret":0.92},{"sym":"UPST","entry":31.92,"stop":31.49,"ret":0.22}]},{"date":"2026-06-26","capital":1070.23,"day_pl":5.56,"trades":[{"sym":"WSE","entry":11.65,"stop":11.41,"ret":0.6},{"sym":"EQX","entry":9.83,"stop":9.69,"ret":1.53},{"sym":"FCEL","entry":22.71,"stop":21.49,"ret":1.54},{"sym":"PLTR","entry":110.95,"stop":109.91,"ret":-0.94},{"sym":"NOW","entry":95.0,"stop":94.16,"ret":-0.12}]}]},"improved":{"start":1000,"end":1141.51,"total_pct":14.15,"sessions":23,"days":[{"date":"2026-05-22","capital":1011.0,"day_pl":11.0,"trades":[{"sym":"HPQ","entry":23.49,"stop":22.57,"ret":4.21},{"sym":"RIOT","entry":24.72,"stop":24.3,"ret":-0.65},{"sym":"UPS","entry":99.41,"stop":98.82,"ret":0.03},{"sym":"AVAV","entry":166.57,"stop":164.1,"ret":1.03},{"sym":"GILD","entry":132.01,"stop":131.11,"ret":0.87}]},{"date":"2026-05-26","capital":1017.63,"day_pl":6.63,"trades":[{"sym":"DNA","entry":8.77,"stop":8.62,"ret":-1.71},{"sym":"NVDA","entry":217.12,"stop":214.85,"ret":-1.05},{"sym":"LCID","entry":6.05,"stop":5.88,"ret":1.0},{"sym":"DJT","entry":8.19,"stop":8.0,"ret":2.32},{"sym":"CHPT","entry":7.36,"stop":7.1,"ret":2.72}]},{"date":"2026-05-27","capital":1022.12,"day_pl":4.48,"trades":[{"sym":"RCL","entry":280.75,"stop":274.39,"ret":-0.41},{"sym":"UPS","entry":103.81,"stop":102.88,"ret":-0.59},{"sym":"ENPH","entry":68.6,"stop":66.14,"ret":1.3},{"sym":"ONDS","entry":10.01,"stop":9.76,"ret":0.3},{"sym":"F","entry":15.59,"stop":15.38,"ret":1.6}]},{"date":"2026-05-28","capital":1029.59,"day_pl":7.47,"trades":[{"sym":"AI","entry":9.68,"stop":9.54,"ret":-1.45},{"sym":"NET","entry":218.94,"stop":213.29,"ret":1.26},{"sym":"FSLR","entry":284.13,"stop":274.63,"ret":3.84},{"sym":"OXY","entry":57.84,"stop":57.61,"ret":0.0},{"sym":"DNA","entry":9.06,"stop":8.87,"ret":0.0}]},{"date":"2026-05-29","capital":1028.35,"day_pl":-1.24,"trades":[{"sym":"BILL","entry":35.86,"stop":35.14,"ret":-2.01},{"sym":"PLTR","entry":148.43,"stop":145.78,"ret":3.97},{"sym":"AI","entry":10.51,"stop":10.25,"ret":0.29},{"sym":"SCHW","entry":86.56,"stop":85.92,"ret":-0.12},{"sym":"ZS","entry":134.69,"stop":131.01,"ret":-2.73}]},{"date":"2026-06-01","capital":1042.42,"day_pl":14.08,"trades":[{"sym":"AI","entry":11.13,"stop":10.89,"ret":1.98},{"sym":"NVDA","entry":218.9,"stop":215.69,"ret":-0.05},{"sym":"SNAP","entry":5.88,"stop":5.78,"ret":0.0},{"sym":"NIO","entry":5.89,"stop":5.71,"ret":3.23},{"sym":"WYNN","entry":104.05,"stop":102.12,"ret":1.69}]},{"date":"2026-06-02","capital":1069.77,"day_pl":27.35,"trades":[{"sym":"BE","entry":290.0,"stop":279.09,"ret":2.47},{"sym":"NVDA","entry":227.56,"stop":225.43,"ret":1.75},{"sym":"CSCO","entry":124.21,"stop":122.4,"ret":1.52},{"sym":"CIFR","entry":25.8,"stop":24.69,"ret":1.03},{"sym":"FCEL","entry":21.91,"stop":21.09,"ret":6.34}]},{"date":"2026-06-03","capital":1056.33,"day_pl":-13.44,"trades":[{"sym":"RIOT","entry":28.29,"stop":27.54,"ret":-2.65},{"sym":"CIFR","entry":28.2,"stop":27.09,"ret":-3.94},{"sym":"CVS","entry":90.63,"stop":89.99,"ret":0.7},{"sym":"XOM","entry":151.12,"stop":150.01,"ret":0.94},{"sym":"WULF","entry":27.11,"stop":26.75,"ret":-1.33}]},{"date":"2026-06-04","capital":1061.06,"day_pl":4.73,"trades":[{"sym":"MMM","entry":153.26,"stop":152.42,"ret":0.21},{"sym":"UPS","entry":110.64,"stop":109.76,"ret":0.01},{"sym":"RTX","entry":178.67,"stop":176.18,"ret":0.71},{"sym":"WFC","entry":80.02,"stop":79.71,"ret":1.16},{"sym":"ROKU","entry":124.76,"stop":122.85,"ret":0.15}]},{"date":"2026-06-05","capital":1061.46,"day_pl":0.4,"trades":[{"sym":"CI","entry":284.78,"stop":282.99,"ret":0.63},{"sym":"ABBV","entry":228.32,"stop":225.99,"ret":-0.78},{"sym":"MMM","entry":153.81,"stop":153.49,"ret":0.0},{"sym":"MCD","entry":276.08,"stop":274.99,"ret":1.03},{"sym":"JNJ","entry":231.09,"stop":229.5,"ret":-0.69}]},{"date":"2026-06-08","capital":1064.82,"day_pl":3.35,"trades":[{"sym":"F","entry":15.08,"stop":14.98,"ret":-0.66},{"sym":"MARA","entry":12.81,"stop":12.59,"ret":0.0},{"sym":"SLB","entry":56.11,"stop":55.57,"ret":0.94},{"sym":"HAL","entry":40.0,"stop":39.54,"ret":0.85},{"sym":"CVX","entry":189.77,"stop":189.0,"ret":0.45}]},{"date":"2026-06-09","capital":1075.28,"day_pl":10.47,"trades":[{"sym":"RCL","entry":278.0,"stop":274.27,"ret":1.32},{"sym":"F","entry":15.25,"stop":15.09,"ret":0.13},{"sym":"ROKU","entry":125.77,"stop":124.54,"ret":0.25},{"sym":"KLAC","entry":217.41,"stop":215.72,"ret":2.33},{"sym":"AMSC","entry":44.1,"stop":43.55,"ret":0.88}]},{"date":"2026-06-10","capital":1093.25,"day_pl":17.97,"trades":[{"sym":"IONQ","entry":58.06,"stop":56.49,"ret":2.45},{"sym":"VZ","entry":46.54,"stop":46.23,"ret":-0.67},{"sym":"KLAC","entry":217.01,"stop":214.11,"ret":4.01},{"sym":"CVX","entry":189.76,"stop":188.22,"ret":-0.07},{"sym":"PENN","entry":20.5,"stop":20.29,"ret":2.63}]},{"date":"2026-06-11","capital":1095.86,"day_pl":2.61,"trades":[{"sym":"KLAC","entry":225.24,"stop":220.62,"ret":2.8},{"sym":"PFE","entry":26.05,"stop":25.78,"ret":0.58},{"sym":"MS","entry":208.8,"stop":206.99,"ret":0.16},{"sym":"VRT","entry":288.9,"stop":283.98,"ret":-1.7},{"sym":"BMY","entry":56.89,"stop":56.53,"ret":-0.63}]},{"date":"2026-06-12","capital":1089.92,"day_pl":-5.94,"trades":[{"sym":"RIOT","entry":26.82,"stop":26.32,"ret":1.69},{"sym":"UPS","entry":110.01,"stop":109.87,"ret":0.38},{"sym":"DDOG","entry":235.89,"stop":230.7,"ret":-2.2},{"sym":"FROG","entry":79.75,"stop":78.68,"ret":-1.34},{"sym":"RIVN","entry":16.1,"stop":15.66,"ret":-1.24}]},{"date":"2026-06-15","capital":1099.81,"day_pl":9.88,"trades":[{"sym":"PLTR","entry":132.08,"stop":129.76,"ret":0.08},{"sym":"NVDA","entry":210.41,"stop":208.67,"ret":-0.61},{"sym":"UPS","entry":109.06,"stop":108.71,"ret":0.96},{"sym":"NOW","entry":105.24,"stop":103.52,"ret":0.67},{"sym":"DASH","entry":156.64,"stop":151.94,"ret":3.42}]},{"date":"2026-06-16","capital":1104.98,"day_pl":5.17,"trades":[{"sym":"MMM","entry":159.77,"stop":158.41,"ret":0.7},{"sym":"UEC","entry":12.13,"stop":11.88,"ret":0.0},{"sym":"UBER","entry":73.38,"stop":72.96,"ret":0.0},{"sym":"ARRY","entry":8.16,"stop":8.02,"ret":1.84},{"sym":"AAL","entry":15.96,"stop":15.56,"ret":-0.19}]},{"date":"2026-06-17","capital":1117.71,"day_pl":12.73,"trades":[{"sym":"SOFI","entry":18.06,"stop":17.77,"ret":1.33},{"sym":"RTX","entry":187.72,"stop":186.37,"ret":1.65},{"sym":"UUUU","entry":15.84,"stop":15.55,"ret":-0.95},{"sym":"NNE","entry":25.41,"stop":24.54,"ret":2.4},{"sym":"BNTX","entry":90.61,"stop":90.21,"ret":1.32}]},{"date":"2026-06-18","capital":1112.38,"day_pl":-5.33,"trades":[{"sym":"DNA","entry":8.99,"stop":8.65,"ret":-1.33},{"sym":"UEC","entry":12.11,"stop":11.84,"ret":-2.23},{"sym":"CCJ","entry":109.44,"stop":107.23,"ret":-2.02},{"sym":"QCOM","entry":220.73,"stop":217.3,"ret":2.51},{"sym":"CHPT","entry":7.99,"stop":7.79,"ret":0.69}]},{"date":"2026-06-22","capital":1113.66,"day_pl":1.28,"trades":[{"sym":"GILD","entry":124.47,"stop":122.99,"ret":-0.68},{"sym":"FANG","entry":186.36,"stop":184.77,"ret":-0.04},{"sym":"COP","entry":109.66,"stop":108.52,"ret":-1.04},{"sym":"CVS","entry":100.4,"stop":98.99,"ret":0.88},{"sym":"HPE","entry":48.51,"stop":48.03,"ret":1.46}]},{"date":"2026-06-23","capital":1118.69,"day_pl":5.03,"trades":[{"sym":"BMY","entry":55.49,"stop":55.16,"ret":-0.59},{"sym":"TMUS","entry":181.72,"stop":180.09,"ret":-0.75},{"sym":"XOM","entry":139.32,"stop":138.54,"ret":-0.15},{"sym":"GTLB","entry":26.39,"stop":25.98,"ret":-1.06},{"sym":"BBBY","entry":6.23,"stop":5.99,"ret":4.82}]},{"date":"2026-06-24","capital":1129.74,"day_pl":11.05,"trades":[{"sym":"DNA","entry":9.08,"stop":8.95,"ret":4.3},{"sym":"GME","entry":21.37,"stop":21.15,"ret":0.89},{"sym":"AAL","entry":16.83,"stop":16.43,"ret":-0.3},{"sym":"UAL","entry":126.51,"stop":123.7,"ret":-0.03},{"sym":"HON","entry":225.1,"stop":223.7,"ret":0.08}]},{"date":"2026-06-26","capital":1141.51,"day_pl":11.77,"trades":[{"sym":"NOW","entry":92.83,"stop":89.99,"ret":2.21},{"sym":"NFLX","entry":72.46,"stop":71.52,"ret":1.29},{"sym":"WSE","entry":11.65,"stop":11.41,"ret":0.6},{"sym":"AU","entry":81.77,"stop":81.1,"ret":0.56},{"sym":"DKNG","entry":24.0,"stop":23.35,"ret":0.54}]}]}}</script>
+
 <script id="perf-data" type="application/json">
 {
   "sessions": [
@@ -185,10 +217,38 @@
 
 <script>
   function show(v){
-    document.getElementById('view-perf').style.display = v==='perf'?'':'none';
-    document.getElementById('view-join').style.display = v==='join'?'':'none';
-    document.getElementById('nav-perf').classList.toggle('active', v==='perf');
-    document.getElementById('nav-join').classList.toggle('active', v==='join');
+    ['perf','track','join'].forEach(k=>{
+      document.getElementById('view-'+k).style.display = k===v?'':'none';
+      document.getElementById('nav-'+k).classList.toggle('active', k===v);
+    });
+    if(v==='track') renderTrack();
+  }
+  let trackData=null, trackCfg='improved';
+  function setCfg(c){
+    trackCfg=c;
+    document.getElementById('cfg-baseline').classList.toggle('on', c==='baseline');
+    document.getElementById('cfg-improved').classList.toggle('on', c==='improved');
+    renderTrack();
+  }
+  function renderTrack(){
+    if(!trackData) trackData=JSON.parse(document.getElementById('track-data').textContent);
+    const c=trackData[trackCfg];
+    const sc=x=>x>=0?'pos':'neg', pc=x=>(x>=0?'+':'')+x.toFixed(2)+'%',
+          mon=x=>(x>=0?'+$':'−$')+Math.abs(x).toFixed(2);
+    let h=`<div class="summary"><div class="big ${sc(c.total_pct)}">$${c.end.toFixed(2)}</div>
+      <div class="ssub">$${c.start.toLocaleString()} start · <b class="${sc(c.total_pct)}">${pc(c.total_pct)}</b>
+      · ${c.sessions} sessions · $200 / slot</div></div>`;
+    h+=c.days.slice().reverse().map(d=>{
+      const rows=d.trades.map(t=>`<div class="trow"><span class="tsym">${t.sym}</span>
+        <span class="tlv">${t.entry} → ${t.stop}</span>
+        <span class="tret ${sc(t.ret)}">${pc(t.ret)}</span></div>`).join('') || '<div class="trow muted">no trades — cash</div>';
+      return `<div class="session"><div class="s-head">
+        <div class="s-date">${d.date}<small>${d.trades.length} trade${d.trades.length!==1?'s':''}</small></div>
+        <div class="s-net"><div class="v ${sc(d.day_pl)}" style="font-size:1.12rem">${mon(d.day_pl)}</div>
+          <div class="l">→ $${d.capital.toFixed(2)}</div></div></div>
+        <div class="tlist">${rows}</div></div>`;
+    }).join('');
+    document.getElementById('track').innerHTML=h;
   }
   function submitJoin(e){
     e.preventDefault();
