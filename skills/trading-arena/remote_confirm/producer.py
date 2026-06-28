@@ -77,68 +77,39 @@ SESSION_CAP = os.path.normpath(os.path.join(HERE, "..", "logs"))  # session_repl
 
 
 def build_signals_live(day):
-    """LIVE mode: read the latest session-capture snapshot his cron already writes
-    (logs/session_replay_<day>/bars_<HHMMSS>.json — read-only, zero CDP touch on his
-    session) and run his baseline arm on each captured funnel name. The captured
-    symbols are already gap/price-filtered by his pre-market scan, so no re-filter."""
+    """LIVE mode: reuse the PROVEN dashboard assembly (sim_opening_variant) to stitch ALL
+    of today's session-capture snapshots into a complete per-symbol series and run his
+    baseline arm on it. Pure file reads of what his capture cron already writes — zero CDP
+    touch on his :9225 session. Stitching gives the full SMA200 history (prior days +
+    pre-market), so the arm list EXACTLY matches the dashboard baseline."""
+    import sim_opening_variant as SOV
     cap_dir = os.path.join(SESSION_CAP, f"session_replay_{day.isoformat()}")
-    snaps = sorted((f for f in glob.glob(os.path.join(cap_dir, "bars_*.json")) if os.path.getsize(f) > 100),
-                   reverse=True)
-    snap, results = None, []
-    for f in snaps:                                    # newest snapshot that actually has bars
-        try:
-            r = json.load(open(f)).get("results", [])
-        except Exception:
-            continue
-        if any(x.get("bars") for x in r):
-            snap, results = f, r
-            break
-    if not snap:
-        raise SystemExit(f"[producer] no usable capture snapshot in {cap_dir} "
+    if not glob.glob(os.path.join(cap_dir, "bars_*.json")):
+        raise SystemExit(f"[producer] no capture snapshots in {cap_dir} "
                          f"(his session_capture cron writes these live each morning)")
+    full_by = SOV.stitch(cap_dir)                      # merge every snapshot -> complete series
     out = []
-    thin = 0                                           # names skipped for too-little SMA history
-    for r in results:
-        sym = r.get("symbol", "").split(":")[-1]
-        raw = r.get("bars", [])
-        bars = []
-        for b in raw:
-            dt = datetime.fromtimestamp(b["time"], V.ET)
-            if V.OPEN_T <= dt.time() <= dtime(16, 0):
-                bars.append({"dt": dt, "open": b["open"], "high": b["high"],
-                             "low": b["low"], "close": b["close"]})
-        bars.sort(key=lambda x: x["dt"])
-        closes = [x["close"] for x in bars]
-        s20, s200 = V.roll(closes, 20), V.roll(closes, 200)
-        byday = {}
-        for i, x in enumerate(bars):
-            byday.setdefault(x["dt"].date(), []).append(i)
-        idxs = byday.get(day)
-        if not idxs:
+    for tv, full in sorted(full_by.items()):
+        if not full:
             continue
-        o = bars[idxs[0]]["open"]
-        if o < V.MIN_PRICE or o > V.MAX_PRICE:
+        sym = tv.split(":")[-1]
+        pclose, topen, gap = SOV.premarket_gap(full, day)
+        if gap is None or not (SOV.GAP_MIN <= gap <= SOV.GAP_MAX):
             continue
-        # SMA200 must be warm by the arm window (needs ~200 bars before 9:30); a 300-bar
-        # capture only carries ~198, so early arms get s200=None and skip. Flag it.
-        if s200[idxs[0]] is None:        # SMA200 not warm at 9:30 -> open-window arms (9:30-9:33) lost
-            thin += 1
-        sig = V.sim_one(bars, s20, s200, idxs, day, sym, "baseline")
-        if not sig:
+        if topen and (topen < V.MIN_PRICE or topen > V.MAX_PRICE):
             continue
+        armed = SOV.arm_variant(full, sym, day, "baseline")   # his exact live arm
+        if not armed:
+            continue
+        _i, entry, stop, info = armed
         out.append({
-            "broadcast_id": f"{day.isoformat()}:{sym}:{sig['arm_t']}",
-            "bar_ts": sig["arm_t"], "symbol": sym, "side": "buy",
-            "entry": sig["entry"], "stop": sig["stop"], "gap_pct": None,
+            "broadcast_id": f"{day.isoformat()}:{sym}:{info['arm_t']}",
+            "bar_ts": info["arm_t"], "symbol": sym, "side": "buy",
+            "entry": entry, "stop": stop, "gap_pct": round(gap, 2),
         })
     out.sort(key=lambda x: (x["bar_ts"], x["symbol"]))
-    nb = sum(1 for x in results if x.get("bars"))
-    print(f"[producer] LIVE source: {os.path.basename(snap)} ({nb} funnel names with bars)", file=sys.stderr)
-    if thin:
-        print(f"[producer] WARNING: {thin} name(s) had SMA200 not yet warm at the open "
-              f"(300-bar capture carries ~198 of the 200 needed). Open-bar arms are skipped — "
-              f"bump session_capture --min to ~500, or drive his live engine, for faithful 9:30 signals.",
-              file=sys.stderr)
+    print(f"[producer] LIVE source: stitched {len(full_by)} symbols from "
+          f"session_replay_{day.isoformat()}", file=sys.stderr)
     return out
 
 
