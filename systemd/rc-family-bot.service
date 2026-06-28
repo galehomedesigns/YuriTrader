@@ -1,0 +1,19 @@
+[Unit]
+Description=Family Remote-Confirm bot (@TVConfirm_bot) — polls Approve/Skip taps, records bids to MongoDB
+Documentation=file:///home/tonygale/openclaw/skills/trading-arena/remote_confirm
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=/home/tonygale/openclaw/skills/trading-arena/remote_confirm
+ExecStart=/home/tonygale/openclaw/.venv/bin/python /home/tonygale/openclaw/skills/trading-arena/remote_confirm/family_bot.py poll
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rc-family-bot
+
+[Install]
+WantedBy=default.target
