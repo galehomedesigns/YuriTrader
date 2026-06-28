@@ -19,6 +19,13 @@ OUT = CANVAS / "index.html"
 CATALOG: list[dict] = [
     # LIVE — follow the DASHBOARDS.md standard, regen on schedule
     {
+        "filename": "gfa.html",
+        "title": "Gale Force Arena — Member Page",
+        "purpose": "Member-facing opening-signal page: last-session win/loss, 23-session Baseline vs Sim Improved track record (entry/stop per trade), and the Join sign-up.",
+        "owner_skill": "trading-arena",
+        "category": "live",
+    },
+    {
         "filename": "bot-arena.html",
         "title": "Trading Arena",
         "purpose": "10-bot paper-trading leaderboard with per-bot cumulative-P&L line charts and strategy definition cards.",
