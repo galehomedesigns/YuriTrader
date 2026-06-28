@@ -1,0 +1,13 @@
+{
+  "_comment": "Phase 0 pilot followers. day_budget/max_trades drive sizing; telegram_chat is where family_bot sends Approve/Skip. All DRY in the pilot. Real followers add cdp_port (9301-9325) later.",
+  "users": [
+    {
+      "user": "pilot",
+      "display": "Pilot (Tony test)",
+      "day_budget": 1000,
+      "max_trades": 5,
+      "telegram_chat": "6545739863",
+      "dry": true
+    }
+  ]
+}
