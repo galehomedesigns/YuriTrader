@@ -5,9 +5,16 @@ Computes Tony's opening signal ONCE from cached 2-min bars (his live rule = the
 baseline arm: classifier MATCH_LONG, loc-by-open, wick stop) and emits one broadcast
 record per armed name, which every follower then sizes + confirms identically.
 
-REPLAY only for now: reads a historical date from the broad IBKR cache so the whole
-fan-out loop can be tested any time, touching nothing live. A live-feed mode (reading
-his real-time TV session read-only) is a later step once this is proven.
+Two feeds:
+  * REPLAY (--date): historical date from the broad IBKR cache; test the loop any time.
+  * LIVE   (--live): reads the latest session-capture snapshot his cron already writes
+    (logs/session_replay_<day>/bars_*.json) — pure file reads, ZERO CDP touch on his
+    :9225 session. Faithfully reproduces his baseline arm on the real funnel.
+
+KNOWN LIMITATION (live): a 300-bar capture carries only ~198 bars before 9:30, so
+SMA200 isn't warm until ~9:34 and arms in the 9:30-9:33 window are skipped (warned at
+runtime). Fix = bump session_capture's tv_bars --min to ~500 (his file), or drive his
+live engine directly, for faithful open-bar signals.
 
 Broadcast file: state/remote_confirm/broadcast/signals_<date>.json — an ordered list
 (by arm time) of {broadcast_id, bar_ts, symbol, side, entry, stop, gap_pct}. Re-runs
@@ -16,10 +23,11 @@ are idempotent (broadcast_id = "<date>:<symbol>:<arm_t>").
 Usage: producer.py --date 2026-06-24 [--cache <dir>] [--out <broadcast_dir>]
 """
 import argparse
+import glob
 import json
 import os
 import sys
-from datetime import date
+from datetime import date, datetime, time as dtime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "opening_agent"))
@@ -65,21 +73,101 @@ def build_signals(cache_dir, day):
     return out
 
 
+SESSION_CAP = os.path.normpath(os.path.join(HERE, "..", "logs"))  # session_replay_<date>/ lives here
+
+
+def build_signals_live(day):
+    """LIVE mode: read the latest session-capture snapshot his cron already writes
+    (logs/session_replay_<day>/bars_<HHMMSS>.json — read-only, zero CDP touch on his
+    session) and run his baseline arm on each captured funnel name. The captured
+    symbols are already gap/price-filtered by his pre-market scan, so no re-filter."""
+    cap_dir = os.path.join(SESSION_CAP, f"session_replay_{day.isoformat()}")
+    snaps = sorted((f for f in glob.glob(os.path.join(cap_dir, "bars_*.json")) if os.path.getsize(f) > 100),
+                   reverse=True)
+    snap, results = None, []
+    for f in snaps:                                    # newest snapshot that actually has bars
+        try:
+            r = json.load(open(f)).get("results", [])
+        except Exception:
+            continue
+        if any(x.get("bars") for x in r):
+            snap, results = f, r
+            break
+    if not snap:
+        raise SystemExit(f"[producer] no usable capture snapshot in {cap_dir} "
+                         f"(his session_capture cron writes these live each morning)")
+    out = []
+    thin = 0                                           # names skipped for too-little SMA history
+    for r in results:
+        sym = r.get("symbol", "").split(":")[-1]
+        raw = r.get("bars", [])
+        bars = []
+        for b in raw:
+            dt = datetime.fromtimestamp(b["time"], V.ET)
+            if V.OPEN_T <= dt.time() <= dtime(16, 0):
+                bars.append({"dt": dt, "open": b["open"], "high": b["high"],
+                             "low": b["low"], "close": b["close"]})
+        bars.sort(key=lambda x: x["dt"])
+        closes = [x["close"] for x in bars]
+        s20, s200 = V.roll(closes, 20), V.roll(closes, 200)
+        byday = {}
+        for i, x in enumerate(bars):
+            byday.setdefault(x["dt"].date(), []).append(i)
+        idxs = byday.get(day)
+        if not idxs:
+            continue
+        o = bars[idxs[0]]["open"]
+        if o < V.MIN_PRICE or o > V.MAX_PRICE:
+            continue
+        # SMA200 must be warm by the arm window (needs ~200 bars before 9:30); a 300-bar
+        # capture only carries ~198, so early arms get s200=None and skip. Flag it.
+        if s200[idxs[0]] is None:        # SMA200 not warm at 9:30 -> open-window arms (9:30-9:33) lost
+            thin += 1
+        sig = V.sim_one(bars, s20, s200, idxs, day, sym, "baseline")
+        if not sig:
+            continue
+        out.append({
+            "broadcast_id": f"{day.isoformat()}:{sym}:{sig['arm_t']}",
+            "bar_ts": sig["arm_t"], "symbol": sym, "side": "buy",
+            "entry": sig["entry"], "stop": sig["stop"], "gap_pct": None,
+        })
+    out.sort(key=lambda x: (x["bar_ts"], x["symbol"]))
+    nb = sum(1 for x in results if x.get("bars"))
+    print(f"[producer] LIVE source: {os.path.basename(snap)} ({nb} funnel names with bars)", file=sys.stderr)
+    if thin:
+        print(f"[producer] WARNING: {thin} name(s) had SMA200 not yet warm at the open "
+              f"(300-bar capture carries ~198 of the 200 needed). Open-bar arms are skipped — "
+              f"bump session_capture --min to ~500, or drive his live engine, for faithful 9:30 signals.",
+              file=sys.stderr)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--date", required=True, help="replay date YYYY-MM-DD")
-    ap.add_argument("--cache", default=V.CACHE, help="bar cache dir (default broad IBKR cache)")
+    ap.add_argument("--date", help="replay date YYYY-MM-DD (defaults to today in --live)")
+    ap.add_argument("--live", action="store_true",
+                    help="read today's live session-capture snapshot instead of the replay cache")
+    ap.add_argument("--cache", default=V.CACHE, help="bar cache dir (replay mode)")
     ap.add_argument("--out", default=DEFAULT_OUT, help="broadcast output dir")
     a = ap.parse_args()
-    day = date.fromisoformat(a.date)
-    signals = build_signals(a.cache, day)
+    if a.live:
+        day = date.fromisoformat(a.date) if a.date else datetime.now(V.ET).date()
+        signals = build_signals_live(day)
+    else:
+        if not a.date:
+            ap.error("--date is required in replay mode")
+        day = date.fromisoformat(a.date)
+        signals = build_signals(a.cache, day)
     os.makedirs(a.out, exist_ok=True)
-    path = os.path.join(a.out, f"signals_{a.date}.json")
+    ds = day.isoformat()
+    path = os.path.join(a.out, f"signals_{ds}.json")
     with open(path, "w") as f:
-        json.dump({"date": a.date, "mode": "replay", "n": len(signals), "signals": signals}, f, indent=2)
-    print(f"[producer] {a.date}: broadcast {len(signals)} armed signal(s) -> {path}")
+        json.dump({"date": ds, "mode": "live" if a.live else "replay",
+                   "n": len(signals), "signals": signals}, f, indent=2)
+    print(f"[producer] {ds} ({'LIVE' if a.live else 'replay'}): broadcast {len(signals)} armed signal(s) -> {path}")
     for sgn in signals:
-        print(f"  {sgn['bar_ts']} {sgn['symbol']:6} buy entry {sgn['entry']} stop {sgn['stop']} (gap {sgn['gap_pct']}%)")
+        gap = "" if sgn["gap_pct"] is None else f" (gap {sgn['gap_pct']}%)"
+        print(f"  {sgn['bar_ts']} {sgn['symbol']:6} buy entry {sgn['entry']} stop {sgn['stop']}{gap}")
 
 
 if __name__ == "__main__":
