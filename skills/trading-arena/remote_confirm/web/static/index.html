@@ -124,6 +124,13 @@
   .check{display:flex;gap:10px;align-items:flex-start;font-size:.84rem;background:var(--bg);
     border:1px solid var(--border);border-radius:10px;padding:11px 12px;margin-bottom:9px;cursor:pointer}
   .check input{margin-top:2px;width:17px;height:17px;accent-color:var(--accent);flex:0 0 auto}
+  .disc-label{font-size:.78rem;color:var(--dim);font-weight:700;margin:10px 0 6px}
+  .disc-box{max-height:150px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);
+    border-radius:10px;padding:12px 14px;font-size:.78rem;line-height:1.55;color:var(--dim);margin-bottom:10px}
+  .disc-box b{color:var(--text)} .disc-box p{margin:0}
+  .check.legal{align-items:flex-start;border-color:var(--accent);background:rgba(34,211,238,.06)}
+  .check.legal.locked{opacity:.5}
+  .check.legal input:disabled{cursor:not-allowed}
   .aside{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
   .aside h3{margin:0 0 12px;font-size:.95rem}
   .aside .row{display:flex;justify-content:space-between;font-size:.82rem;padding:8px 0;color:var(--dim);
@@ -197,8 +204,27 @@
         <label class="check"><input type="checkbox" name="qt"> I have a funded <b>Questrade</b> account.</label>
         <label class="check"><input type="checkbox" name="pc"> I have a computer that stays on during US market open.</label>
         <label class="check"><input type="checkbox" name="ss"> I'll keep TradingView signed out on my other devices.</label>
+
+        <div class="disc-label">Risk Disclosure &amp; Disclaimer — please read</div>
+        <div class="disc-box" id="discBox" onscroll="discScrolled(this)">
+          <p><b>Trading involves substantial risk of loss; you may lose some or all of your capital.</b>
+          Gale Force Arena provides <b>general, educational information only</b> — the same for every member —
+          and is <b>not</b> investment, financial, legal or tax advice, and <b>not</b> a registered adviser or broker.
+          We disclose that we are <b>compensated</b> (membership fees). <b>You make every decision and execute every
+          trade yourself</b>: pressing Confirm places <b>your</b> order in <b>your</b> own account; we never hold,
+          access, or control your money. <b>Any amount you put at risk (including any $1,000 stake) is entirely your
+          own risk.</b> Performance figures shown are <b>hypothetical / simulated</b>, were not achieved by any member
+          account, and have inherent limitations; <b>past performance does not indicate future results</b>, and we
+          guarantee <b>no</b> profit. To the fullest extent permitted by law we accept <b>no liability</b> for your
+          trading losses, and you agree to indemnify us. Read the full
+          <a href="disclaimer.html" target="_blank">Risk Disclosure &amp; Disclaimer →</a></p>
+        </div>
+        <label class="check legal locked" id="agreeLabel"><input type="checkbox" name="agree" id="agree" disabled>
+          I have read and agree to the <b>Risk Disclosure &amp; Disclaimer</b>. I understand I trade my own account at
+          my own risk, that this is general information (not personalized advice), and I accept all risk of loss.</label>
+
         <div class="err" id="joinErr"></div>
-        <button class="btn" type="submit">Request access</button>
+        <button class="btn" type="submit">I agree — request access</button>
       </form>
       <div>
         <div class="aside">
@@ -316,10 +342,21 @@
     e.preventDefault();
     const f=e.target, err=document.getElementById('joinErr');
     if(!f.name.value.trim()||!f.telegram.value.trim()){err.textContent='Name and Telegram username are required.';return false;}
-    if(!(f.tv.checked&&f.qt.checked&&f.pc.checked&&f.ss.checked)){err.textContent='Please confirm all four checkboxes.';return false;}
+    if(!(f.tv.checked&&f.qt.checked&&f.pc.checked&&f.ss.checked)){err.textContent='Please confirm the four account checkboxes.';return false;}
+    if(!f.agree.checked){err.textContent='You must read and agree to the Risk Disclosure & Disclaimer to continue.';return false;}
     err.textContent=''; f.style.display='none'; document.getElementById('joinDone').style.display='';
-    return false;
+    return false;   // (backend will record the agreement: disclaimer version + timestamp + IP)
   }
+  // enable the agree box only after the disclaimer has been scrolled through (or if it all fits)
+  function discScrolled(el){
+    if(el.scrollTop+el.clientHeight >= el.scrollHeight-8) unlockAgree();
+  }
+  function unlockAgree(){
+    const a=document.getElementById('agree'); if(a){a.disabled=false;}
+    const l=document.getElementById('agreeLabel'); if(l){l.classList.remove('locked');}
+  }
+  window.addEventListener('load',()=>{const b=document.getElementById('discBox');
+    if(b && b.scrollHeight<=b.clientHeight+4) unlockAgree();});
   (function(){
     const data=JSON.parse(document.getElementById('perf-data').textContent);
     document.getElementById('sessions').innerHTML=data.sessions.map(s=>{
