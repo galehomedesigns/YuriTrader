@@ -17,6 +17,7 @@ buy_watcher). On-demand: /opening in stock_concierge reads the cache this writes
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.parse
 import urllib.request
@@ -83,18 +84,29 @@ def in_premarket_window():
     return WIN_START * 60 <= mins < WIN_END_H * 60 + WIN_END_M
 
 
-def _tg_send_one(text):
-    data = urllib.parse.urlencode({
-        "chat_id": CHAT_ID, "text": text, "parse_mode": "HTML",
-        "disable_web_page_preview": "true",
-    }).encode()
+def _tg_post(text, html=True):
+    fields = {"chat_id": CHAT_ID, "text": text, "disable_web_page_preview": "true"}
+    if html:
+        fields["parse_mode"] = "HTML"
+    data = urllib.parse.urlencode(fields).encode()
     url = f"https://api.telegram.org/bot{STOCK_BOT_TOKEN}/sendMessage"
+    with urllib.request.urlopen(urllib.request.Request(url, data=data), timeout=30) as r:
+        return json.loads(r.read()).get("ok", False)
+
+
+def _tg_send_one(text):
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, data=data), timeout=30) as r:
-            return json.loads(r.read()).get("ok", False)
+        return _tg_post(text, html=True)
     except Exception as e:                   # noqa: BLE001
-        print(f"  [opening] TG send error: {e}", file=sys.stderr)
-        return False
+        # A 400 here is almost always invalid HTML in an interpolated value (a stray
+        # <, >, & or an unclosed tag). Don't drop the alert — resend as PLAIN text
+        # (tags stripped) so the message always lands.
+        print(f"  [opening] TG HTML send failed ({e}); retrying as plain text", file=sys.stderr)
+        try:
+            return _tg_post(re.sub(r"<[^>]+>", "", text), html=False)
+        except Exception as e2:              # noqa: BLE001
+            print(f"  [opening] TG plain-text send also failed: {e2}", file=sys.stderr)
+            return False
 
 
 def _chunk(text, limit=3900):
@@ -222,20 +234,24 @@ def run(force=False, send=True):
     except OSError as e:
         print(f"[opening] cache/watchlist write failed: {e}", file=sys.stderr)
 
+    # Mirror the ranked list into the user's (single, free-tier) TradingView
+    # watchlist so it syncs to their devices and stays current with the scan.
+    # Runs on EVERY scan (coupled to the scan, not the Telegram send) so the
+    # watchlist tracks the funnel even on --no-send runs. Replace-entirely per
+    # the 2026-06-13 decision. Non-fatal: never let a watchlist hiccup break the
+    # scan. Auto-skips if TRADINGVIEW_SESSIONID is unset or OPENING_TV_WATCHLIST=0.
+    if ranked and os.environ.get("OPENING_TV_WATCHLIST", "1") not in ("0", "false", ""):
+        try:
+            tv_watchlist.sync([r["symbol"] for r in ranked])
+            print(f"[opening] TV watchlist synced ({len(ranked)} symbols)", file=sys.stderr)
+        except Exception as e:  # noqa: BLE001
+            print(f"[opening] TV watchlist sync skipped: {e}", file=sys.stderr)
+
     msg = format_message(ranked, et_now)
     print(msg)
     if send:
         ok = send_message(msg)
         print(f"[opening] sent={ok} | cached -> {CACHE}")
-        # Mirror the ranked list into the user's (single, free-tier) TradingView
-        # watchlist so it syncs to their devices. Replace-entirely per the
-        # 2026-06-13 decision. Non-fatal: never let a watchlist hiccup break the
-        # scan/send. Auto-skips if TRADINGVIEW_SESSIONID is unset or disabled.
-        if ranked and os.environ.get("OPENING_TV_WATCHLIST", "1") not in ("0", "false", ""):
-            try:
-                tv_watchlist.sync([r["symbol"] for r in ranked])
-            except Exception as e:  # noqa: BLE001
-                print(f"[opening] TV watchlist sync skipped: {e}", file=sys.stderr)
 
 
 def main():

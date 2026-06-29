@@ -29,7 +29,7 @@ from ib_async import IB, Stock
 
 ET = ZoneInfo("America/New_York")
 HERE = os.path.dirname(os.path.abspath(__file__))
-CACHE_DIR = os.path.join(os.path.dirname(HERE), "logs", "backtest_cache_ibkr")
+CACHE_DIR = os.environ.get("IBKR_BACKFILL_CACHE_DIR") or os.path.join(os.path.dirname(HERE), "logs", "backtest_cache_ibkr")
 OPEN_T, RTH_END = dtime(9, 30), dtime(16, 0)
 
 HOST = os.environ.get("IBKR_HOST", "127.0.0.1")

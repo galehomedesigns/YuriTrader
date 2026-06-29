@@ -83,6 +83,25 @@ def broker_ok():
         return False, str(e)[:80]
 
 
+def stage_selftest_ok():
+    """(ok, detail) — CANARY: can the order-staging DOM path actually LOCATE the
+    order-type tab + stop-loss section + submit button right now? Runs the same
+    finders staging uses (never submits). Catches the cold-ticket innerText drop /
+    a TradingView ticket-DOM change BEFORE 9:30, instead of when a live setup fires
+    (the recurring failure that cost trades 2026-06-22)."""
+    import json
+    import subprocess
+    here = os.path.dirname(os.path.abspath(__file__))
+    try:
+        out = subprocess.run(["node", os.path.join(here, "tv_stage_selftest.js"), "--port", str(CDP_PORT)],
+                             capture_output=True, text=True, timeout=45)
+        lines = [l for l in (out.stdout or "").splitlines() if l.strip().startswith("{")]
+        data = json.loads(lines[-1]) if lines else {}
+        return bool(data.get("ok")), (data.get("detail") or "unknown")
+    except Exception as e:                             # noqa: BLE001
+        return False, str(e)[:80]
+
+
 def screener_ok():
     """(ok, detail) — does the TradingView pre-market scanner respond?"""
     try:
@@ -91,6 +110,29 @@ def screener_ok():
         return (len(rows) > 0), f"{len(rows)} movers"
     except Exception as e:                         # noqa: BLE001
         return False, str(e)[:80]
+
+
+def ibkr_ok():
+    """(ok, detail) or (None, _) if disabled — is the IBKR auto-exec path ready?
+    Runs the isolated canary as a SUBPROCESS with a timeout, so a stuck gateway (e.g.
+    a competing login froze it at 'Existing session detected') can't hang this check;
+    the timeout becomes an unhealthy verdict. Only meaningful when OPENING_IBKR_EXEC=1."""
+    if os.environ.get("OPENING_IBKR_EXEC", "0").lower() not in ("1", "true", "yes"):
+        return None, "disabled"
+    import json
+    import subprocess
+    here = os.path.dirname(os.path.abspath(__file__))
+    script = os.path.join(os.path.dirname(here), "ibkr_exec", "health_check.py")
+    try:
+        out = subprocess.run([sys.executable, script], capture_output=True, text=True, timeout=35)
+        lines = [l for l in (out.stdout or "").splitlines() if l.strip().startswith("{")]
+        data = json.loads(lines[-1]) if lines else {}
+        return bool(data.get("ok")), (data.get("detail") or "no result")
+    except subprocess.TimeoutExpired:
+        return False, ("gateway not responding (likely stuck on a competing session) — "
+                       "restart ib-gateway (needs a 2FA tap)")
+    except Exception as e:                         # noqa: BLE001
+        return False, str(e)[:90]
 
 
 def _tg(msg):
@@ -137,9 +179,31 @@ def main():
                             "laptop TradingView tab, open the bottom Trading Panel → broker dropdown → "
                             "reconnect <b>Questrade</b>, and keep that tab the sole TV login.")
 
+        # Order-staging canary — only meaningful with the broker connected (the
+        # ticket needs a live broker to render the order-type tabs). Catches the
+        # cold-ticket finder failure before the open instead of at 9:32.
+        if bok:
+            stok, stdetail = stage_selftest_ok()
+            if stok:
+                oks.append(f"✅ Order-staging path verified ({stdetail})")
+            else:
+                problems.append(f"🔴 Order-staging path BROKEN ({stdetail}) — a real setup would FAIL to "
+                                "stage at 9:30. Re-warm the trading tab (reopen the chart + order ticket) "
+                                "and re-run this check; if it persists, the TradingView ticket DOM changed "
+                                "and tv_order*.js finders need updating.")
+
     sok, sdetail = screener_ok()
     (oks if sok else problems).append(
         ("✅ TradingView screener OK" if sok else "🔴 TradingView screener FAILED") + f" ({sdetail})")
+
+    # IBKR auto-exec path (independent of CDP/Questrade). Only reported when enabled.
+    iok, idetail = ibkr_ok()
+    if iok is True:
+        oks.append(f"✅ IBKR auto-exec ready ({idetail})")
+    elif iok is False:
+        problems.append(f"🔴 IBKR auto-exec DOWN ({idetail}) — autonomous orders WON'T place. "
+                        "Make sure the gateway holds the SOLE session (close TV↔IBKR and the "
+                        "IBKR app), and restart ib-gateway if it's stuck (needs a 2FA tap).")
 
     head = f"🌅 <b>Opening Power pre-open check</b> — {et:%H:%M ET}"
     if problems:

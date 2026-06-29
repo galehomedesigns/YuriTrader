@@ -113,6 +113,32 @@ def step(eng, bar):
     return [advice(t) for t in eng.on_bar(bar, complete=True)]
 
 
+def _ibkr_bridge():
+    """Lazy-load the isolated IBKR bridge (adds ibkr_exec/ to sys.path). The bridge
+    imports nothing from this package — it's the browser-free parallel order path."""
+    d = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ibkr_exec")
+    if d not in sys.path:
+        sys.path.insert(0, d)
+    import opening_bridge
+    return opening_bridge
+
+
+def _ibkr_exec_batch(orders):
+    try:
+        return _ibkr_bridge().execute_batch(orders)
+    except Exception as e:                                       # noqa: BLE001
+        print(f"[advisory] IBKR bridge load error: {e}", file=sys.stderr)
+        return []
+
+
+def _ibkr_flatten():
+    try:
+        return _ibkr_bridge().flatten_all()
+    except Exception as e:                                       # noqa: BLE001
+        print(f"[advisory] IBKR flatten load error: {e}", file=sys.stderr)
+        return []
+
+
 def cutoff(eng):
     return [advice(t) for t in eng.on_cutoff()]
 
@@ -469,6 +495,16 @@ def main():
                     _stage_entries({s: book[s] for s in newly}, tag)
                 except Exception as e:                           # noqa: BLE001
                     print(f"[advisory] order staging skipped: {e}", file=sys.stderr)
+        # Parallel IBKR auto-execution (isolated executor; runs INDEPENDENTLY of the
+        # TV/Questrade staging + broker link). Same $-slot sizing + risk cap. Shadow-
+        # logs until OPENING_IBKR_ALLOW_TRADING=1. No-op unless OPENING_IBKR_EXEC=1.
+        try:
+            ib_orders = [{"symbol": s, "entry": book[s]["entry"], "stop": book[s]["stop"]}
+                         for s in newly if book[s].get("entry") and book[s].get("stop")]
+            for _m in _ibkr_exec_batch(ib_orders):
+                send_message(_m)
+        except Exception as _e:                                  # noqa: BLE001
+            print(f"[advisory] IBKR entry hook error: {_e}", file=sys.stderr)
 
     # Pre-flight broker check (P0): know the link state BEFORE we try to stage, so
     # the first announce can warn instead of silently failing to route orders.
@@ -642,6 +678,15 @@ def main():
                 _stage_closes(close_syms)
             except Exception as e:                               # noqa: BLE001
                 print(f"[advisory] close staging skipped: {e}", file=sys.stderr)
+
+    # IBKR cutoff flatten — cancel resting brackets + market-close IBKR longs.
+    # Independent of the Questrade path/broker. Shadow-notes until armed; no-op
+    # unless OPENING_IBKR_EXEC=1. (v1 IBKR always flattens at the cutoff.)
+    try:
+        for _m in _ibkr_flatten():
+            send_message(_m)
+    except Exception as _e:                                      # noqa: BLE001
+        print(f"[advisory] IBKR cutoff flatten error: {_e}", file=sys.stderr)
 
     # ── Ride loop (ride mode): keep trailing the stop on protected winners past
     # the cutoff until the resting stop fills (position gone) or the hard

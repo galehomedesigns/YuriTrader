@@ -1,0 +1,33 @@
+
+========== TODAY 2026-06-25 OPENING REPLAY (IBKR 2-min RTH, backtest vendor) ==========
+universe: 91 | usable for B (today open): 91 | usable for A (>=200 prior bars): 91 | no-data: 0
+config: TIGHT mode=atr mult=1.0 atr_len=14 | risk cap 3.0% | slot $200 | cutoff +30m
+
+--- A: AS-BUILT (gate ON, rolling-arm 9:30-9:42, first 5 armed) ---
+sym      arm  risk%  fill  exit pct  $ on $200
+ABCL   09:30   2.9   yes    -0.64%      -1.28
+SPCX   09:30   2.3   yes    -2.27%      -4.54
+COMP   09:30   1.3   yes    +0.37%      +0.74
+QCOM   09:32   1.5   yes    -1.50%      -3.00
+BE     09:32   1.9   yes    -1.85%      -3.71
+  armed+tradable: 29 | taken: 5 | TOTAL on $1000: $-11.79 (-1.18%)
+
+--- B: GATE-OFF + GAP-RANK + 9:30 BREAKOUT (top 5 by gap) ---
+sym       gap%  9:30 open  risk%  fill  exit pct  $ on $200
+TECH     +19.4      70.20   0.7    no         -      +0.00
+MU       +18.1    1234.49   1.2   yes    -1.20%      -2.39
+SNDK     +15.8    2236.61   1.3   yes    -1.33%      -2.67
+WDC      +13.2          -   4.3  SKIP risk-cap
+STX      +11.2    1111.00   2.7    no         -      +0.00
+BB       +10.2          -   7.8  SKIP risk-cap
+WEN       +9.9          -   7.0  SKIP risk-cap
+VELO      +9.2          -  10.3  SKIP risk-cap
+FRMI      +8.0          -   3.3  SKIP risk-cap
+PENG      +8.0          -   5.3  SKIP risk-cap
+AMAT      +7.7     639.26   2.0    no         -      +0.00
+  TOTAL on $1000: $-5.06 (-0.51%)
+
+--- TAKE-IT-ANYWAY across all 91 valid names (9:30 breakout, gate ignored) ---
+  win 2 / lose 23 / flat 0 / never-triggered 66 | avg $-0.98/name | sum $-89.01
+
+(ONE trading day. Gross=net on Questrade; spread/slippage NOT modeled. Full-slot = upper bound.)

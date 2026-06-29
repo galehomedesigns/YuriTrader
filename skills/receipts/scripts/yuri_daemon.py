@@ -42,6 +42,13 @@ def _load_env():
 
 _load_env()
 
+# Telegram chat logging to MongoDB (soft-fail; never blocks the bot)
+sys.path.insert(0, "/home/tonygale/openclaw/skills/shared")
+try:
+    import mongo_telegram
+except Exception:
+    mongo_telegram = None
+
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 ALLOWED_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 API_BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"
@@ -80,7 +87,10 @@ def send(chat_id, text, keyboard=None):
     p = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
     if keyboard:
         p["reply_markup"] = json.dumps({"inline_keyboard": keyboard})
-    return tg("sendMessage", p)
+    res = tg("sendMessage", p)
+    if mongo_telegram:
+        mongo_telegram.log_outbound("yuri", res, text=text, chat_id=chat_id)
+    return res
 
 
 def edit(chat_id, message_id, text, keyboard=None):
@@ -344,6 +354,8 @@ def main():
                      timeout=POLL_TIMEOUT + 10) or []
         for u in updates:
             offset = u["update_id"] + 1
+            if mongo_telegram:
+                mongo_telegram.log_inbound("yuri", u)
             try:
                 if "message" in u:
                     m = u["message"]

@@ -62,6 +62,13 @@ from shared.kraken_executor import KrakenExecutor, KrakenExecutorError, KRAKEN_P
 from concierge import advisor
 from concierge import state
 
+# Telegram chat logging to MongoDB (soft-fail; never blocks the bot)
+sys.path.insert(0, "/home/tonygale/openclaw/skills/shared")
+try:
+    import mongo_telegram
+except Exception:
+    mongo_telegram = None
+
 TRADER_BOT_TOKEN = os.environ.get("TELEGRAM_TRADER_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "6545739863")
 API_BASE = f"https://api.telegram.org/bot{TRADER_BOT_TOKEN}"
@@ -106,7 +113,11 @@ def send_message(text, keyboard=None, chat_id=None):
     }
     if keyboard:
         params["reply_markup"] = json.dumps({"inline_keyboard": keyboard})
-    return tg_request("sendMessage", params)
+    res = tg_request("sendMessage", params)
+    if mongo_telegram:
+        mongo_telegram.log_outbound("trading_concierge", res, text=text,
+                                    chat_id=chat_id or TELEGRAM_CHAT_ID)
+    return res
 
 
 def answer_callback(callback_query_id, text=None):
@@ -633,6 +644,8 @@ def main():
             updates = get_updates(offset=offset)
             for u in updates:
                 offset = u["update_id"] + 1
+                if mongo_telegram:
+                    mongo_telegram.log_inbound("trading_concierge", u)
                 handle_update(u)
 
             # Clean up old pending actions every 100 polls (~50 min)

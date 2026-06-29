@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(systemctl --user list-timers --all)",
+      "Bash(timedatectl)",
+      "Read(//etc/cron.d/**)",
+      "Bash(sudo -n cat /etc/crontab)",
+      "Bash(crontab -l)",
+      "Bash(systemctl show *)"
+    ]
+  }
+}

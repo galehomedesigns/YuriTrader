@@ -97,6 +97,18 @@ SIDCACHE = os.path.join(CACHE_DIR, "_symbol_ids.json")
 
 POS_USD = float(os.environ.get("OPENING_BT_POS_USD", "1000"))
 SLIP = float(os.environ.get("OPENING_BT_SLIP_PCT", "0.0010"))
+# Price-scaled slippage: a per-side cents/share floor that DOMINATES for cheap
+# stocks (a 2c half-spread is 0.04% on a $5 name but 4% on a $0.50 name — the
+# reality that makes naive penny-stock backtests fiction). Default 0 = flat-% only
+# (mega-cap runs unchanged). For the low-priced universe set OPENING_BT_SLIP_CENTS.
+SLIP_CENTS = float(os.environ.get("OPENING_BT_SLIP_CENTS", "0"))
+
+
+def _slip(px):
+    """Effective per-side slippage fraction at price px (max of flat-% and cents floor)."""
+    return max(SLIP, (SLIP_CENTS / px) if (SLIP_CENTS and px and px > 0) else 0.0)
+
+
 CUTOFF_MIN = int(os.environ.get("OPENING_SESSION_CUTOFF_MIN", "30"))
 RIDE_MAX_MIN = int(os.environ.get("OPENING_BT_RIDE_MAX_MIN", "90"))
 OPEN_T = time(9, 30)
@@ -368,15 +380,15 @@ def _sim_naive(sym, day, bar1, entry_lvl, stop_lvl, session, cutoff_ts):
     for b in in_window[1:]:
         if entered is None:
             if C.takeout_long(bar1, b):
-                entered = entry_lvl * (1 + SLIP)
+                entered = entry_lvl * (1 + _slip(entry_lvl))
             continue
         if b["low"] <= stop_lvl:
-            exit_px, reason = stop_lvl * (1 - SLIP), "stop"
+            exit_px, reason = stop_lvl * (1 - _slip(stop_lvl)), "stop"
             break
     if entered is None:
         return {"triggered": False}
     if exit_px is None:
-        exit_px, reason = in_window[-1]["close"] * (1 - SLIP), "cutoff"
+        exit_px, reason = in_window[-1]["close"] * (1 - _slip(in_window[-1]["close"])), "cutoff"
     full, eq = _slot(entered)
     qty, avg, pnl = _pnl([(full, entered)], exit_px)        # naive = full slot at entry
     return _trade(qty, avg, exit_px, reason, adds=0)
@@ -407,7 +419,7 @@ def _sim_engine(sym, day, bar1, prior, smf, sms, session, cutoff_ts, ride, ride_
 
         # entry just filled this bar (ARMED -> IN_HALF): deploy the half slot
         if was_armed and eng.state in (IN_HALF, IN_FULL) and not buys:
-            entry_fill = eng.entry_price * (1 + SLIP)
+            entry_fill = eng.entry_price * (1 + _slip(eng.entry_price))
             full, eq = _slot(entry_fill)
             buys.append((eq, entry_fill))
             prev_filled = eq
@@ -417,12 +429,12 @@ def _sim_engine(sym, day, bar1, prior, smf, sms, session, cutoff_ts, ride, ride_
             adds = eng.adds
             add_qty = max(0, full - sum(q for q, _ in buys))
             if add_qty > 0:
-                add_fill = b["close"] * (1 + SLIP)
+                add_fill = b["close"] * (1 + _slip(b["close"]))
                 buys.append((add_qty, add_fill))
 
         # stop hit (engine -> FLAT) this bar
         if buys and eng.state == FLAT:
-            exit_px, reason = eng.stop_price * (1 - SLIP), "stop"
+            exit_px, reason = eng.stop_price * (1 - _slip(eng.stop_price)), "stop"
             break
 
         # ride mode past the cutoff: only keep going if breakeven-protected
@@ -430,7 +442,7 @@ def _sim_engine(sym, day, bar1, prior, smf, sms, session, cutoff_ts, ride, ride_
             protected = (eng.stop_price is not None and eng.entry_price is not None
                          and eng.stop_price >= eng.entry_price)
             if not protected:
-                exit_px, reason = b["close"] * (1 - SLIP), "cutoff"
+                exit_px, reason = b["close"] * (1 - _slip(b["close"])), "cutoff"
                 break
 
     if not buys:
@@ -442,7 +454,7 @@ def _sim_engine(sym, day, bar1, prior, smf, sms, session, cutoff_ts, ride, ride_
             if not ride and b["et"].timestamp() > cutoff_ts + 1:
                 break
             last = b
-        exit_px = last["close"] * (1 - SLIP)
+        exit_px = last["close"] * (1 - _slip(last["close"]))
         reason = "ride-backstop" if ride else "cutoff"
     qty, avg, pnl = _pnl(buys, exit_px)
     return _trade(qty, avg, exit_px, reason, adds)
