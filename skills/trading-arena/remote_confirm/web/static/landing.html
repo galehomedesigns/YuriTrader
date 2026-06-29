@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gale Force Arena — Trade the open with the team</title>
+<style>
+  :root{
+    --bg:#0a0d13; --surface:#141a24; --surface-2:#1b212c; --border:#222b38;
+    --text:#eef2f7; --dim:#9aa6b8; --muted:#64708099;
+    --pos:#3fd07f; --neg:#ff5d6c; --accent:#7c8aff; --accent2:#b07dff; --radius:18px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;line-height:1.5}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 22px}
+  .accent{color:var(--accent)}
+  .grad{background:linear-gradient(120deg,#9fb0ff,#d6b3ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+  /* nav */
+  nav.top{position:sticky;top:0;z-index:20;background:rgba(10,13,19,.82);backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--border)}
+  nav.top .wrap{display:flex;align-items:center;gap:14px;height:64px}
+  .logo{width:38px;height:38px;border-radius:10px;flex:0 0 auto;box-shadow:0 6px 18px rgba(124,138,255,.3)}
+  .brandname{font-weight:800;font-size:1.12rem;margin-right:auto}
+  nav.top a.link{color:var(--dim);font-size:.9rem;font-weight:600;padding:8px 10px;display:none}
+  nav.top a.link:hover{color:var(--text)}
+  .btn{display:inline-block;border:0;border-radius:11px;font-weight:700;cursor:pointer;font-size:.9rem;
+    padding:10px 16px;transition:.15s}
+  .btn.ghost{background:var(--surface-2);color:var(--text);border:1px solid var(--border)}
+  .btn.solid{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a0d13}
+  .btn.lg{padding:14px 24px;font-size:1rem;border-radius:13px}
+  @media(min-width:780px){ nav.top a.link{display:inline} }
+
+  /* hero */
+  .hero{padding:64px 0 36px;position:relative;overflow:hidden}
+  .hero:before{content:"";position:absolute;inset:-30% 30% auto -10%;height:420px;
+    background:radial-gradient(closest-side,rgba(124,138,255,.22),transparent);filter:blur(20px)}
+  .hero .wrap{position:relative;display:grid;grid-template-columns:1fr;gap:34px;align-items:center}
+  @media(min-width:880px){ .hero .wrap{grid-template-columns:1.1fr .9fr} }
+  .pill{display:inline-block;background:var(--surface-2);border:1px solid var(--border);
+    color:var(--dim);font-size:.74rem;font-weight:600;letter-spacing:.4px;padding:6px 12px;border-radius:99px;margin-bottom:18px}
+  h1{font-size:clamp(2.1rem,5.6vw,3.5rem);line-height:1.06;margin:0 0 16px;letter-spacing:-.5px}
+  .lede{color:var(--dim);font-size:1.06rem;max-width:34ch;margin:0 0 26px}
+  .cta-row{display:flex;gap:12px;flex-wrap:wrap}
+
+  /* hero card */
+  .hcard{background:linear-gradient(180deg,var(--surface),#10151d);border:1px solid var(--border);
+    border-radius:24px;padding:22px;box-shadow:0 30px 60px -30px rgba(0,0,0,.7)}
+  .hcard .top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+  .hcard .lbl{color:var(--dim);font-size:.72rem;text-transform:uppercase;letter-spacing:.7px}
+  .hcard .big{font-size:3rem;font-weight:800;line-height:1;color:var(--pos)}
+  .hcard .grow{color:var(--dim);font-size:.85rem;margin-top:4px}
+  .spark{display:flex;align-items:flex-end;gap:5px;height:64px;margin:18px 0 6px}
+  .spark i{flex:1;background:linear-gradient(180deg,var(--accent),rgba(124,138,255,.25));border-radius:3px 3px 0 0;min-height:6px}
+  .hcard .foot{display:flex;justify-content:space-between;color:var(--dim);font-size:.74rem;margin-top:6px}
+
+  /* stats band */
+  .stats{border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface)}
+  .stats .wrap{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--border);padding:1px 0}
+  @media(min-width:720px){ .stats .wrap{grid-template-columns:repeat(4,1fr)} }
+  .stat{background:var(--surface);padding:24px 18px;text-align:center}
+  .stat .n{font-size:1.9rem;font-weight:800;line-height:1}
+  .stat .c{color:var(--dim);font-size:.8rem;margin-top:6px}
+
+  /* sections */
+  section.pad{padding:64px 0}
+  .eyebrow{color:var(--accent);font-weight:700;font-size:.8rem;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px}
+  h2{font-size:clamp(1.6rem,3.6vw,2.2rem);margin:0 0 12px;letter-spacing:-.3px}
+  .sub{color:var(--dim);max-width:54ch;margin:0 0 30px}
+  .grid3{display:grid;grid-template-columns:1fr;gap:16px}
+  @media(min-width:760px){ .grid3{grid-template-columns:repeat(3,1fr)} }
+  .feat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px}
+  .feat .ic{width:42px;height:42px;border-radius:11px;background:var(--surface-2);display:grid;place-items:center;
+    font-size:1.3rem;margin-bottom:14px}
+  .feat h3{margin:0 0 6px;font-size:1.06rem}
+  .feat p{margin:0;color:var(--dim);font-size:.9rem}
+
+  .steps{counter-reset:s;display:grid;grid-template-columns:1fr;gap:14px}
+  @media(min-width:760px){ .steps{grid-template-columns:repeat(3,1fr)} }
+  .step{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;position:relative}
+  .step:before{counter-increment:s;content:counter(s);position:absolute;top:-14px;left:20px;width:30px;height:30px;
+    border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a0d13;
+    font-weight:800;display:grid;place-items:center;font-size:.95rem}
+  .step h3{margin:8px 0 6px;font-size:1.02rem}
+  .step p{margin:0;color:var(--dim);font-size:.9rem}
+
+  .cta-band{background:linear-gradient(120deg,rgba(124,138,255,.14),rgba(176,125,255,.12));
+    border:1px solid var(--border);border-radius:24px;padding:40px 28px;text-align:center;margin:8px 0 0}
+  .cta-band h2{margin-bottom:8px}
+  .cta-band .sub{margin:0 auto 22px}
+
+  footer{border-top:1px solid var(--border);padding:30px 0;color:var(--muted);font-size:.76rem;text-align:center;margin-top:50px}
+  .disc{color:var(--muted);font-size:.72rem;text-align:center;margin-top:14px;max-width:70ch;margin-left:auto;margin-right:auto}
+</style>
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<nav class="top"><div class="wrap">
+  <svg class="logo" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-label="Gale Force Arena">
+    <defs><linearGradient id="g" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7c8aff"/><stop offset="1" stop-color="#b07dff"/></linearGradient></defs>
+    <rect width="64" height="64" rx="14" fill="url(#g)"/>
+    <text x="32" y="46" text-anchor="middle" font-family="Arial Black,Arial" font-weight="900" font-size="42" fill="#0a0d13" opacity="0.16">GF</text>
+    <line x1="32" y1="14" x2="32" y2="20" stroke="#0a0d13" stroke-width="2.4" stroke-linecap="round"/>
+    <circle cx="32" cy="12" r="3" fill="#0a0d13"/>
+    <rect x="18" y="20" width="28" height="22" rx="7" fill="#0a0d13"/>
+    <circle cx="26" cy="31" r="3.4" fill="#3fd07f"/><circle cx="38" cy="31" r="3.4" fill="#3fd07f"/>
+    <rect x="25" y="37" width="14" height="2.6" rx="1.3" fill="#7c8aff"/>
+    <polyline points="22,52 28,48 34,50 42,43" stroke="#0a0d13" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity=".85"/>
+  </svg>
+  <span class="brandname">Gale Force Arena</span>
+  <a class="link" href="#why">Why</a>
+  <a class="link" href="#how">How it works</a>
+  <a class="link" href="#proof">Track record</a>
+  <a class="btn ghost" href="gfa.html">Member login</a>
+  <a class="btn solid" href="gfa.html#join" onclick="">Join</a>
+</div></nav>
+
+<!-- ============ HERO ============ -->
+<header class="hero"><div class="wrap">
+  <div>
+    <span class="pill">⚡ OPENING-BELL SIGNALS · CONFIRMED BY YOU</span>
+    <h1>Trade the market open <span class="grad">with the team.</span></h1>
+    <p class="lede">One analyst's read on the opening bell, sent to every member in real time.
+      You confirm each call on your own broker — same trades, your account, your control.</p>
+    <div class="cta-row">
+      <a class="btn solid lg" href="gfa.html#join">Join Gale Force Arena</a>
+      <a class="btn ghost lg" href="gfa.html">Member login →</a>
+    </div>
+  </div>
+  <div class="hcard">
+    <div class="top"><div><div class="lbl">Track record · last month</div>
+      <div class="big">+14.15%</div><div class="grow">$1,000 → $1,141.51 · compounded</div></div></div>
+    <div class="spark">
+      <i style="height:24%"></i><i style="height:40%"></i><i style="height:33%"></i><i style="height:55%"></i>
+      <i style="height:48%"></i><i style="height:66%"></i><i style="height:58%"></i><i style="height:78%"></i>
+      <i style="height:70%"></i><i style="height:92%"></i><i style="height:84%"></i><i style="height:100%"></i>
+    </div>
+    <div class="foot"><span>23 trading sessions</span><span>Sim Improved · signal-only</span></div>
+  </div>
+</div></header>
+
+<!-- ============ STATS BAND ============ -->
+<div class="stats"><div class="wrap">
+  <div class="stat"><div class="n grad">+14.15%</div><div class="c">Compounded · last ~month</div></div>
+  <div class="stat"><div class="n">23</div><div class="c">Sessions tracked</div></div>
+  <div class="stat"><div class="n">$1,000→$1,141</div><div class="c">Example starting stake</div></div>
+  <div class="stat"><div class="n">1</div><div class="c">Shared call list · all members</div></div>
+</div></div>
+
+<!-- ============ WHY ============ -->
+<section class="pad" id="why"><div class="wrap">
+  <div class="eyebrow">Why Gale Force Arena</div>
+  <h2>The edge of a desk, on your own account.</h2>
+  <p class="sub">No black box and no handing over your money. You get the same calls as everyone,
+    confirm the ones you want, and trade them through your own broker.</p>
+  <div class="grid3">
+    <div class="feat"><div class="ic">🎯</div><h3>One read, shared live</h3>
+      <p>Every member gets the identical opening call — symbol, entry and stop — the moment it fires.</p></div>
+    <div class="feat"><div class="ic">✅</div><h3>You stay in control</h3>
+      <p>Tap Approve or Skip in Telegram. Nothing trades unless you confirm it on your own account.</p></div>
+    <div class="feat"><div class="ic">🏦</div><h3>Your broker, your money</h3>
+      <p>Trades go through your own funded brokerage. We never hold funds or place orders for you.</p></div>
+    <div class="feat"><div class="ic">📈</div><h3>Every call, scored</h3>
+      <p>Win rate, loss rate and P&amp;L for each side, each session — full entry/stop on every trade.</p></div>
+    <div class="feat"><div class="ic">📱</div><h3>Built for your phone</h3>
+      <p>The whole flow lives in Telegram and a mobile member page. Confirm from anywhere in seconds.</p></div>
+    <div class="feat"><div class="ic">🤝</div><h3>Same size for everyone</h3>
+      <p>Start on the same simple plan as every member, then size each call to your own budget.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ HOW ============ -->
+<section class="pad" id="how" style="background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border)"><div class="wrap">
+  <div class="eyebrow">How it works</div>
+  <h2>From sign-up to your first confirmed trade.</h2>
+  <p class="sub">A few minutes to set up once. After that it's three taps a morning.</p>
+  <div class="steps">
+    <div class="step"><h3>Sign up &amp; connect</h3><p>Tell us about yourself, connect your Telegram, and we provision your member access.</p></div>
+    <div class="step"><h3>Get the calls</h3><p>At the open, the day's calls arrive in Telegram with entry and stop — the same for everyone.</p></div>
+    <div class="step"><h3>Approve &amp; trade</h3><p>Tap Approve on the ones you want and place them on your own broker. Skip the rest.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ PROOF / TRACK RECORD ============ -->
+<section class="pad" id="proof"><div class="wrap">
+  <div class="eyebrow">Track record</div>
+  <h2>+14.15% compounded in a single month.</h2>
+  <p class="sub">Over the last 23 sessions, the improved call list compounded a $1,000 stake to
+    $1,141.51 — entry and stop shown on every trade. See the full session-by-session history,
+    plus the most recent live session, in the member area.</p>
+  <div class="cta-row">
+    <a class="btn solid lg" href="gfa.html">Open the member page →</a>
+    <a class="btn ghost lg" href="gfa.html#join">Become a member</a>
+  </div>
+  <p class="disc">Figures are the recorded performance of the signal list (signal-only, simulated
+    execution, commission-free) over ~23 trading sessions. Past performance is not indicative of
+    future results. Members trade their own accounts and results will vary.</p>
+</div></section>
+
+<!-- ============ CTA ============ -->
+<section class="pad" style="padding-top:0"><div class="wrap">
+  <div class="cta-band">
+    <h2>Ready to trade the open with the team?</h2>
+    <p class="sub">Bring your own TradingView and funded brokerage. We bring the call.</p>
+    <a class="btn solid lg" href="gfa.html#join">Join Gale Force Arena</a>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  © Gale Force Arena · Members only · For educational purposes — not financial advice.
+</div></footer>
+
+</body>
+</html>
