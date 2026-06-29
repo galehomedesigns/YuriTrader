@@ -88,6 +88,19 @@
   .step h3{margin:8px 0 6px;font-size:1.02rem}
   .step p{margin:0;color:var(--dim);font-size:.9rem}
 
+  /* join flow diagram */
+  .flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:10px}
+  .fstep{flex:1 1 150px;min-width:150px;background:var(--bg);border:1px solid var(--border);
+    border-radius:var(--radius);padding:20px 16px 16px;position:relative}
+  .fstep .fn{position:absolute;top:-12px;left:16px;width:26px;height:26px;border-radius:8px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a0d13;font-weight:800;
+    display:grid;place-items:center;font-size:.85rem}
+  .fstep .fi{font-size:1.5rem;margin:4px 0 8px}
+  .fstep h4{margin:0 0 5px;font-size:.98rem}
+  .fstep p{margin:0;color:var(--dim);font-size:.82rem;line-height:1.45}
+  .farrow{display:flex;align-items:center;color:var(--accent);font-size:1.5rem;font-weight:700}
+  @media(max-width:760px){ .flow{flex-direction:column} .farrow{justify-content:center;transform:rotate(90deg);height:16px} }
+
   .cta-band{background:linear-gradient(120deg,rgba(34,211,238,.14),rgba(56,189,248,.12));
     border:1px solid var(--border);border-radius:24px;padding:40px 28px;text-align:center;margin:8px 0 0}
   .cta-band h2{margin-bottom:8px}
@@ -115,10 +128,10 @@
   </svg>
   <span class="brandname">Gale Force Arena</span>
   <a class="link" href="#why">Why</a>
-  <a class="link" href="#how">How it works</a>
   <a class="link" href="#proof">Track record</a>
-  <a class="btn ghost" href="gfa.html">Member login</a>
-  <a class="btn solid" href="gfa.html#join" onclick="">Join</a>
+  <a class="link" href="#join">How to join</a>
+  <a class="btn ghost" href="login.html">Member login</a>
+  <a class="btn solid" href="gfa.html#join">Apply</a>
 </div></nav>
 
 <!-- ============ HERO ============ -->
@@ -203,6 +216,34 @@
   <p class="disc">Figures are the recorded performance of the signal list (signal-only, simulated
     execution, commission-free) over ~23 trading sessions. Past performance is not indicative of
     future results. Members trade their own accounts and results will vary.</p>
+</div></section>
+
+<!-- ============ HOW TO JOIN ============ -->
+<section class="pad" id="join" style="background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border)"><div class="wrap">
+  <div class="eyebrow">How to join</div>
+  <h2>Approved members only.</h2>
+  <p class="sub">Every application is personally reviewed and approved by the owner. Once you're approved
+    you're assigned your own portal number and emailed your setup steps.</p>
+  <div class="flow">
+    <div class="fstep"><div class="fn">1</div><div class="fi">📝</div><h4>Register</h4>
+      <p>Submit your details and confirm you have TradingView + a funded brokerage.</p></div>
+    <div class="farrow">→</div>
+    <div class="fstep"><div class="fn">2</div><div class="fi">📧</div><h4>Owner approves</h4>
+      <p>Your request lands in the owner's inbox. He reviews and approves you personally.</p></div>
+    <div class="farrow">→</div>
+    <div class="fstep"><div class="fn">3</div><div class="fi">🔑</div><h4>Portal assigned</h4>
+      <p>On approval you're given your own portal number and emailed a welcome with setup steps.</p></div>
+    <div class="farrow">→</div>
+    <div class="fstep"><div class="fn">4</div><div class="fi">⚙️</div><h4>One-time setup</h4>
+      <p>Log into your own TradingView + brokerage once and run the connect step on your always-on PC.</p></div>
+    <div class="farrow">→</div>
+    <div class="fstep"><div class="fn">5</div><div class="fi">⚡</div><h4>Trade the open</h4>
+      <p>Each morning, get the calls in Telegram, Approve / Skip, and place them on your own broker.</p></div>
+  </div>
+  <div class="cta-row" style="margin-top:30px">
+    <a class="btn solid lg" href="gfa.html#join">Apply for membership</a>
+    <a class="btn ghost lg" href="login.html">Member login</a>
+  </div>
 </div></section>
 
 <!-- ============ CTA ============ -->
