@@ -8,7 +8,7 @@
   :root{
     --bg:#0a0d13; --surface:#141a24; --surface-2:#1b212c; --border:#222b38;
     --text:#eef2f7; --dim:#9aa6b8; --muted:#64708099;
-    --pos:#3fd07f; --neg:#ff5d6c; --accent:#7c8aff; --accent2:#b07dff; --radius:18px;
+    --pos:#3fd07f; --neg:#ff5d6c; --accent:#22d3ee; --accent2:#38bdf8; --radius:18px;
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
@@ -18,13 +18,13 @@
   a{color:inherit;text-decoration:none}
   .wrap{max-width:1080px;margin:0 auto;padding:0 22px}
   .accent{color:var(--accent)}
-  .grad{background:linear-gradient(120deg,#9fb0ff,#d6b3ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .grad{background:linear-gradient(120deg,#67e8f9,#7dd3fc);-webkit-background-clip:text;background-clip:text;color:transparent}
 
   /* nav */
   nav.top{position:sticky;top:0;z-index:20;background:rgba(10,13,19,.82);backdrop-filter:blur(10px);
     border-bottom:1px solid var(--border)}
   nav.top .wrap{display:flex;align-items:center;gap:14px;height:64px}
-  .logo{width:38px;height:38px;border-radius:10px;flex:0 0 auto;box-shadow:0 6px 18px rgba(124,138,255,.3)}
+  .logo{width:38px;height:38px;border-radius:10px;flex:0 0 auto;box-shadow:0 6px 18px rgba(34,211,238,.3)}
   .brandname{font-weight:800;font-size:1.12rem;margin-right:auto}
   nav.top a.link{color:var(--dim);font-size:.9rem;font-weight:600;padding:8px 10px;display:none}
   nav.top a.link:hover{color:var(--text)}
@@ -38,7 +38,7 @@
   /* hero */
   .hero{padding:64px 0 36px;position:relative;overflow:hidden}
   .hero:before{content:"";position:absolute;inset:-30% 30% auto -10%;height:420px;
-    background:radial-gradient(closest-side,rgba(124,138,255,.22),transparent);filter:blur(20px)}
+    background:radial-gradient(closest-side,rgba(34,211,238,.22),transparent);filter:blur(20px)}
   .hero .wrap{position:relative;display:grid;grid-template-columns:1fr;gap:34px;align-items:center}
   @media(min-width:880px){ .hero .wrap{grid-template-columns:1.1fr .9fr} }
   .pill{display:inline-block;background:var(--surface-2);border:1px solid var(--border);
@@ -55,13 +55,13 @@
   .hcard .big{font-size:3rem;font-weight:800;line-height:1;color:var(--pos)}
   .hcard .grow{color:var(--dim);font-size:.85rem;margin-top:4px}
   .spark{display:flex;align-items:flex-end;gap:5px;height:64px;margin:18px 0 6px}
-  .spark i{flex:1;background:linear-gradient(180deg,var(--accent),rgba(124,138,255,.25));border-radius:3px 3px 0 0;min-height:6px}
+  .spark i{flex:1;background:linear-gradient(180deg,var(--accent),rgba(34,211,238,.25));border-radius:3px 3px 0 0;min-height:6px}
   .hcard .foot{display:flex;justify-content:space-between;color:var(--dim);font-size:.74rem;margin-top:6px}
 
   /* stats band */
   .stats{border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface)}
   .stats .wrap{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--border);padding:1px 0}
-  @media(min-width:720px){ .stats .wrap{grid-template-columns:repeat(4,1fr)} }
+  @media(min-width:720px){ .stats .wrap{grid-template-columns:repeat(3,1fr)} }
   .stat{background:var(--surface);padding:24px 18px;text-align:center}
   .stat .n{font-size:1.9rem;font-weight:800;line-height:1}
   .stat .c{color:var(--dim);font-size:.8rem;margin-top:6px}
@@ -88,7 +88,7 @@
   .step h3{margin:8px 0 6px;font-size:1.02rem}
   .step p{margin:0;color:var(--dim);font-size:.9rem}
 
-  .cta-band{background:linear-gradient(120deg,rgba(124,138,255,.14),rgba(176,125,255,.12));
+  .cta-band{background:linear-gradient(120deg,rgba(34,211,238,.14),rgba(56,189,248,.12));
     border:1px solid var(--border);border-radius:24px;padding:40px 28px;text-align:center;margin:8px 0 0}
   .cta-band h2{margin-bottom:8px}
   .cta-band .sub{margin:0 auto 22px}
@@ -103,14 +103,14 @@
 <nav class="top"><div class="wrap">
   <svg class="logo" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-label="Gale Force Arena">
     <defs><linearGradient id="g" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#7c8aff"/><stop offset="1" stop-color="#b07dff"/></linearGradient></defs>
+      <stop stop-color="#22d3ee"/><stop offset="1" stop-color="#38bdf8"/></linearGradient></defs>
     <rect width="64" height="64" rx="14" fill="url(#g)"/>
     <text x="32" y="46" text-anchor="middle" font-family="Arial Black,Arial" font-weight="900" font-size="42" fill="#0a0d13" opacity="0.16">GF</text>
     <line x1="32" y1="14" x2="32" y2="20" stroke="#0a0d13" stroke-width="2.4" stroke-linecap="round"/>
     <circle cx="32" cy="12" r="3" fill="#0a0d13"/>
     <rect x="18" y="20" width="28" height="22" rx="7" fill="#0a0d13"/>
     <circle cx="26" cy="31" r="3.4" fill="#3fd07f"/><circle cx="38" cy="31" r="3.4" fill="#3fd07f"/>
-    <rect x="25" y="37" width="14" height="2.6" rx="1.3" fill="#7c8aff"/>
+    <rect x="25" y="37" width="14" height="2.6" rx="1.3" fill="#22d3ee"/>
     <polyline points="22,52 28,48 34,50 42,43" stroke="#0a0d13" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity=".85"/>
   </svg>
   <span class="brandname">Gale Force Arena</span>
@@ -148,9 +148,11 @@
 <!-- ============ STATS BAND ============ -->
 <div class="stats"><div class="wrap">
   <div class="stat"><div class="n grad">+14.15%</div><div class="c">Compounded · last ~month</div></div>
+  <div class="stat"><div class="n">83%</div><div class="c">Profitable sessions (19/23)</div></div>
+  <div class="stat"><div class="n">61%</div><div class="c">Win rate · 115 trades</div></div>
   <div class="stat"><div class="n">23</div><div class="c">Sessions tracked</div></div>
+  <div class="stat"><div class="n">+1.53%</div><div class="c">Avg winning trade</div></div>
   <div class="stat"><div class="n">$1,000→$1,141</div><div class="c">Example starting stake</div></div>
-  <div class="stat"><div class="n">1</div><div class="c">Shared call list · all members</div></div>
 </div></div>
 
 <!-- ============ WHY ============ -->
