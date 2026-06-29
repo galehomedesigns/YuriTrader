@@ -195,8 +195,10 @@
   <section id="view-join" style="display:none">
     <div class="joinwrap">
       <form class="card" id="signup" onsubmit="return submitJoin(event)">
-        <h2>Become a member</h2>
-        <p class="sub">Same signals as everyone — confirmed by you, on your own accounts.</p>
+        <h2>Apply for membership</h2>
+        <p class="sub">Private &amp; invitation-only. Enter your invite code and tell us about yourself —
+          a membership fee applies on approval. Same calls for every member, confirmed by you.</p>
+        <div class="grp"><label>Invitation code</label><input type="text" name="invite" placeholder="GFA-XXXX-XXXX"></div>
         <div class="grp"><label>Full name</label><input type="text" name="name" placeholder="Jane Trader"></div>
         <div class="grp"><label>Email</label><input type="email" name="email" placeholder="you@email.com"></div>
         <div class="grp"><label>Telegram username</label><input type="text" name="telegram" placeholder="@yourhandle"></div>
@@ -208,7 +210,9 @@
         <div class="disc-label">Risk Disclosure &amp; Disclaimer — please read</div>
         <div class="disc-box" id="discBox" onscroll="discScrolled(this)">
           <p><b>Trading involves substantial risk of loss; you may lose some or all of your capital.</b>
-          Gale Force Arena provides <b>general, educational information only</b> — the same for every member —
+          Gale Force Arena is a <b>private, invitation-only members' community</b>; membership fees are for access to
+          the community and general educational content, <b>not</b> personalized advice. It provides
+          <b>general, educational information only</b> — the same for every member —
           and is <b>not</b> investment, financial, legal or tax advice, and <b>not</b> a registered adviser or broker.
           We disclose that we are <b>compensated</b> (membership fees). <b>You make every decision and execute every
           trade yourself</b>: pressing Confirm places <b>your</b> order in <b>your</b> own account; we never hold,
@@ -341,6 +345,7 @@
   function submitJoin(e){
     e.preventDefault();
     const f=e.target, err=document.getElementById('joinErr');
+    if(!f.invite.value.trim()){err.textContent='An invitation code is required — membership is invite-only.';return false;}
     if(!f.name.value.trim()||!f.telegram.value.trim()){err.textContent='Name and Telegram username are required.';return false;}
     if(!(f.tv.checked&&f.qt.checked&&f.pc.checked&&f.ss.checked)){err.textContent='Please confirm the four account checkboxes.';return false;}
     if(!f.agree.checked){err.textContent='You must read and agree to the Risk Disclosure & Disclaimer to continue.';return false;}
