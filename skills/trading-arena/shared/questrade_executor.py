@@ -258,9 +258,21 @@ class QuestradeExecutor:
 
     def get_open_orders(self):
         acct = self.get_account_id()
+        # Questrade defaults the orders endpoint to TODAY (it filters by creationTime),
+        # so a bare stateFilter=Open query silently DROPS orders created on a prior day
+        # that are still resting — e.g. an after-hours Day order queued for the next
+        # open, or a GTC. That made a leftover-order check falsely report "clean".
+        # Query a wide window so "open orders" means ALL currently-open orders.
+        from datetime import timezone, timedelta
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(days=31)
         raw = self._get(
             f"/v1/accounts/{acct}/orders",
-            params={"stateFilter": "Open"},
+            params={
+                "stateFilter": "Open",
+                "startTime": start.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                "endTime": end.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+            },
         )
         return raw.get("orders", [])
 
