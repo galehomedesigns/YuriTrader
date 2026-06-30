@@ -328,6 +328,24 @@ const READ_POSITIONS_FN = `(async()=>{
   return JSON.stringify(out);
 })()`;
 
+const READ_ORDERS_FN = `(async()=>{
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  const vis=el=>!!(el&&el.offsetParent!==null&&el.getClientRects().length>0);
+  const tab=Array.from(document.querySelectorAll('button,[role=button],[role=tab]')).find(b=>vis(b)&&/^orders\\b/i.test((b.innerText||'').trim()));
+  if(tab){tab.click(); await sleep(800);}
+  const t=document.querySelector('[data-name=\\"QUESTRADE.orders-table\\"]');
+  if(!t) return JSON.stringify([]);
+  const out=[];
+  for(const r of Array.from(t.querySelectorAll('[role=row],tr')).filter(vis)){
+    const txt=(r.innerText||'').replace(/\\s+/g,' ').trim();
+    if(!txt) continue;
+    const sym=txt.split(' ')[0];
+    const live=/\\b(QUEUED|WORKING|PENDING|PARTIAL)\\b/i.test(txt) && !/\\b(CANCEL|REJECT)/i.test(txt);
+    out.push({symbol:sym, live, text:txt.slice(0,90)});
+  }
+  return JSON.stringify(out);
+})()`;
+
 (async () => {
   const tabs = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();
   const tv = require("./tv_tab").pickTradingTab(tabs);   // never the dedicated data tab
@@ -443,6 +461,40 @@ const READ_POSITIONS_FN = `(async()=>{
     } catch (e) { console.log("could not write reconcile file:", e.message); }
   }
 
+  // ── entry verification (fill-truth): the confirm dialog CLOSING does not prove the
+  // order was SENT — clicking Cancel or dismissing it closes the dialog too, and the
+  // queue would still log "confirmation closed - advancing". After the batch, read the
+  // broker ONCE and confirm each staged ENTRY is actually resting (QUEUED) or already
+  // filled (a position). Anything missing was a missed/cancelled Send Order; alert so
+  // the bid isn't lost silently (the SMR/GILT 2026-06-29 failure). Non-fatal.
+  let verify = null;
+  const entryOrders = orders.filter(o => !o.action && !isClose(o));
+  if (!DRY && entryOrders.length) {
+    await sleep(1200);   // let the last send settle into the orders/positions table
+    let ords = [], pos = [];
+    try { ords = JSON.parse(await evalJs(READ_ORDERS_FN, true) || "[]"); } catch (e) { console.log("could not read orders for verify:", e.message); }
+    try { pos  = JSON.parse(await evalJs(READ_POSITIONS_FN, true) || "[]"); } catch (e) { console.log("could not read positions for verify:", e.message); }
+    const liveT = new Set(ords.filter(r => r.live).map(r => ticker(r.symbol)));
+    const heldT = new Set(pos.filter(p => (p.qty || 0) > 0).map(p => ticker(p.symbol)));
+    console.log("\nENTRY VERIFICATION (must be QUEUED at broker or already filled):");
+    const unsent = [];
+    const rows = entryOrders.map(o => {
+      const t = ticker(o.symbol);
+      const live = liveT.has(t), held = heldT.has(t), ok = live || held;
+      console.log(`   ${t}: ${ok ? (held ? '✓ FILLED (position)' : '✓ resting (queued)') : '✗ NOT AT BROKER — was not sent'}`);
+      const res = results.find(r => r.symbol === o.symbol && r.staged);   // only ones the queue believed it staged
+      if (res) res.verified = ok;
+      if (!ok && res) unsent.push(o);
+      return { symbol: t, live, held, ok };
+    });
+    for (const o of unsent) {
+      await tg(`⚠️ ${ticker(o.symbol)} entry NOT live at broker — ${(o.side||'buy').toUpperCase()} ${o.qty} ${(o.type||'stop').toUpperCase()} @ ${o.price}${o.stop != null ? `, SL ${o.stop}` : ''} was staged but the Send Order click was missed/cancelled. Place it by hand if you still want it.`);
+    }
+    verify = { verifiedAt: new Date().toISOString(), entries: entryOrders.length, unsent: unsent.length, rows };
+    try { fs.writeFileSync(require("path").join(__dirname, "..", "logs", "opening_entry_verify.json"), JSON.stringify(verify)); }
+    catch (e) { console.log("could not write entry-verify file:", e.message); }
+  }
+
   sock.close();
   if (DRY) {
     const pass = results.filter(r => r.ok).length;
@@ -450,6 +502,7 @@ const READ_POSITIONS_FN = `(async()=>{
     results.filter(r => !r.ok).forEach(r => console.log(`   FAIL ${r.symbol}: ${r.reason || 'see log'}`));
   } else
   console.log(`\nqueue done: staged ${results.filter(r => r.staged).length}/${orders.length}`
+    + (verify ? `, entries live ${verify.entries - verify.unsent}/${verify.entries}` : "")
     + (reconcile ? `, closes flattened ${reconcile.flattened}/${reconcile.total} (per positions)` : ""));
   process.exit(0);
 })().catch(e => { console.error("ERR", e.message); process.exit(3); });

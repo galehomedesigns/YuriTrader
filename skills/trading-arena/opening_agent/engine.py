@@ -60,8 +60,10 @@ class OpeningEngine:
     _pending_red: dict = None     # first counter-color bar awaiting removal (R5)
 
     def _c(self, k):
+        # entry_fraction / exit_mode / rr_target come from C.DEFAULTS (env-driven via
+        # profiles.py). risk_per_trade + max_adds keep their engine defaults here.
         return {**C.DEFAULTS,
-                "risk_per_trade": 0.01, "initial_fraction": 0.5, "max_adds": 2,
+                "risk_per_trade": 0.01, "max_adds": 2,
                 **self.cfg}[k]
 
     def _log(self, msg, rule):
@@ -95,7 +97,7 @@ class OpeningEngine:
         self._log(f"armed {v.decision} entry={entry} stop={stop} shares={self.shares}",
                   "R3")
         # The resting stop-entry order (half the position fires on trigger).
-        half = max(1, int(self.shares * self._c("initial_fraction")))
+        half = max(1, int(self.shares * self._c("entry_fraction")))
         return [OrderTicket(self.symbol, "BUY" if self.side > 0 else "SELL",
                             "STP", half, entry, "armed opening breakout", "G5")]
 
@@ -112,7 +114,10 @@ class OpeningEngine:
             out = self._manage_stop(bar)
             if self.state == FLAT:
                 return out
-            if complete:
+            # target_3r (sweet-spot): no push-trail and no add — the resting 3R target
+            # + breakeven stop carry the trade. Only the baseline push-trail exit runs
+            # the add/ratchet machinery.
+            if complete and self._c("exit_mode") != "target_3r":
                 out += self._manage_adds_and_pushes(bar)
             return out
         if self.state == WAITING and complete:
@@ -124,15 +129,28 @@ class OpeningEngine:
                else C.takeout_short(self.bar1, bar, self.cfg))
         if not hit:
             return []
-        half = max(1, int(self.shares * self._c("initial_fraction")))
+        half = max(1, int(self.shares * self._c("entry_fraction")))
         self.filled = half
         self.state = IN_HALF
         self.push = C.PushState(direction=self.side,
                                 trade_extreme=bar["high"] if self.side > 0 else bar["low"])
         self._log(f"entry filled {half}@~{self.entry_price}; stop {self.stop_price}", "R3")
         # protective stop placed immediately on fill (R4/G7)
-        return [OrderTicket(self.symbol, "SELL" if self.side > 0 else "BUY",
-                            "STP", half, self.stop_price, "protective one-bar stop", "G7")]
+        tickets = [OrderTicket(self.symbol, "SELL" if self.side > 0 else "BUY",
+                               "STP", half, self.stop_price, "protective one-bar stop", "G7")]
+        # Sweet-spot exit: rest a fixed R-multiple take-profit at entry ± rr_target*risk
+        # (OCO with the stop). In this mode on_bar runs no push-trail/add, so the trade
+        # is carried by {breakeven@1R stop, 3R target, time-stop} only.
+        if self._c("exit_mode") == "target_3r":
+            risk = abs(self.entry_price - self.stop_price)
+            rr = self._c("rr_target")
+            target = (self.entry_price + rr * risk if self.side > 0
+                      else self.entry_price - rr * risk)
+            self._log(f"{rr}R target @{round(target, 4)} (entry {self.entry_price})", "G10")
+            tickets.append(OrderTicket(self.symbol, "SELL" if self.side > 0 else "BUY",
+                                       "LMT", half, round(target, 2),
+                                       f"{rr}R fixed take-profit (sweet-spot)", "G10"))
+        return tickets
 
     def _manage_stop(self, bar):
         stopped = (bar["low"] <= self.stop_price if self.side > 0
@@ -229,7 +247,7 @@ class OpeningEngine:
             self.stop_price = (self._pending_red["low"] - self._c("trade_offset") if loc_long
                                else self._pending_red["high"] + self._c("trade_offset"))
             self.shares = self._size(self.entry_price, self.stop_price)
-            half = max(1, int(self.shares * self._c("initial_fraction")))
+            half = max(1, int(self.shares * self._c("entry_fraction")))
             self.filled, self.state = half, IN_HALF
             self.push = C.PushState(direction=self.side, trade_extreme=bar["high"] if loc_long else bar["low"])
             self._log("mismatch removed — delayed entry", "G11")

@@ -44,6 +44,16 @@ DEFAULTS["atr_len"] = int(os.environ.get("OPENING_ATR_LEN", "14"))
 # requirement, isolating exactly what the coil gate contributes.
 DEFAULTS["require_tight"] = os.environ.get("OPENING_REQUIRE_TIGHT", "true").lower() == "true"
 
+# ── Strategy-profile knobs (set by profiles.py / .env; defaults = current live) ──
+# loc_mode: "open_band" (current — first bar's OPEN vs the SMA20/200 band) or
+#   "close_slow" (sweet-spot — the bar's CLOSE vs the slow/200 SMA only).
+# exit_mode / rr_target / entry_fraction are consumed by engine.py; they live here
+# so engine._c() picks them up through C.DEFAULTS without extra plumbing.
+DEFAULTS["loc_mode"] = os.environ.get("OPENING_LOC_MODE", "open_band").lower()
+DEFAULTS["exit_mode"] = os.environ.get("OPENING_EXIT_MODE", "push_trail").lower()
+DEFAULTS["rr_target"] = float(os.environ.get("OPENING_TARGET_RR", "3.0"))
+DEFAULTS["entry_fraction"] = float(os.environ.get("OPENING_ENTRY_FRACTION", "0.5"))
+
 
 # ── Primitive bar geometry ────────────────────────────────────────────────────
 def body(bar):
@@ -130,6 +140,20 @@ def location(open_price, sma_fast, sma_slow):
     if open_price > hi:
         return "above"
     if open_price < lo:
+        return "below"
+    return "inside"
+
+
+def location_close_slow(close_price, sma_slow):
+    """Sweet-spot location: the first bar's CLOSE vs the slow (200) SMA only.
+    'above' = close > slow (bullish), 'below' = close < slow, else 'inside'.
+    (The 20-SMA and the open are ignored — this is the looser 'coiled-but-moving'
+    gate found by the parameter sweep.)"""
+    if close_price is None or sma_slow is None:
+        return "unknown"
+    if close_price > sma_slow:
+        return "above"
+    if close_price < sma_slow:
         return "below"
     return "inside"
 
@@ -257,7 +281,10 @@ def classify_opening(symbol, bar1, prior_bars, sma_fast, sma_slow, cfg=None):
     cfg = {**DEFAULTS, **(cfg or {})}
     atr_val = atr((prior_bars or []) + [bar1], cfg["atr_len"])
     state, _dir = market_state(sma_fast, sma_slow, bar1["open"], cfg, atr_val=atr_val)
-    loc = location(bar1["open"], sma_fast, sma_slow)
+    if cfg.get("loc_mode") == "close_slow":
+        loc = location_close_slow(bar1["close"], sma_slow)
+    else:
+        loc = location(bar1["open"], sma_fast, sma_slow)
     tags = classify_bar(bar1, prior_bars, cfg)
     sig = bar_signal(bar1, prior_bars, cfg)
 

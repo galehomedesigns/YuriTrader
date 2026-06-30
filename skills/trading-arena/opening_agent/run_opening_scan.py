@@ -39,6 +39,8 @@ def _load_env():
 
 _load_env()
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from opening_agent import profiles as _profiles
+_profiles.apply_to_env()              # select strategy bundle BEFORE classifier-backed imports
 from opening_agent import universe, ranker, tv_watchlist
 
 STOCK_BOT_TOKEN = os.environ.get("TELEGRAM_STOCK_BOT_TOKEN", "")

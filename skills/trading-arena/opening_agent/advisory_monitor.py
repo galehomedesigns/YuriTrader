@@ -32,6 +32,8 @@ def _load_env():
 
 
 _load_env()
+from opening_agent import profiles as _profiles
+_profiles.apply_to_env()              # select strategy bundle BEFORE classifier/engine import
 from opening_agent import classifier as C
 from opening_agent import universe as U
 from opening_agent import tv_bars
@@ -175,10 +177,12 @@ def _stage_entries(subset, tag):
             skipped.append((s, reason))
             print(f"[advisory] {s}: {reason} - skipped", file=sys.stderr)
             continue
-        # Half-entry → add-to-full: enter HALF the slot now; the G9 add (first
-        # pullback-takeout) completes it to the full slot, so total exposure never
-        # exceeds one slot. A 1-share slot can't be halved -> enter the whole 1.
-        qty = max(1, slot_qty // 2)
+        # Entry fraction (profile-driven). Baseline = 0.5: enter HALF now, the G9 add
+        # (first pullback-takeout) completes it to a full slot, so total exposure never
+        # exceeds one slot. Sweet-spot = 1.0: enter the FULL slot at once (no add). A
+        # 1-share slot can't be halved -> enter the whole 1.
+        frac = float(os.environ.get("OPENING_ENTRY_FRACTION", "0.5"))
+        qty = max(1, int(slot_qty * frac))
         # Risk cap: skip if bar-1 risk exceeds the max allowed %
         bar_spread = entry - stop
         max_risk = float(os.environ.get("OPENING_MAX_RISK_PCT", "3.0"))
@@ -301,6 +305,15 @@ def _stage_stop_move(sym, new_stop):
     for one symbol; the user clicks Confirm in the Modify dialog. Non-blocking."""
     here = os.path.dirname(os.path.abspath(__file__))
     port = os.environ.get("OPENING_TV_CDP_PORT", "9225")
+    # Fill-gate: only trail a stop for a position we ACTUALLY hold. A name can be in
+    # the book (armed) without a live order — risk-capped at entry, or staged but the
+    # Send Order click was missed — and trailing a phantom just spams "no resting
+    # QUEUED bracket order". _held_longs() returns None on read error → fail OPEN
+    # (don't drop protection on a real winner over a transient read glitch).
+    held = _held_longs()
+    if held is not None and sym.upper() not in held:
+        print(f"[advisory] {sym}: not held (no confirmed fill) - skip stop-move", file=sys.stderr)
+        return
     of = os.path.join(os.path.dirname(here), "logs", f"opening_modify_{sym}.json")
     with open(of, "w") as f:
         json.dump([{"action": "modify-stop", "symbol": sym, "price": round(new_stop, 2)}], f)
@@ -315,6 +328,12 @@ def _stage_take_profit(sym, tp_price):
     one symbol; the user clicks Confirm in the Modify dialog. Non-blocking."""
     here = os.path.dirname(os.path.abspath(__file__))
     port = os.environ.get("OPENING_TV_CDP_PORT", "9225")
+    # Fill-gate (same as the stop-move): never add a take-profit to a bracket we don't
+    # actually hold. None = read error → fail OPEN.
+    held = _held_longs()
+    if held is not None and sym.upper() not in held:
+        print(f"[advisory] {sym}: not held (no confirmed fill) - skip take-profit", file=sys.stderr)
+        return
     of = os.path.join(os.path.dirname(here), "logs", f"opening_tp_{sym}.json")
     with open(of, "w") as f:
         json.dump([{"action": "modify-tp", "symbol": sym, "take_profit": round(tp_price, 2)}], f)
