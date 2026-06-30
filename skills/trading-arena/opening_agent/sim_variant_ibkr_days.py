@@ -29,6 +29,7 @@ OPEN_T, ARM_END, WIN_END = dtime(9, 30), dtime(9, 44), dtime(10, 20)
 SELLOFF_MIN, RR = 30, 3.0      # SWEET SPOT: 3R target, 30-min hold
 GAP_MIN, GAP_MAX = 0.5, 4.0    # SWEET SPOT: modest gaps, cap the big gappers
 SLOT = 200.0; OFFSET = C.DEFAULTS["trade_offset"]
+RISK_USD = 6.0                 # risk-sizing variant: cap $-risk/trade (= 3% of the $200 slot)
 N_DAYS = 22; TOP_PER_DAY = 8     # ~one month of trading days (+ the 6/26 TV day)
 MAX_PRICE = 300.0              # remove high-priced stocks (>$300) from the dashboard
 MIN_PRICE = 5.0                # match the LIVE scanner floor (OPENING_MIN_PRICE default $5)
@@ -46,6 +47,37 @@ def panel(rows):
                       "names":len(rows),"shown":len(disp),
                       "held_to_1020_pl":round(sum((r["held_to_1020_pl"] or 0) for r in rows),2)},
             "rows":disp,"picks":picks}
+
+def risk_resize_rows(rows):
+    """Re-size each baseline row to risk <= $RISK_USD per trade, capped at one SLOT —
+    the "size DOWN instead of skip/full-slot" option. Sizing is linear, so realized P&L,
+    position cost and held-P&L all scale by new_shares/old_shares; per-trade ret% is
+    unchanged. Pure + additive: never mutates the input rows."""
+    out=[]
+    for r in rows:
+        rps=r.get("risk_per_share") or 0.0; old=r.get("shares") or 0; entry=r.get("entry") or 0.0
+        nr=dict(r)
+        if rps>0 and old>0 and entry>0:
+            new=max(1, min(math.floor(RISK_USD/rps), math.floor(SLOT/entry)))
+            f=new/old
+            nr["shares"]=new
+            nr["position_cost"]=round(new*entry,2)
+            nr["realized_pl"]=round((r.get("realized_pl") or 0.0)*f,2)
+            if r.get("held_to_1020_pl") is not None:
+                nr["held_to_1020_pl"]=round(r["held_to_1020_pl"]*f,2)
+            nr["sized_down"]=new<old
+        else:
+            nr["sized_down"]=False
+        out.append(nr)
+    return out
+
+def risksize_panel(base_rows):
+    """A panel() over risk-resized copies of the baseline rows, with the count of
+    trades that had to be trimmed (risk > cap) stashed on totals for the A/B tab."""
+    rr=risk_resize_rows(base_rows)
+    p=panel(rr)
+    p["totals"]["n_sized_down"]=sum(1 for r in rr if r.get("sized_down"))
+    return p
 CACHE = os.path.join(HERE, "..", "logs", "backtest_cache_ibkr_broad")
 OUT = os.path.join(HERE, "..", "logs", "opening_sim_variant.json")
 
@@ -232,7 +264,8 @@ def main():
                     r["premarket_gap_pct"]=round(gap,2); r["prev_close"]=round(pclose,2); r["today_open"]=round(o,2)
                     bucket.append(r)
         days_out.append({"day":di_day.isoformat(),"source":"IBKR 2-min (broad 231-name cache)",
-                         "sweet":panel(sweet),"baseline":panel(base),"base_simarm":panel(simarm)})
+                         "sweet":panel(sweet),"baseline":panel(base),"base_simarm":panel(simarm),
+                         "risksize":risksize_panel(base)})
     # merge with existing (TV 6/26) day
     existing=json.load(open(OUT))
     tv_days=[d for d in existing["days"] if d["day"] not in {x["day"] for x in days_out}]
@@ -270,6 +303,31 @@ def main():
         "recent":{"days":len(rec),"window":f"{rec[0]}..{rec[-1]}",
                 "current":compound_from_picks(picks_for(syms,rec,"sweet",0.5,4.0,30)),
                 "above_both":compound_from_picks(picks_for(syms,rec,"sweet",0.5,4.0,30,req20=True))}}
+    # risk-based sizing A/B: same baseline trade selection, but each trade sized to risk
+    # <= $RISK_USD (capped at one slot) instead of a flat $200 slot. The wide-bar names the
+    # live 3% cap SKIPS and the fixed-slot baseline FULL-SLOTS are instead taken sized-down.
+    rs=[]
+    for d in existing["days"]:
+        if "risksize" not in d or "baseline" not in d: continue
+        bt=d["baseline"]["totals"]; rt=d["risksize"]["totals"]
+        rs.append({"day":d["day"],"source":d.get("source",""),
+                   "base_pl":bt["realized_pl"],"risk_pl":rt["realized_pl"],
+                   "delta":round(rt["realized_pl"]-bt["realized_pl"],2),
+                   "n":bt["names"],"n_down":rt.get("n_sized_down",0)})
+    rs.sort(key=lambda x:x["day"])
+    cb=cr=0.0
+    for s in rs:
+        cb=round(cb+s["base_pl"],2); cr=round(cr+s["risk_pl"],2)
+        s["cum_base"]=cb; s["cum_risk"]=cr
+    existing["risksize_ab"]={
+        "days":len(rs),"window":(f"{rs[0]['day']}..{rs[-1]['day']}" if rs else ""),
+        "r_usd":RISK_USD,"slot":SLOT,"cap_pct":round(RISK_USD/SLOT*100,1),
+        "totals":{"base_pl":round(sum(s["base_pl"] for s in rs),2),
+                  "risk_pl":round(sum(s["risk_pl"] for s in rs),2),
+                  "delta":round(sum(s["delta"] for s in rs),2),
+                  "n_trades":sum(s["n"] for s in rs),
+                  "n_down":sum(s["n_down"] for s in rs)},
+        "series":rs}
     json.dump(existing,open(OUT,"w"),indent=2,default=str)
     print(json.dumps({"added_days":[{"day":d["day"],"sweet$":d["sweet"]["totals"]["realized_pl"],
                                      "base$":d["baseline"]["totals"]["realized_pl"]} for d in days_out]},indent=2))

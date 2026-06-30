@@ -443,6 +443,44 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
         <div class="appcol">${col(ab,cur.total_pct,'🛡 ABOVE-BOTH — &gt; 20-SMA & 200-SMA','sweet')}</div></div>`;
   }
 
+  function renderRiskSizing(rs) {
+    if(!rs||!rs.series){document.getElementById('day').innerHTML='<div class="empty">no risk-sizing data — re-run sim_variant_ibkr_days.py</div>';return;}
+    const T=rs.totals;
+    const rows=rs.series.slice().reverse().map(s=>`<tr>
+        <td class="sym">${s.day}</td>
+        <td class="num ${cls(s.base_pl)}">${money(s.base_pl)}</td>
+        <td class="num ${cls(s.risk_pl)}">${money(s.risk_pl)}</td>
+        <td class="num ${cls(s.delta)}">${money(s.delta)}</td>
+        <td class="num">${s.n}</td>
+        <td class="num">${s.n_down||0}</td></tr>`).join('');
+    document.getElementById('day').innerHTML=`
+      <div class="stat-row">
+        <div class="stat"><div class="value ${cls(T.risk_pl)}">${money(T.risk_pl)}</div><div class="label">Risk-sized net (${rs.days}d · all armed names)</div></div>
+        <div class="stat"><div class="value ${cls(T.base_pl)}">${money(T.base_pl)}</div><div class="label">Baseline net (fixed $${(+rs.slot).toFixed(0)} slot)</div></div>
+        <div class="stat"><div class="value ${cls(T.delta)}">${money(T.delta)}</div><div class="label">Δ risk-sized − baseline</div></div>
+        <div class="stat"><div class="value">${T.n_down} / ${T.n_trades}</div><div class="label">trades sized down (risk&gt;${rs.cap_pct}%) / total</div></div></div>
+      <div class="banner" style="background:rgba(124,138,255,0.10);border:1px solid var(--accent)">
+        <b>Risk-based sizing — the "size DOWN instead of skip" option</b> (the alternative to the live 3% risk-cap that skipped OUST/VRDN).
+        Same baseline arm + exit and the same gap-0.5–4% trade selection; <b>only the share count changes</b>.
+        Each trade is sized to risk <b>$${(+rs.r_usd).toFixed(2)}</b> (= ${rs.cap_pct}% of the $${(+rs.slot).toFixed(0)} slot):
+        <b>shares = min( floor($${(+rs.r_usd).toFixed(2)} ÷ (entry−stop)) , floor($${(+rs.slot).toFixed(0)} ÷ entry) )</b>.
+        A wide-bar name — which the <b>live 3% cap SKIPS</b> and the <b>fixed-slot baseline FULL-SLOTS</b> — is instead taken at a <b>smaller</b> size;
+        tight-bar names still cap at one slot, so per-trade dollar-risk is held ≤ $${(+rs.r_usd).toFixed(2)}.
+        <b>Net over ${rs.days} days: baseline ${money(T.base_pl)} → risk-sized ${money(T.risk_pl)} (Δ ${money(T.delta)}).</b>
+        Research only — totals over every armed name at one slot each (same basis as the per-day tabs), not the top-5 compound.</div>
+      <table class="tape">
+        <tr><th>Day</th><th class="num">Baseline $</th><th class="num">Risk-sized $</th><th class="num">Δ $</th><th class="num">#trades</th><th class="num">#sized-down</th></tr>
+        ${rows}
+        <tr style="border-top:2px solid var(--border);font-weight:700">
+          <td class="sym">TOTAL · ${rs.days}d</td>
+          <td class="num ${cls(T.base_pl)}">${money(T.base_pl)}</td>
+          <td class="num ${cls(T.risk_pl)}">${money(T.risk_pl)}</td>
+          <td class="num ${cls(T.delta)}">${money(T.delta)}</td>
+          <td class="num">${T.n_trades}</td>
+          <td class="num">${T.n_down}</td></tr>
+      </table>`;
+  }
+
   // tabs
   const tabs=document.getElementById('tabs');
   const setActive=el=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');};
@@ -471,6 +509,9 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
   const lmt=document.createElement('div');lmt.className='tab';lmt.textContent='🛡 Loss filter';
   lmt.onclick=()=>{setActive(lmt);renderLossFilter(data.lossmin);};
   tabs.appendChild(lmt);
+  const rst=document.createElement('div');rst.className='tab';rst.textContent='⚖ Risk-sizing';
+  rst.onclick=()=>{setActive(rst);renderRiskSizing(data.risksize_ab);};
+  tabs.appendChild(rst);
   const ag=data.armgate;
   const ta1=document.createElement('div');ta1.className='tab';ta1.textContent='🔁 Baseline + sim arm';
   ta1.onclick=()=>{setActive(ta1);renderArmgate(ag,'base_simarm','BASELINE + sim arm gate','Take the baseline but arm on the sim gate: a power bar closing above the 200-SMA (no TIGHT), so an upward first 2-min bar places the buy.');};

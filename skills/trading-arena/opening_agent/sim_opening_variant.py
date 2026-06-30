@@ -38,6 +38,7 @@ WIN_END = dtime(10, 20)            # chart display window
 SELLOFF_MIN = 30                   # SWEET SPOT: 30-minute sell-off (10:00)
 RR_TARGET = 3.0                    # SWEET SPOT: 3R target (let winners run)
 SLOT = 200.0
+RISK_USD = 6.0                     # risk-sizing variant: cap $-risk/trade (= 3% of the slot)
 OFFSET = C.DEFAULTS["trade_offset"]
 OUT = os.path.join(HERE, "..", "logs", "opening_sim_variant.json")
 REPLAY_GLOB = os.path.join(HERE, "..", "logs", "session_replay_*")
@@ -200,6 +201,34 @@ def panel(rows):
                        "held_to_1020_pl": round(sum((r["held_to_1020_pl"] or 0) for r in rows), 2)},
             "rows": disp, "picks": picks}
 
+def risk_resize_rows(rows):
+    """Re-size each baseline row to risk <= $RISK_USD per trade, capped at one SLOT — the
+    "size DOWN instead of skip/full-slot" option. Sizing is linear, so realized P&L /
+    cost / held scale by new_shares/old_shares; per-trade ret% is unchanged. Pure + additive."""
+    out = []
+    for r in rows:
+        rps = r.get("risk_per_share") or 0.0; old = r.get("shares") or 0; entry = r.get("entry") or 0.0
+        nr = dict(r)
+        if rps > 0 and old > 0 and entry > 0:
+            new = max(1, min(math.floor(RISK_USD / rps), math.floor(SLOT / entry)))
+            f = new / old
+            nr["shares"] = new
+            nr["position_cost"] = round(new * entry, 2)
+            nr["realized_pl"] = round((r.get("realized_pl") or 0.0) * f, 2)
+            if r.get("held_to_1020_pl") is not None:
+                nr["held_to_1020_pl"] = round(r["held_to_1020_pl"] * f, 2)
+            nr["sized_down"] = new < old
+        else:
+            nr["sized_down"] = False
+        out.append(nr)
+    return out
+
+def risksize_panel(base_rows):
+    rr = risk_resize_rows(base_rows)
+    p = panel(rr)
+    p["totals"]["n_sized_down"] = sum(1 for r in rr if r.get("sized_down"))
+    return p
+
 def main():
     days_out = []
     for dstr, snap_dir in sorted(discover_days().items(), reverse=True):
@@ -220,7 +249,8 @@ def main():
                     r["today_open"] = round(topen, 2) if topen else None
                     bucket.append(r)
         days_out.append({"day": dstr, "source": "TradingView 2-min (live capture)",
-                         "sweet": panel(sweet), "baseline": panel(base), "base_simarm": panel(simarm)})
+                         "sweet": panel(sweet), "baseline": panel(base), "base_simarm": panel(simarm),
+                         "risksize": risksize_panel(base)})
     summary = {
         "generated_at": datetime.now(ET).isoformat(),
         "window": "09:30–10:20 ET",
