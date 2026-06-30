@@ -218,7 +218,11 @@ def _stage_entries(subset, tag):
     # so a phone ✅ tap can send it too. Off by default — the laptop Send Order is unchanged.
     remote = False
     try:
-        from shared import opening_confirm as _oc
+        # opening_confirm lives in skills/shared/ (loose module, not the shared.* pkg).
+        _shared = os.path.join(os.path.dirname(os.path.dirname(here)), "shared")
+        if _shared not in sys.path:
+            sys.path.insert(0, _shared)
+        import opening_confirm as _oc
         if _oc.enabled():
             for idx, o in enumerate(orders):
                 o["order_id"] = _oc.make_order_id(o["symbol"], idx)

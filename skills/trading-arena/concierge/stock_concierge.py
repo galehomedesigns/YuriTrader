@@ -676,7 +676,7 @@ def handle_update(update):
         # would 409. Isolated try/except so a confirm hiccup never breaks the concierge.
         if cb_data.startswith("OPN|"):
             try:
-                from shared import opening_confirm
+                import opening_confirm  # skills/shared (on sys.path), not the shared.* pkg
                 opening_confirm.handle_callback(cb_data, cq)
             except Exception as e:
                 print(f"  OPN callback error: {e}", file=sys.stderr)
