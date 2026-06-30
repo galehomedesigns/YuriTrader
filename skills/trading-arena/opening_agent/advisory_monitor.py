@@ -213,16 +213,35 @@ def _stage_entries(subset, tag):
         return
     here = os.path.dirname(os.path.abspath(__file__))
     of = os.path.join(os.path.dirname(here), "logs", f"opening_orders_{tag}.json")
+    # Remote-confirm (entries only, OPENING_REMOTE_CONFIRM): stamp each order with an
+    # id + per-staging nonce, write a pending sidecar, and send a per-order Telegram card
+    # so a phone ✅ tap can send it too. Off by default — the laptop Send Order is unchanged.
+    remote = False
+    try:
+        from shared import opening_confirm as _oc
+        if _oc.enabled():
+            for idx, o in enumerate(orders):
+                o["order_id"] = _oc.make_order_id(o["symbol"], idx)
+                o["nonce"] = _oc.make_nonce()
+                _oc.stage(o)
+            remote = True
+    except Exception as e:                                       # noqa: BLE001
+        print(f"[advisory] remote-confirm staging skipped: {e}", file=sys.stderr)
     with open(of, "w") as f:
         json.dump(orders, f)
     port = os.environ.get("OPENING_TV_CDP_PORT", "9225")
     qjs = os.path.join(here, "tv_order_queue.js")
-    send_message(f"⚡ <b>Staging {len(orders)} order(s) to TradingView</b> — review each "
-                 "confirmation on your laptop and click <b>Send Order</b> (or Cancel to skip)."
-                 + skip_line)
+    tail = (" — or tap ✅ Approve in Telegram." if remote else
+            " — review each confirmation on your laptop and click <b>Send Order</b> (or Cancel to skip).")
+    send_message(f"⚡ <b>Staging {len(orders)} order(s) to TradingView</b>{tail}" + skip_line)
+    cmd = ["node", qjs, "--port", str(port), "--orders-file", of]
+    if remote:
+        cmd += ["--remote-confirm", "--timeout-ms",
+                os.environ.get("OPENING_CONFIRM_TIMEOUT_MS", "300000")]
     # Non-blocking: the queue runner handles confirmations while we keep coaching.
-    subprocess.Popen(["node", qjs, "--port", str(port), "--orders-file", of])
-    print(f"[advisory] spawned queue runner: {len(orders)} orders on CDP port {port}")
+    subprocess.Popen(cmd)
+    print(f"[advisory] spawned queue runner: {len(orders)} orders on CDP port {port}"
+          + (" (remote-confirm ON)" if remote else ""))
 
 
 def _held_longs():

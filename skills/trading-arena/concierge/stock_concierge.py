@@ -671,6 +671,17 @@ def handle_update(update):
 
         answer_callback(cq["id"])
 
+        # Opening-agent remote order confirm (✅ tap → CDP runner sends). Handled here
+        # because this service already long-polls TELEGRAM_STOCK_BOT_TOKEN; a 2nd poller
+        # would 409. Isolated try/except so a confirm hiccup never breaks the concierge.
+        if cb_data.startswith("OPN|"):
+            try:
+                from shared import opening_confirm
+                opening_confirm.handle_callback(cb_data, cq)
+            except Exception as e:
+                print(f"  OPN callback error: {e}", file=sys.stderr)
+            return
+
         action = state.consume_pending_action(cb_data)
         if not action:
             send_message("⚠️ That button has expired or already been used.")

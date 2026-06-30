@@ -23,6 +23,24 @@ const PER_ORDER_TIMEOUT_MS = Number(arg("timeout-ms", "100000"));
 // --dry: run the FULL staging path (incl. stop-loss attach + verification) but
 // NEVER click submit, and neutralize the ticket afterward. For pre-open testing.
 const DRY = process.argv.includes("--dry");
+// --remote-confirm: ALSO honour a Telegram ✅ tap (sidecar status=approve) by doing a
+//   pre-click readback then clicking Send Order. The laptop Send Order stays in parallel.
+// --no-click: remote-confirm test mode — do the readback on a real approve, log
+//   "WOULD CLICK", but Cancel instead of sending. Proves the path with no transmit.
+const REMOTE_CONFIRM = process.argv.includes("--remote-confirm");
+const NO_CLICK = process.argv.includes("--no-click");
+const CONFIRM_DIR = require("path").join(__dirname, "..", "logs", "opening_confirm");
+function readSidecar(oid) {
+  try { return JSON.parse(fs.readFileSync(require("path").join(CONFIRM_DIR, oid + ".json"), "utf8")); }
+  catch (e) { return null; }   // missing / mid-write / corrupt → no-op, never throw
+}
+function writeSidecar(oid, data) {
+  try {
+    const p = require("path").join(CONFIRM_DIR, oid + ".json");
+    const tmp = p + "." + process.pid + ".tmp";
+    fs.writeFileSync(tmp, JSON.stringify(data)); fs.renameSync(tmp, p);
+  } catch (e) { /* best-effort */ }
+}
 
 if (!ORDERS_FILE) { console.error("--orders-file required"); process.exit(1); }
 const orders = JSON.parse(fs.readFileSync(ORDERS_FILE, "utf8"));
@@ -310,6 +328,34 @@ const STAGE_FN = `async (o, dry) => {
 
 const CONFIRM_VISIBLE_FN = `(function(){ var b=Array.from(document.querySelectorAll('button,[role=button]')).find(x=>(x.offsetParent!==null && x.getClientRects().length>0) && /send order|place order|confirm/i.test(x.innerText||'')); return !!b; })()`;
 
+// Atomic find-verify-click for the remote (Telegram) path: locate the Send Order
+// button, READ BACK the live ticket text and require the exact "<SIDE> <QTY> <SYM>"
+// to be present (taps gate intent; this readback gates correctness), then click —
+// or, in --no-click test mode, report what it WOULD click without sending.
+const CLICK_CONFIRM_FN = `(function(expected, noClick){
+  function vis(el){return !!(el&&el.offsetParent!==null&&el.getClientRects().length>0);}
+  var btn=Array.from(document.querySelectorAll('button,[role=button]')).find(function(b){return vis(b)&&/send order|place order|confirm/i.test(b.innerText||'');});
+  if(!btn) return {ok:false,reason:'no Send Order button visible'};
+  var box=btn.closest('[role=dialog]')||(btn.parentElement&&btn.parentElement.parentElement)||document.body;
+  var txt=((box&&box.innerText)||'');
+  var pm=document.querySelector('[data-name=place-and-modify-button]');
+  if(pm&&pm.innerText) txt+=' '+pm.innerText;
+  txt=txt.replace(/\\s+/g,' ').toUpperCase();
+  var sym=String(expected.symbol).split(':').pop().toUpperCase();
+  var needle=String(expected.side).toUpperCase()+' '+String(expected.qty)+' '+sym;
+  if(txt.indexOf(needle)===-1) return {ok:false,reason:'readback mismatch (want "'+needle+'")',readback:txt.slice(0,160)};
+  if(noClick) return {ok:true,clicked:false,noClick:true,readback:txt.slice(0,160)};
+  btn.click();
+  return {ok:true,clicked:true,readback:txt.slice(0,160)};
+})`;
+
+const CLICK_CANCEL_FN = `(function(){
+  function vis(el){return !!(el&&el.offsetParent!==null&&el.getClientRects().length>0);}
+  var b=Array.from(document.querySelectorAll('button,[role=button]')).find(function(x){return vis(x)&&/^\\s*cancel\\s*$|^\\s*close\\s*$|dismiss/i.test(x.innerText||'');});
+  if(b){b.click(); return {ok:true};}
+  return {ok:false,reason:'no Cancel button'};
+})`;
+
 const READ_POSITIONS_FN = `(async()=>{
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const vis=el=>!!(el&&el.offsetParent!==null&&el.getClientRects().length>0);
@@ -421,20 +467,72 @@ const READ_ORDERS_FN = `(async()=>{
     console.log(`   >> CONFIRM ON SCREEN${staged.ok ? '' : ' (dialog not auto-detected)'}: ${staged.summary || desc}  (click Send Order, or Cancel to skip)`);
 
     const start = Date.now();
-    let sawOpen = staged.ok, closed = false;
+    let sawOpen = staged.ok, closed = false, closeStreak = 0, remote = null;
+    const isEntry = !o.action && !isClose(o);          // remote-confirm is entries-only
     await sleep(300);
     while (Date.now() - start < PER_ORDER_TIMEOUT_MS) {
       const open = await evalJs(CONFIRM_VISIBLE_FN);
-      if (open) sawOpen = true;
-      else if (sawOpen) { closed = true; break; }
+      if (open) { sawOpen = true; closeStreak = 0; }
+      // manual laptop Send closes the dialog. Debounce under remote-confirm (2 consecutive
+      // !open) so a single flaky read can't beat a tap; off-path stays single-poll (unchanged).
+      else if (sawOpen) { if (!REMOTE_CONFIRM || ++closeStreak >= 2) { closed = true; break; } }
       else if (Date.now() - start > NO_DIALOG_FALLBACK_MS) break;
+
+      // Remote (Telegram) path: act on a tap recorded in the sidecar. Entries only; the
+      // dialog must be up (sawOpen); nonce must match THIS staging (stale card = ignored).
+      if (REMOTE_CONFIRM && isEntry && o.order_id && sawOpen) {
+        const sc = readSidecar(o.order_id);
+        if (sc && String(sc.nonce) === String(o.nonce)) {
+          if (sc.status === 'approve') {
+            const r = await evalJs(`(${CLICK_CONFIRM_FN})(${JSON.stringify({ symbol: o.symbol, side: o.side, qty: o.qty })}, ${NO_CLICK})`, true);
+            if (r && r.ok) {
+              remote = NO_CLICK ? 'would-send' : 'sent';
+              console.log(`   ${NO_CLICK ? '✓ WOULD CLICK Send Order (no-click test)' : '✓ CLICKED Send Order'} via Telegram approve — readback "${(r.readback || '').slice(0, 90)}"`);
+              writeSidecar(o.order_id, { ...sc, status: NO_CLICK ? 'approve' : 'sent', clicked_ts: Date.now() });
+              await tg(`✅ ${NO_CLICK ? 'WOULD SEND (no-click test)' : 'SENT'} ${(o.side || 'buy').toUpperCase()} ${o.qty} ${ticker(o.symbol)} @ ${o.price} (Telegram approve)`);
+              closed = true; break;
+            } else {
+              remote = 'mismatch';
+              console.log(`   ⛔ readback MISMATCH — NOT clicking (${r && r.reason})`);
+              writeSidecar(o.order_id, { ...sc, status: 'mismatch' });
+              await tg(`⛔ ${ticker(o.symbol)} readback mismatch — refused the Telegram send (${r && r.reason}). Use the laptop Send Order.`);
+              // keep waiting for the manual laptop path / timeout
+            }
+          } else if (sc.status === 'skip') {
+            await evalJs(`(${CLICK_CANCEL_FN})()`, true);
+            remote = 'skip';
+            console.log("   ✗ Telegram Skip — cancelled the dialog");
+            break;
+          }
+        }
+      }
       await sleep(350);
     }
-    if (sawOpen && !closed) { console.log("   .. timed out waiting for your confirm - stopping queue"); results.push({ ...o, staged: true, dialogClosed: false }); break; }
-    console.log(sawOpen ? "   .. confirmation closed - advancing"
-      : isClose(o) ? "   .. advancing (outcome will be reconciled via positions)"
-      : "   .. advancing (confirm not auto-detected)");
-    results.push({ ...o, staged: true, dialogClosed: closed, sawConfirm: sawOpen });
+
+    if (remote === 'sent' || remote === 'would-send') {
+      results.push({ ...o, staged: true, sentVia: 'telegram', dialogClosed: true });
+    } else if (remote === 'skip') {
+      results.push({ ...o, staged: true, skippedVia: 'telegram' });
+    } else if (sawOpen && !closed) {
+      // dialog still open at timeout. Under remote-confirm: never leave an armed dialog and
+      // never break the queue — Cancel it and continue. Off-path keeps the old behaviour.
+      if (REMOTE_CONFIRM && isEntry) {
+        await evalJs(`(${CLICK_CANCEL_FN})()`, true);
+        if (o.order_id) writeSidecar(o.order_id, { ...(readSidecar(o.order_id) || {}), status: 'timeout' });
+        console.log("   .. confirm timed out — cancelled the dialog, continuing");
+        await tg(`⌛ ${ticker(o.symbol)} confirm timed out — cancelled, not sent.`);
+        results.push({ ...o, staged: true, timedOut: true });
+      } else {
+        console.log("   .. timed out waiting for your confirm - stopping queue");
+        results.push({ ...o, staged: true, dialogClosed: false });
+        break;
+      }
+    } else {
+      console.log(sawOpen ? "   .. confirmation closed - advancing"
+        : isClose(o) ? "   .. advancing (outcome will be reconciled via positions)"
+        : "   .. advancing (confirm not auto-detected)");
+      results.push({ ...o, staged: true, dialogClosed: closed, sawConfirm: sawOpen });
+    }
     await sleep(400);
   }
 
