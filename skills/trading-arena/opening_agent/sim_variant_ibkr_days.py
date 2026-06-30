@@ -102,7 +102,7 @@ def load(path):
     for i,x in enumerate(bars): byday[x["dt"].date()].append(i)
     return bars,s20,s200,byday
 
-def sim_one(bars,s20,s200,idxs,day,sym,mode,be_abs=None,be_r=1.0,lock_abs=0.0,mae_stop=None,noprog=None,req20=False):
+def sim_one(bars,s20,s200,idxs,day,sym,mode,be_abs=None,be_r=1.0,lock_abs=0.0,mae_stop=None,noprog=None,req20=False,trend_align=False):
     """Full sim producing row+timeline for one candidate, in 'sweet' or 'baseline' mode.
     sweet:    arm power+close>SMA200 (no TIGHT), wick stop, 3R target, breakeven@1R, 30-min.
     baseline: arm classifier MATCH_LONG (TIGHT on, loc by open), wick stop, breakeven@1R +
@@ -125,6 +125,11 @@ def sim_one(bars,s20,s200,idxs,day,sym,mode,be_abs=None,be_r=1.0,lock_abs=0.0,ma
                     and (not req20 or (s20[i] is not None and bars[i]["close"]>s20[i])))
             else:                                  # baseline: full classifier (TIGHT on + loc-by-open)
                 ok=(C.classify_opening("S",bars[i],prior,s20[i],s200[i]).decision=="MATCH_LONG")
+            # trend-align filter (subtractive A/B): require the 20-SMA ABOVE the 200-SMA at the
+            # arm bar (MAs stacked bullishly) — consumes the SMA20-vs-200 direction the live
+            # classifier currently discards. Default off.
+            if ok and trend_align and not (s20[i] is not None and s200[i] is not None and s20[i]>s200[i]):
+                ok=False
             if ok: arm=i; break
     if arm is None: return None
     entry=round(bars[arm]["high"]+OFFSET,2); stop=round(bars[arm]["low"]-OFFSET,2)
@@ -303,6 +308,40 @@ def main():
         "recent":{"days":len(rec),"window":f"{rec[0]}..{rec[-1]}",
                 "current":compound_from_picks(picks_for(syms,rec,"sweet",0.5,4.0,30)),
                 "above_both":compound_from_picks(picks_for(syms,rec,"sweet",0.5,4.0,30,req20=True))}}
+    # trend-align A/B: sweet vs sweet + (20-SMA > 200-SMA at the arm bar). Subtractive — it can
+    # only REMOVE non-trend-aligned arms. Split the full populated window into IS/OOS halves to
+    # test robustness: a full-window win that fails OOS is regime luck, not an edge (firstgreen lesson).
+    _half = len(fdays) // 2
+    def _ta(days, mode):
+        return {"days": len(days), "window": (f"{days[0]}..{days[-1]}" if days else ""),
+                "off": compound_from_picks(picks_for(syms, days, mode, 0.5, 4.0, 30)),
+                "on":  compound_from_picks(picks_for(syms, days, mode, 0.5, 4.0, 30, trend_align=True))}
+    # Tested on BOTH the sweet-spot (already gates close>200, so trend-align is near-redundant)
+    # AND the baseline/live classifier (where the SMA20-vs-200 direction is currently discarded —
+    # the faithful test of the idea). Each split into IS/OOS halves for robustness.
+    existing["trendalign"] = {
+        "sweet":    {"full": _ta(fdays, "sweet"),    "is": _ta(fdays[:_half], "sweet"),    "oos": _ta(fdays[_half:], "sweet")},
+        "baseline": {"full": _ta(fdays, "baseline"), "is": _ta(fdays[:_half], "baseline"), "oos": _ta(fdays[_half:], "baseline")}}
+    # best-combo matrix: promising joint configs (the other tabs A/B one knob at a time; these
+    # test them STACKED), IS/OOS/Full. Winner = sweet45 + trend-align.
+    def _combo(mode, gmin, gmax, sell, **kw):
+        return {w: compound_from_picks(picks_for(syms, ds, mode, gmin, gmax, sell, **kw))
+                for w, ds in (("is", fdays[:_half]), ("oos", fdays[_half:]), ("full", fdays))}
+    existing["combos"] = {
+        "window": f"{fdays[0]}..{fdays[-1]}", "days": len(fdays),
+        "is_days": _half, "oos_days": len(fdays) - _half,
+        "rows": [
+            {"key": "sweet45ta", "label": "sweet45 + trend-align", "best": True,
+             "splits": _combo("sweet", 2.0, 4.0, 45, trend_align=True)},
+            {"key": "sweet45", "label": "sweet45 (current best profile)",
+             "splits": _combo("sweet", 2.0, 4.0, 45)},
+            {"key": "sweet45ab", "label": "sweet45 + above-both (close>20)",
+             "splits": _combo("sweet", 2.0, 4.0, 45, req20=True)},
+            {"key": "sweet30", "label": "sweet30 (gap 0.5–4 / 30m)",
+             "splits": _combo("sweet", 0.5, 4.0, 30)},
+            {"key": "base45ta", "label": "baseline + gap2–4/45 + trend-align",
+             "splits": _combo("baseline", 2.0, 4.0, 45, trend_align=True)},
+        ]}
     # risk-based sizing A/B: same baseline trade selection, but each trade sized to risk
     # <= $RISK_USD (capped at one slot) instead of a flat $200 slot. The wide-bar names the
     # live 3% cap SKIPS and the fixed-slot baseline FULL-SLOTS are instead taken sized-down.

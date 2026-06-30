@@ -53,14 +53,26 @@ PROFILES = {
         "OPENING_SCAN_MAX_GAP_PCT": "4.0",
         "OPENING_SESSION_CUTOFF_MIN": "45",    # 45-min time-stop (the only other diff vs sweet30)
     },
+    "sweet45ta": {                             # sweet45 + trend-align — best combo in the 61d A/B
+        "OPENING_REQUIRE_TIGHT": "false",
+        "OPENING_LOC_MODE": "close_slow",
+        "OPENING_EXIT_MODE": "target_3r",
+        "OPENING_TARGET_RR": "3.0",
+        "OPENING_ENTRY_FRACTION": "1.0",
+        "OPENING_SCAN_MIN_GAP_PCT": "2.0",
+        "OPENING_SCAN_MAX_GAP_PCT": "4.0",
+        "OPENING_SESSION_CUTOFF_MIN": "45",
+        "OPENING_REQUIRE_TREND_ALIGN": "true",  # require SMA20>SMA200 at the arm bar (chop insurance)
+    },
 }
 
-ORDER = ["baseline", "sweet30", "sweet45"]
+ORDER = ["baseline", "sweet30", "sweet45", "sweet45ta"]
 
 ONE_LINER = {
     "baseline": "current live — TIGHT on · loc by open · push-trail · gap 1–25% · 30-min",
     "sweet30":  "sweet-spot — TIGHT off · loc by close · 3R target · gap 0.5–4% · 30-min",
     "sweet45":  "sweet-spot 45 — TIGHT off · loc by close · 3R target · gap 2–4% · 45-min",
+    "sweet45ta": "BEST COMBO — sweet45 + trend-align (SMA20>200); IS+OOS-robust, +19.6%/61d",
 }
 
 

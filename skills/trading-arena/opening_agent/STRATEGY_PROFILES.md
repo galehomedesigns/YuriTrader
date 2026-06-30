@@ -41,6 +41,17 @@ target · full entry). They differ in **exactly two** knobs:
 - **Gap band:** sweet45 is **2–4%** (drops the smallest gappers, 0.5–2%); sweet30 is **0.5–4%**.
 - **Time-stop:** sweet45 holds **45 min** (flatten ~10:15 ET); sweet30 holds **30 min** (~10:00 ET).
 
+## sweet45ta — the best combo (sweet45 + trend-align)
+
+`sweet45ta` = sweet45 **plus** the trend-align filter: require **20-SMA > 200-SMA** at the
+arm bar (`OPENING_REQUIRE_TREND_ALIGN=true`) — drops counter-trend opening pops. In the
+61-day IS/OOS A/B it's the most profitable **robust** config: **+19.64%** full (vs sweet45's
++19.10%) and it more than **doubles the in-sample/choppy-regime return** (+4.4% vs +2.0%) on
+fewer trades — i.e. the same trending-day upside but it stays clearly positive in chop too.
+Best single default. The 🏆 Best-combo tab on the opening-sim-variant dashboard shows the
+full IS/OOS matrix. (Above-both was tested and **dropped** — it helps sweet30 but slightly
+hurts sweet45.) **Still backtest-only — run a live shadow A/B before arming.**
+
 In the 61-day backtest A/B (compounded $1,000 / 5 slots, 2026-03-24…06-18):
 
 | | end | total |
@@ -64,6 +75,7 @@ bundle sets these knobs (all default to baseline behaviour when unset):
 | knob | baseline | sweet | read by |
 |---|---|---|---|
 | `OPENING_REQUIRE_TIGHT` | true | false | classifier |
+| `OPENING_REQUIRE_TREND_ALIGN` | false | false (true in sweet45ta) | classifier |
 | `OPENING_LOC_MODE` | open_band | close_slow | classifier |
 | `OPENING_EXIT_MODE` | push_trail | target_3r | engine |
 | `OPENING_TARGET_RR` | 3.0 | 3.0 | engine |

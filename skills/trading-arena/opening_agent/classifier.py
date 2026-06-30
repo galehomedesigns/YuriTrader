@@ -49,6 +49,7 @@ DEFAULTS["require_tight"] = os.environ.get("OPENING_REQUIRE_TIGHT", "true").lowe
 #   "close_slow" (sweet-spot — the bar's CLOSE vs the slow/200 SMA only).
 # exit_mode / rr_target / entry_fraction are consumed by engine.py; they live here
 # so engine._c() picks them up through C.DEFAULTS without extra plumbing.
+DEFAULTS["require_trend_align"] = os.environ.get("OPENING_REQUIRE_TREND_ALIGN", "false").lower() == "true"
 DEFAULTS["loc_mode"] = os.environ.get("OPENING_LOC_MODE", "open_band").lower()
 DEFAULTS["exit_mode"] = os.environ.get("OPENING_EXIT_MODE", "push_trail").lower()
 DEFAULTS["rr_target"] = float(os.environ.get("OPENING_TARGET_RR", "3.0"))
@@ -294,6 +295,14 @@ def classify_opening(symbol, bar1, prior_bars, sma_fast, sma_slow, cfg=None):
     if loc == "inside" or loc == "unknown":
         return Verdict(symbol, "NO_PLAY", tags, loc, state,
                        f"location {loc}")
+    # Trend-align gate (subtractive, default off): require the 20-SMA on the correct side
+    # of the 200-SMA for the direction — consumes the SMA20-vs-200 direction `_dir` the
+    # classifier otherwise discards. Removes counter-trend opening pops (best in chop).
+    if cfg.get("require_trend_align", False):
+        if sig > 0 and not (_dir > 0):
+            return Verdict(symbol, "NO_PLAY", tags, loc, state, "trend not aligned (SMA20<SMA200) (G3b)")
+        if sig < 0 and not (_dir < 0):
+            return Verdict(symbol, "NO_PLAY", tags, loc, state, "trend not aligned (SMA20>SMA200) (G3b)")
     if sig > 0 and loc == "above":
         return Verdict(symbol, "MATCH_LONG", tags, loc, state,
                        "bullish bar in bullish location")

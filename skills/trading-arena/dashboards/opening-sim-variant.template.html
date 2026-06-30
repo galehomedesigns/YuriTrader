@@ -481,12 +481,84 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
       </table>`;
   }
 
+  function renderTrendAlign(ta) {
+    if(!ta||!ta.baseline){document.getElementById('day').innerHTML='<div class="empty">no trend-align data — re-run sim_variant_ibkr_days.py</div>';return;}
+    const trades=c=>(c&&c.curve?c.curve.reduce((s,r)=>s+(r.n||0),0):0);
+    const dP=b=>b.on.total_pct-b.off.total_pct;
+    const seg=(label,blk)=>{
+      const off=blk.off,on=blk.on,d=on.total_pct-off.total_pct,toff=trades(off),ton=trades(on);
+      return `<div class="card" style="padding:10px">
+        <div class="funded" style="margin-bottom:4px"><b>${label}</b> · ${blk.days}d · ${esc(blk.window||'')}</div>
+        <table class="tape">
+          <tr><th>Config</th><th class="num">Total %</th><th class="num">Tr</th></tr>
+          <tr><td>trend-align OFF</td><td class="num ${cls(off.total_pct)}">${off.total_pct>=0?'+':''}${off.total_pct}%</td><td class="num">${toff}</td></tr>
+          <tr><td><b>trend-align ON</b></td><td class="num ${cls(on.total_pct)}">${on.total_pct>=0?'+':''}${on.total_pct}%</td><td class="num">${ton}</td></tr>
+          <tr style="border-top:2px solid var(--border);font-weight:700"><td>Δ</td><td class="num ${cls(d)}">${d>=0?'+':''}${d.toFixed(1)} pts</td><td class="num">−${toff-ton}</td></tr>
+        </table></div>`;
+    };
+    const group=(title,sub,klass,g)=>{
+      const dIS=dP(g.is),dOOS=dP(g.oos),dFull=dP(g.full),robust=(dIS>0&&dOOS>0);
+      return `<div class="appcol">
+        <div class="apphdr ${klass}">${title}</div>
+        <div class="note" style="margin-bottom:8px">${sub} — IS <b class="${cls(dIS)}">${dIS>=0?'+':''}${dIS.toFixed(1)}</b> · OOS <b class="${cls(dOOS)}">${dOOS>=0?'+':''}${dOOS.toFixed(1)}</b> · full <b class="${cls(dFull)}">${dFull>=0?'+':''}${dFull.toFixed(1)}</b> pts → <b class="${robust?'pos':'neg'}">${robust?'robust (helps BOTH halves)':'not robust'}</b></div>
+        ${seg('🟢 IN-SAMPLE (first half)',g.is)}${seg('🧪 OUT-OF-SAMPLE (second half)',g.oos)}${seg('🔵 FULL window',g.full)}</div>`;
+    };
+    const bIS=dP(ta.baseline.is),bOOS=dP(ta.baseline.oos),bFull=dP(ta.baseline.full),bRobust=(bIS>0&&bOOS>0);
+    const verdict=bRobust
+      ?'✅ on the LIVE (baseline) arm it is a ROBUST edge — helps in both IS and OOS halves; worth a live shadow A/B'
+      :'❌ not robust on the live arm';
+    document.getElementById('day').innerHTML=`
+      <div class="stat-row">
+        <div class="stat"><div class="value ${cls(bOOS)}">${bOOS>=0?'+':''}${bOOS.toFixed(1)} pts</div><div class="label">baseline OUT-OF-SAMPLE Δ</div></div>
+        <div class="stat"><div class="value ${cls(bIS)}">${bIS>=0?'+':''}${bIS.toFixed(1)} pts</div><div class="label">baseline in-sample Δ</div></div>
+        <div class="stat"><div class="value ${cls(bFull)}">${bFull>=0?'+':''}${bFull.toFixed(1)} pts</div><div class="label">baseline full-window Δ</div></div>
+        <div class="stat"><div class="value" style="font-size:1rem">${bRobust?'EDGE':'NO'}</div><div class="label">robust on live arm?</div></div></div>
+      <div class="banner" style="background:${bRobust?'rgba(0,200,83,0.08)':'rgba(255,23,68,0.08)'};border:1px solid ${bRobust?'var(--ok)':'var(--fail)'}">
+        <b>Trend-align filter:</b> require the <b>20-SMA &gt; 200-SMA</b> at the arm bar (MAs stacked bullishly) — it consumes the SMA20-vs-200 direction the live classifier currently <i>discards</i>. Subtractive: it only drops non-aligned arms.
+        <b>Verdict: ${verdict}.</b> On the <b>live (baseline) arm</b> — where price can be above the SMA band by OPEN while the MAs trend DOWN — it drops the downtrend pop-ups (~18 of 277 trades) and lifts <b>+${bFull.toFixed(1)} pts over 61d</b>, in BOTH halves. On the <b>sweet-spot</b> it barely fires (sweet already gates close&gt;200, which correlates with 20&gt;200). <b>Backtest only — a positive sim is NOT a live-arm trigger</b>; next step is wiring <code>OPENING_REQUIRE_TREND_ALIGN</code> + a live shadow A/B (same discipline as REQUIRE_TIGHT). Full IBKR universe (231 names), compounded $1000/5 by arm time.</div>
+      <div class="split">
+        ${group('⚙ BASELINE — live classifier (discards SMA dir today)','the faithful test','base',ta.baseline)}
+        ${group('★ SWEET-SPOT — already gates close>200','near-redundant here','sweet',ta.sweet)}
+      </div>`;
+  }
+
+  function renderCombos(cb) {
+    if(!cb||!cb.rows){document.getElementById('day').innerHTML='<div class="empty">no combo data — re-run sim_variant_ibkr_days.py</div>';return;}
+    const trades=c=>(c&&c.curve?c.curve.reduce((s,r)=>s+(r.n||0),0):0);
+    const cell=c=>`<td class="num ${cls(c.total_pct)}">${c.total_pct>=0?'+':''}${c.total_pct}% <span class="flat" style="font-size:0.78rem">(${trades(c)})</span></td>`;
+    const best=cb.rows.find(r=>r.best)||cb.rows[0];
+    const rows=cb.rows.map(r=>{
+      const s=r.splits, rob=(s.is.total_pct>0&&s.oos.total_pct>0);
+      return `<tr style="${r.best?'background:rgba(0,200,83,0.10);font-weight:600':''}">
+        <td>${r.best?'🏆 ':''}${esc(r.label)}</td>${cell(s.is)}${cell(s.oos)}${cell(s.full)}
+        <td class="num">${rob?'<span class="badge badge-ok">robust</span>':'<span class="badge badge-warn">weak</span>'}</td></tr>`;
+    }).join('');
+    const bf=best.splits.full, bi=best.splits.is, bo=best.splits.oos;
+    document.getElementById('day').innerHTML=`
+      <div class="stat-row">
+        <div class="stat"><div class="value ${cls(bf.total_pct)}">${bf.total_pct>=0?'+':''}${bf.total_pct}%</div><div class="label">🏆 sweet45 + trend-align · full ${cb.days}d</div></div>
+        <div class="stat"><div class="value ${cls(bi.total_pct)}">${bi.total_pct>=0?'+':''}${bi.total_pct}%</div><div class="label">in-sample (chop ${cb.is_days}d)</div></div>
+        <div class="stat"><div class="value ${cls(bo.total_pct)}">${bo.total_pct>=0?'+':''}${bo.total_pct}%</div><div class="label">out-of-sample (trend ${cb.oos_days}d)</div></div>
+        <div class="stat"><div class="value" style="font-size:0.9rem">sweet45ta</div><div class="label">OPENING_STRATEGY_PROFILE=</div></div></div>
+      <div class="banner" style="background:rgba(0,200,83,0.08);border:1px solid var(--ok)">
+        <b>Most profitable robust config: sweet45 + trend-align.</b> It stacks the two levers that survive an IS/OOS split — the dominant <b>gap 2–4% + 45-min + 3R-target</b> engine (+9 pts over sweet30) and the <b>trend-align</b> chop-insurance filter (SMA20&gt;200), which more than doubles the in-sample/choppy-regime return (+2.0 → +4.4) for a small OOS give-back, on fewer trades.
+        <b>Above-both is dropped</b> — it helps sweet30 but slightly HURTS sweet45 (config-dependent). <b>When:</b> long-only opening-range continuation — earns in trending mornings (OOS), and trend-align keeps it positive in chop (IS). Backtest on the IBKR 231-name universe (top-5/day, $1000/5 compounded) — a rules test, not the live scan; magnitudes optimistic, the ordering is the signal. Run it: <code>profiles.py set sweet45ta</code> (live shadow A/B before arming).</div>
+      <table class="tape">
+        <tr><th>Config</th><th class="num">IS · chop ${cb.is_days}d</th><th class="num">OOS · trend ${cb.oos_days}d</th><th class="num">FULL ${cb.days}d</th><th class="num">IS+OOS</th></tr>
+        ${rows}
+      </table>
+      <div class="note" style="margin-top:8px">% = compounded $1,000 / 5 slots over the window; (n) = total compounded trades. <b>robust</b> = positive in BOTH the in-sample and out-of-sample halves.</div>`;
+  }
+
   // tabs
   const tabs=document.getElementById('tabs');
   const setActive=el=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');};
   const stratTab=document.createElement('div');stratTab.className='tab active';stratTab.textContent='📋 Trading Strategy';
   stratTab.onclick=()=>{setActive(stratTab);renderStrategy();};
   tabs.appendChild(stratTab);
+  const cbt=document.createElement('div');cbt.className='tab';cbt.textContent='🏆 Best combo';
+  cbt.onclick=()=>{setActive(cbt);renderCombos(data.combos);};
+  tabs.appendChild(cbt);
   const sumTab=document.createElement('div');sumTab.className='tab';sumTab.textContent='📈 Summary (compounded)';
   sumTab.onclick=()=>{setActive(sumTab);renderSummary(data.compound);};
   tabs.appendChild(sumTab);
@@ -512,6 +584,9 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
   const rst=document.createElement('div');rst.className='tab';rst.textContent='⚖ Risk-sizing';
   rst.onclick=()=>{setActive(rst);renderRiskSizing(data.risksize_ab);};
   tabs.appendChild(rst);
+  const tat=document.createElement('div');tat.className='tab';tat.textContent='📈 Trend-align';
+  tat.onclick=()=>{setActive(tat);renderTrendAlign(data.trendalign);};
+  tabs.appendChild(tat);
   const ag=data.armgate;
   const ta1=document.createElement('div');ta1.className='tab';ta1.textContent='🔁 Baseline + sim arm';
   ta1.onclick=()=>{setActive(ta1);renderArmgate(ag,'base_simarm','BASELINE + sim arm gate','Take the baseline but arm on the sim gate: a power bar closing above the 200-SMA (no TIGHT), so an upward first 2-min bar places the buy.');};
