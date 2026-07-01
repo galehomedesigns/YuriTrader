@@ -30,19 +30,50 @@ def _load_env():
             if k and v: os.environ.setdefault(k, v)
 _load_env()
 from opening_agent import classifier as C
+from opening_agent import profiles as PROF
 import shared.indicators as IND
 
 ET = ZoneInfo("America/New_York")
 OPEN_T, CLOSE_T = dtime(9, 30), dtime(16, 0)
 WIN_END = dtime(10, 20)            # chart display window
-SELLOFF_MIN = 30                   # SWEET SPOT: 30-minute sell-off (10:00)
-RR_TARGET = 3.0                    # SWEET SPOT: 3R target (let winners run)
+SELLOFF_MIN = 30                   # SWEET SPOT: 30-minute sell-off (10:00)  [legacy default]
+RR_TARGET = 3.0                    # SWEET SPOT: 3R target (let winners run)  [legacy default]
 SLOT = 200.0
 RISK_USD = 6.0                     # risk-sizing variant: cap $-risk/trade (= 3% of the slot)
 OFFSET = C.DEFAULTS["trade_offset"]
 OUT = os.path.join(HERE, "..", "logs", "opening_sim_variant.json")
 REPLAY_GLOB = os.path.join(HERE, "..", "logs", "session_replay_*")
 GAP_MIN, GAP_MAX = 1.0, 6.0    # pre-market funnel band (positive gap, not over-extended)
+
+# Per-day strategy profile: a captured session is simulated under the PROFILE that was
+# live that morning (profiles.py). Days NOT listed here keep the legacy sweet-spot rules
+# above (30-min · gap 1-6 · no trend-align) so their tabs stay byte-for-byte unchanged.
+# Only the SWEET column follows the profile; the baseline column stays the live-style
+# reference so the per-day A/B is on the profile's candidate universe.
+PROFILE_BY_DAY = {
+    "2026-06-30": "sweet45ta",   # live profile that morning (OPENING_STRATEGY_PROFILE)
+}
+
+def _sweet_params(profile_name):
+    """Resolve the sweet-column sim knobs for a strategy profile → dict. Unknown/None
+    profile → the legacy sweet-spot (30-min · gap 1-6 · 3R · no trend-align)."""
+    ov = PROF.PROFILES.get((profile_name or "").strip().lower()) or {}
+    if not ov:
+        return {"selloff": SELLOFF_MIN, "gmin": GAP_MIN, "gmax": GAP_MAX,
+                "rr": RR_TARGET, "ta": False}
+    return {"selloff": int(ov.get("OPENING_SESSION_CUTOFF_MIN", SELLOFF_MIN)),
+            "gmin": float(ov.get("OPENING_SCAN_MIN_GAP_PCT", GAP_MIN)),
+            "gmax": float(ov.get("OPENING_SCAN_MAX_GAP_PCT", GAP_MAX)),
+            "rr": float(ov.get("OPENING_TARGET_RR", RR_TARGET)),
+            "ta": str(ov.get("OPENING_REQUIRE_TREND_ALIGN", "false")).lower() == "true"}
+
+def _rules_label(profile_name, sp):
+    """Honest one-line rule string for the per-day sweet panel header (shown verbatim
+    on the tab so the day never mislabels the rules it was simulated under)."""
+    band = f" · gap {sp['gmin']:g}–{sp['gmax']:g}%"
+    ta = " · trend-align (SMA20>200)" if sp["ta"] else ""
+    return (f"{profile_name} (TIGHT off · loc by close · wick stop · "
+            f"{sp['rr']:g}R target · {sp['selloff']}-min{band}{ta})")
 
 def discover_days():
     """Auto-find captured session days (logs/session_replay_<YYYY-MM-DD>); candidates
@@ -83,9 +114,10 @@ def premarket_gap(full, day):
     gap = (topen - pclose) / pclose * 100 if pclose else None
     return pclose, topen, gap
 
-def arm_variant(full, sym, day, mode="sweet"):
+def arm_variant(full, sym, day, mode="sweet", trend_align=False):
     """First opening bar (9:30→9:44) that arms. sweet: bullish power bar closing above
-    the 200-SMA (no TIGHT). baseline: classifier MATCH_LONG (TIGHT on, loc by open)."""
+    the 200-SMA (no TIGHT). baseline: classifier MATCH_LONG (TIGHT on, loc by open).
+    trend_align (sweet/base_simarm only): also require SMA20>SMA200 at the arm bar."""
     for i, b in enumerate(full):
         dt = _et(b["time"])
         if dt.date() != day or not (OPEN_T <= dt.time() <= dtime(9, 44)): continue
@@ -96,6 +128,8 @@ def arm_variant(full, sym, day, mode="sweet"):
                 continue
         else:
             if not (C.bar_signal(b, full[max(0, i - 30):i], C.DEFAULTS) > 0 and b["close"] > sms):
+                continue
+            if trend_align and not (smf is not None and smf > sms):
                 continue
         entry = round(b["high"] + OFFSET, 2); stop = round(b["low"] - OFFSET, 2)
         loc = "above-both" if b["close"] > max(smf, sms) else \
@@ -123,15 +157,16 @@ def _arm_variant_dead(full, sym, day):
                                     "sma200": round(sms, 2), "loc": loc}
     return None
 
-def simulate(full, sym, tv, day, mode="sweet"):
-    armed = arm_variant(full, sym, day, mode)
+def simulate(full, sym, tv, day, mode="sweet", selloff_min=SELLOFF_MIN,
+             rr_target=RR_TARGET, trend_align=False):
+    armed = arm_variant(full, sym, day, mode, trend_align=trend_align)
     if not armed:
         return {"symbol": sym, "tv": tv, "armed": False}
     ai, entry, stop, info = armed
     risk = round(entry - stop, 4)
-    target = round(entry + RR_TARGET * risk, 4) if mode == "sweet" else None
+    target = round(entry + rr_target * risk, 4) if mode == "sweet" else None
     shares = max(1, math.floor(SLOT / entry))
-    selloff_dt = datetime.combine(day, OPEN_T, ET) + timedelta(minutes=SELLOFF_MIN)
+    selloff_dt = datetime.combine(day, OPEN_T, ET) + timedelta(minutes=selloff_min)
 
     tl = []
     in_pos = False; cur_stop = stop; filled = 0; entry_dt = None; exit_rec = None
@@ -142,7 +177,7 @@ def simulate(full, sym, tv, day, mode="sweet"):
         smf, sms = smas_at(full, i)
         ev = []
         if dt.strftime("%H:%M") == info["arm_t"]:
-            ev.append(f"ARMED ${entry:.2f}, stop ${stop:.2f}" + (f", target ${target:.2f} (3R)" if target else " (trail)"))
+            ev.append(f"ARMED ${entry:.2f}, stop ${stop:.2f}" + (f", target ${target:.2f} ({rr_target:g}R)" if target else " (trail)"))
         if not in_pos and exit_rec is None and i > ai and b["high"] >= entry:
             in_pos = True; filled = shares; entry_dt = dt; prev_low = b["low"]
             ev.append(f"ENTRY {shares} @ ${entry:.2f}")
@@ -162,8 +197,8 @@ def simulate(full, sym, tv, day, mode="sweet"):
                     cur_stop = round(prev_low - OFFSET, 4); ev.append(f"trail stop → ${cur_stop:.2f}")
                 if dt >= selloff_dt:
                     exit_rec = {"time": dt.strftime("%H:%M"), "price": round(b["close"], 4),
-                                "reason": f"{SELLOFF_MIN}-min sell-off", "qty": filled}
-                    ev.append(f"{SELLOFF_MIN}-MIN SELL-OFF ${b['close']:.2f}"); in_pos = False
+                                "reason": f"{selloff_min}-min sell-off", "qty": filled}
+                    ev.append(f"{selloff_min}-MIN SELL-OFF ${b['close']:.2f}"); in_pos = False
             prev_low = b["low"]
         tl.append({"t": dt.strftime("%H:%M"), "o": b["open"], "h": b["high"], "l": b["low"], "c": b["close"],
                    "sma20": round(smf, 3) if smf else None, "sma200": round(sms, 3) if sms else None,
@@ -183,6 +218,7 @@ def simulate(full, sym, tv, day, mode="sweet"):
             "entry": entry, "stop": stop, "target": target, "risk_per_share": risk,
             "risk_pct": round(risk / entry * 100, 2), "shares": shares, "position_cost": pos_cost,
             "exit": exit_rec, "realized_pl": realized, "held_to_1020_pl": held,
+            "selloff_min": selloff_min,
             "session_high": round(sess_high, 4) if sess_high else None, "timeline": tl}
 
 MAX_PRICE = 300.0    # remove high-priced stocks (>$300) from the dashboard
@@ -229,28 +265,57 @@ def risksize_panel(base_rows):
     p["totals"]["n_sized_down"] = sum(1 for r in rr if r.get("sized_down"))
     return p
 
+def _compute_day(dstr, snap_dir):
+    """Simulate one captured session. The SWEET column follows that day's strategy
+    profile (PROFILE_BY_DAY → legacy sweet-spot if unlisted); the baseline / sim-arm
+    columns stay the live-style reference (30-min, no trend-align) so the A/B is that
+    profile's candidate universe judged by both rule sets."""
+    day = date.fromisoformat(dstr)
+    prof = PROFILE_BY_DAY.get(dstr)
+    sp = _sweet_params(prof)
+    full_by = stitch(snap_dir)
+    sweet = []; base = []; simarm = []
+    for tv, full in sorted(full_by.items()):
+        if not full: continue
+        sym = tv.split(":")[-1]
+        pclose, topen, gap = premarket_gap(full, day)
+        if gap is None or not (sp["gmin"] <= gap <= sp["gmax"]): continue
+        if topen and (topen > MAX_PRICE or topen < MIN_PRICE): continue   # match live: $5–$300 only
+        specs = (("sweet", sweet, dict(selloff_min=sp["selloff"], rr_target=sp["rr"], trend_align=sp["ta"])),
+                 ("baseline", base, {}), ("base_simarm", simarm, {}))
+        for mode, bucket, kw in specs:
+            r = simulate(full, sym, tv, day, mode, **kw)
+            if r.get("armed") and r.get("exit"):
+                r["premarket_gap_pct"] = round(gap, 2)
+                r["prev_close"] = round(pclose, 2) if pclose else None
+                r["today_open"] = round(topen, 2) if topen else None
+                bucket.append(r)
+    d = {"day": dstr, "source": "TradingView 2-min (live capture)",
+         "sweet": panel(sweet), "baseline": panel(base), "base_simarm": panel(simarm),
+         "risksize": risksize_panel(base)}
+    if prof:
+        d["profile"] = prof
+        d["sweet_rules"] = _rules_label(prof, sp)
+    return d
+
+
 def main():
+    # Reuse already-rendered live-capture days verbatim (their tabs are locked); only
+    # (re)compute a profiled day or a brand-new capture day.
+    prior = {}
+    if os.path.exists(OUT):
+        try:
+            for d in json.load(open(OUT)).get("days", []):
+                if str(d.get("source", "")).startswith("TradingView"):
+                    prior[d["day"]] = d
+        except Exception:
+            pass
     days_out = []
     for dstr, snap_dir in sorted(discover_days().items(), reverse=True):
-        day = date.fromisoformat(dstr)
-        full_by = stitch(snap_dir)
-        sweet = []; base = []; simarm = []
-        for tv, full in sorted(full_by.items()):
-            if not full: continue
-            sym = tv.split(":")[-1]
-            pclose, topen, gap = premarket_gap(full, day)
-            if gap is None or not (GAP_MIN <= gap <= GAP_MAX): continue
-            if topen and (topen > MAX_PRICE or topen < MIN_PRICE): continue   # match live: $5–$300 only
-            for mode, bucket in (("sweet", sweet), ("baseline", base), ("base_simarm", simarm)):
-                r = simulate(full, sym, tv, day, mode)
-                if r.get("armed") and r.get("exit"):
-                    r["premarket_gap_pct"] = round(gap, 2)
-                    r["prev_close"] = round(pclose, 2) if pclose else None
-                    r["today_open"] = round(topen, 2) if topen else None
-                    bucket.append(r)
-        days_out.append({"day": dstr, "source": "TradingView 2-min (live capture)",
-                         "sweet": panel(sweet), "baseline": panel(base), "base_simarm": panel(simarm),
-                         "risksize": risksize_panel(base)})
+        if dstr not in PROFILE_BY_DAY and dstr in prior:
+            days_out.append(prior[dstr])
+        else:
+            days_out.append(_compute_day(dstr, snap_dir))
     summary = {
         "generated_at": datetime.now(ET).isoformat(),
         "window": "09:30–10:20 ET",

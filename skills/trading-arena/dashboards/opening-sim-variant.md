@@ -5,15 +5,23 @@
 A/B. Each tab is one session: candlestick charts with SMA20/200, pre-market gap, location,
 and entry/stop/3R-target lines, plus a summary table (gap, location, placed $, P/L $, P/L %).
 
-**Sweet-spot rules:** TIGHT gate off at the open · location by close (>200-SMA) · **wick stop**
+**Sweet-spot rules (legacy default):** TIGHT gate off at the open · location by close (>200-SMA) · **wick stop**
 (one-bar low, no cap) · **3R take-profit** · breakeven at 1R · **30-min sell-off** · gap **0.5–4%**.
 Baseline = live-style rules (TIGHT on, location by open, wick stop, breakeven + push-trail, 30-min).
+
+**Per-day profile:** a captured session's SWEET column is simulated under the strategy profile that was
+live that morning — `sim_opening_variant.py:PROFILE_BY_DAY` maps `<date> → profile` (`opening_agent/profiles.py`);
+days not listed keep the legacy sweet-spot above, so their tabs stay byte-for-byte unchanged. The day carries
+its own `sweet_rules` label, rendered verbatim on the tab; the baseline/sim-arm columns stay the live-style
+reference on that profile's candidate universe. 2026-06-30 = **sweet45ta** (TIGHT off · loc by close · wick stop ·
+3R · **45-min** · gap **2–4%** · trend-align SMA20>200).
 
 **Audience:** Tony — strategy R&D / parameter tuning.
 
 **Data:** `logs/opening_sim_variant.json`, written by two generators:
 - `opening_agent/sim_opening_variant.py` — the live TradingView capture days (auto-discovers
-  `logs/session_replay_<date>/`; currently 2026-06-26). Daily capture cron accrues more.
+  `logs/session_replay_<date>/`; currently 2026-06-26, 2026-06-29, 2026-06-30). Already-rendered
+  live days are reused verbatim; only a profiled day or a brand-new capture is (re)computed.
 - `opening_agent/sim_variant_ibkr_days.py` — the last N days from the IBKR broad 231-name cache
   (`logs/backtest_cache_ibkr_broad/`), merged in as additional tabs.
 

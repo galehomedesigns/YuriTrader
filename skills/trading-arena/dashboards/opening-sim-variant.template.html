@@ -155,7 +155,7 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
         <span><span class="swatch" style="background:#69f0ae"></span>up</span><span><span class="swatch" style="background:#ef5350"></span>down</span>
         <span><span class="swatch" style="background:#7c8aff"></span>SMA20</span><span><span class="swatch" style="background:#ffa726"></span>SMA200</span>
         <span><span class="swatch" style="background:#c77dff"></span>entry</span><span><span class="swatch" style="background:#ff1744"></span>stop</span>
-        ${hasT?'<span><span class="swatch" style="background:#00c853"></span>target 3R</span>':''}<span><span class="swatch" style="background:#ffc107"></span>30-min sell-off</span></div>
+        ${hasT?'<span><span class="swatch" style="background:#00c853"></span>target 3R</span>':''}<span><span class="swatch" style="background:#ffc107"></span>${(r.selloff_min||30)}-min sell-off</span></div>
       <div class="chart-wrap">${chart(r)}</div>
       <details><summary>exact 2-min numbers</summary>
         <table class="tape"><tr><th>Time</th><th class="num">O</th><th class="num">H</th><th class="num">L</th><th class="num">C</th>
@@ -182,7 +182,7 @@ tr.r-exit { background: rgba(255,23,68,0.15); } tr.r-flat td { color: var(--text
       <div class="stat"><div class="value" style="font-size:0.92rem">${esc(d.source||'')}</div><div class="label">${d.day} · data source · ≤$300 only</div></div></div>`;
     html+=`<div class="split">
       <div class="appcol"><div class="apphdr base">⚙ ${improved?'BASELINE + SIM ARM — power bar + close&gt;200-SMA (no TIGHT) · wick stop · push-trail · 30-min':'BASELINE — live rules (TIGHT on · loc by open · wick stop · push-trail · 30-min)'}</div>${panelBody(bpan)}</div>
-      <div class="appcol"><div class="apphdr sweet">★ NEW SIM — sweet-spot (TIGHT off · loc by close · wick stop · 3R target · 30-min)</div>${panelBody(d.sweet)}</div>
+      <div class="appcol"><div class="apphdr sweet">★ NEW SIM — ${esc(d.sweet_rules || 'sweet-spot (TIGHT off · loc by close · wick stop · 3R target · 30-min)')}</div>${panelBody(d.sweet)}</div>
     </div>`;
     document.getElementById('day').innerHTML=html;
   }
