@@ -145,6 +145,22 @@ def cutoff(eng):
     return [advice(t) for t in eng.on_cutoff()]
 
 
+def _entry_gate(entry, stop):
+    """Order-level gate (risk cap + min bar range), delegated to
+    opening_confirm.validate_entry so the auto path here and any remote/manual card
+    share ONE definition. Fails CLOSED — if the shared module can't load, refuse to
+    stage rather than risk staging an uncapped order."""
+    try:
+        here = os.path.dirname(os.path.abspath(__file__))       # .../opening_agent
+        _shared = os.path.join(os.path.dirname(os.path.dirname(here)), "shared")  # .../skills/shared
+        if _shared not in sys.path:
+            sys.path.insert(0, _shared)
+        import opening_confirm as _oc
+        return _oc.validate_entry(entry, stop)
+    except Exception as e:                                       # noqa: BLE001
+        return False, f"entry-gate unavailable ({e})"
+
+
 def _stage_entries(subset, tag):
     """Build entry buy-stop orders (+ attached protective stop) for a batch of
     NEWLY-armed names and spawn the CDP queue runner that stages each for manual
@@ -167,9 +183,12 @@ def _stage_entries(subset, tag):
     skipped = []                                     # (symbol, reason) for transparency
     for s in syms:
         entry, stop = subset[s].get("entry"), subset[s].get("stop")
-        if not entry or entry <= 0:
-            skipped.append((s, "no entry level"))
-            print(f"[advisory] {s}: no entry level - skipped", file=sys.stderr)
+        # Order-level gate (risk cap + min bar range), SHARED with opening_confirm.stage
+        # so this auto path and any remote/manual card enforce the identical cap.
+        ok, reason = _entry_gate(entry, stop)
+        if not ok:
+            skipped.append((s, reason))
+            print(f"[advisory] {s}: {reason} - skipped", file=sys.stderr)
             continue
         slot_qty = int(per // entry)                  # whole shares affordable per slot
         if slot_qty < 1:
@@ -183,22 +202,6 @@ def _stage_entries(subset, tag):
         # 1-share slot can't be halved -> enter the whole 1.
         frac = float(os.environ.get("OPENING_ENTRY_FRACTION", "0.5"))
         qty = max(1, int(slot_qty * frac))
-        # Risk cap: skip if bar-1 risk exceeds the max allowed %
-        bar_spread = entry - stop
-        max_risk = float(os.environ.get("OPENING_MAX_RISK_PCT", "3.0"))
-        risk_pct = bar_spread / entry * 100 if entry > 0 else 0
-        if risk_pct > max_risk:
-            reason = f"risk {risk_pct:.1f}% > {max_risk}% cap (entry ${entry:.2f}, stop ${stop:.2f})"
-            skipped.append((s, reason))
-            print(f"[advisory] {s}: {reason} - skipped", file=sys.stderr)
-            continue
-        # Min bar range: skip if entry-stop spread is too narrow (noise breakout)
-        min_range = float(os.environ.get("OPENING_MIN_BAR_RANGE", "0.05"))
-        if bar_spread < min_range:
-            reason = f"bar-1 range ${bar_spread:.2f} < ${min_range:.2f} min"
-            skipped.append((s, reason))
-            print(f"[advisory] {s}: {reason} - skipped", file=sys.stderr)
-            continue
         orders.append({"symbol": s, "side": "buy", "type": "stop",
                        "price": round(entry, 2), "qty": qty, "stop": round(stop, 2)})
         # Remember the full-slot target so the G9 add can complete this half to full.

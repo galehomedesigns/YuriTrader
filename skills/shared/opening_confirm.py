@@ -89,6 +89,36 @@ def enabled():
     return os.environ.get("OPENING_REMOTE_CONFIRM", "false").lower() == "true"
 
 
+# ── shared entry-order gate (single source of truth for EVERY staging path) ────
+def entry_gate_params():
+    """(max_risk_pct, min_bar_range) for the entry gate — env-driven; defaults match
+    advisory_monitor's historical inline cap."""
+    return (float(os.environ.get("OPENING_MAX_RISK_PCT", "3.0")),
+            float(os.environ.get("OPENING_MIN_BAR_RANGE", "0.05")))
+
+
+def validate_entry(entry, stop):
+    """Order-level gate enforced by EVERY path that can mint a sendable entry card —
+    the auto-arm path (advisory_monitor._stage_entries) AND any direct/manual/remote
+    stage() call. Returns (ok, reason). Long buy-stop entries only (stop below entry).
+    Co-locates the risk cap with the thing that creates the confirmable order, so a
+    card can never be minted for an over-cap order regardless of caller."""
+    if not entry or entry <= 0:
+        return False, "no entry level"
+    if stop is None:
+        return False, "no stop level"
+    spread = entry - stop
+    if spread <= 0:
+        return False, f"stop ${stop:.2f} not below entry ${entry:.2f}"
+    max_risk, min_range = entry_gate_params()
+    risk_pct = spread / entry * 100
+    if risk_pct > max_risk:
+        return False, f"risk {risk_pct:.1f}% > {max_risk}% cap (entry ${entry:.2f}, stop ${stop:.2f})"
+    if spread < min_range:
+        return False, f"bar range ${spread:.2f} < ${min_range:.2f} min"
+    return True, None
+
+
 # ── Telegram (read token at CALL time; never at import) ───────────────────────
 def _token():
     return os.environ.get("TELEGRAM_STOCK_BOT_TOKEN", "")
@@ -128,6 +158,7 @@ _HEAD = {
     "sent":     "✅ <b>SENT</b>",
     "timeout":  "⌛ <b>Expired</b>",
     "mismatch": "⛔ <b>Refused — readback mismatch</b>",
+    "blocked":  "⛔ <b>Blocked — fails risk gate, not stageable</b>",
 }
 
 
@@ -150,9 +181,20 @@ def kb_confirm(oid, nonce):
 
 # ── stager entry point ────────────────────────────────────────────────────────
 def stage(order):
-    """Write the pending sidecar + send one confirm card for an ENTRY order. Called by
-    advisory_monitor when OPENING_REMOTE_CONFIRM is on. Needs order[order_id]+[nonce]."""
+    """Write the pending sidecar + send one confirm card for an ENTRY order. Needs
+    order[order_id]+[nonce]. GATED: refuses (no sidecar, no tappable buttons) if the
+    order fails validate_entry — so a manual/remote stage can't bypass the risk cap
+    even though it doesn't go through advisory_monitor._stage_entries."""
     oid, nonce = order["order_id"], order["nonce"]
+    ok, reason = validate_entry(order.get("price"), order.get("stop"))
+    if not ok:
+        print(f"[opening_confirm] stage REFUSED {order.get('symbol')}: {reason}", file=sys.stderr)
+        sl = order.get("stop")
+        txt = (f"{_HEAD['blocked']}\n<b>{str(order.get('side', '')).upper()} "
+               f"{order.get('qty')} {ticker(order['symbol'])}</b> stop @ {order.get('price')}"
+               + (f" · SL {sl}" if sl is not None else "")
+               + f"\n<i>{reason}</i>")
+        return _api("sendMessage", {"chat_id": _chat(), "parse_mode": "HTML", "text": txt})
     write(oid, {"status": "pending", "nonce": nonce,
                 "symbol": order["symbol"], "side": order["side"], "qty": order["qty"],
                 "entry": order.get("price"), "stop": order.get("stop"), "ts": time.time()})
